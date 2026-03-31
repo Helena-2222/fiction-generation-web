@@ -1,21 +1,21 @@
-const GENRE_OPTIONS = ["??", "??", "??", "??", "??", "????", "??"];
-const STYLE_OPTIONS = ["??", "????", "???", "???", "????", "????"];
+const GENRE_OPTIONS = ["爱情", "科幻", "悬疑", "奇幻", "历史", "现实主义", "成长"];
+const STYLE_OPTIONS = ["幽默", "张爱玲式", "雨果式", "电影感", "冷峻克制", "轻盈浪漫"];
 const CHARACTER_FIELDS = [
-  ["name", "??"],
-  ["gender", "??"],
-  ["age", "??"],
-  ["occupation", "??"],
-  ["nationality", "??/??"],
-  ["personality", "??"],
-  ["appearance", "????"],
-  ["values", "???"],
-  ["core_motivation", "????/????/??"],
+  ["name", "姓名"],
+  ["gender", "性别"],
+  ["age", "年龄"],
+  ["occupation", "职业"],
+  ["nationality", "种族/国籍"],
+  ["personality", "性格"],
+  ["appearance", "外貌特征"],
+  ["values", "价值观"],
+  ["core_motivation", "核心目标/行为动机/欲望"],
 ];
 const TEXTAREA_FIELDS = new Set(["personality", "appearance", "values", "core_motivation"]);
 
 const state = {
-  genre: "??",
-  style: "???",
+  genre: "科幻",
+  style: "电影感",
   characters: [],
   relations: [],
   outline: null,
@@ -92,7 +92,7 @@ function init() {
   updateChapterEstimate();
   renderCharacters();
   renderGraph();
-  setStatus("????????????????????????????????", false);
+  setStatus("填写左侧信息后，先生成故事大纲；若不满意，可以补充反馈并重生成。", false);
 }
 
 function renderChipGroup(container, options, key) {
@@ -114,7 +114,7 @@ function updateChapterEstimate() {
   const totalWords = Number(elements.totalWords.value) || 0;
   const chapterWords = Number(elements.chapterWords.value) || 2000;
   const count = Math.max(1, Math.ceil(totalWords / chapterWords || 1));
-  elements.chapterCount.textContent = `${count} ?`;
+  elements.chapterCount.textContent = `${count} 章`;
 }
 
 function renderCharacters() {
@@ -131,13 +131,13 @@ function renderCharacters() {
     kicker.className = "section-kicker";
     kicker.textContent = `Character ${index + 1}`;
     const title = document.createElement("h3");
-    title.textContent = character.name || `?? ${index + 1}`;
+    title.textContent = character.name || `角色 ${index + 1}`;
     headerMeta.append(kicker, title);
 
     const removeButton = document.createElement("button");
     removeButton.type = "button";
     removeButton.className = "tiny-button";
-    removeButton.textContent = "????";
+    removeButton.textContent = "删除角色";
     removeButton.disabled = state.characters.length <= 1;
     removeButton.addEventListener("click", () => removeCharacter(character.id));
 
@@ -164,7 +164,7 @@ function renderCharacters() {
       control.addEventListener("input", (event) => {
         character[field] = event.target.value;
         if (field === "name") {
-          title.textContent = character.name || `?? ${index + 1}`;
+          title.textContent = character.name || `角色 ${index + 1}`;
         }
         syncRelationNames();
         renderGraph();
@@ -257,7 +257,7 @@ function renderGraph() {
     input.type = "text";
     input.value = relation.label || "";
     input.setAttribute("list", "relation-presets");
-    input.placeholder = `${source.name || "??"} ? ${target.name || "??"}`;
+    input.placeholder = `${source.name || "角色"} 与 ${target.name || "角色"}`;
     input.addEventListener("input", (event) => {
       relation.label = event.target.value;
     });
@@ -265,7 +265,7 @@ function renderGraph() {
     const removeButton = document.createElement("button");
     removeButton.type = "button";
     removeButton.className = "tiny-button";
-    removeButton.textContent = "?";
+    removeButton.textContent = "删";
     removeButton.addEventListener("click", () => {
       state.relations = state.relations.filter((item) => item.id !== relation.id);
       renderGraph();
@@ -296,11 +296,11 @@ function renderGraph() {
 
     const name = document.createElement("div");
     name.className = "graph-node-name";
-    name.textContent = character.name || `?? ${index + 1}`;
+    name.textContent = character.name || `角色 ${index + 1}`;
 
     const anchor = document.createElement("div");
     anchor.className = "graph-anchor";
-    anchor.title = "???????????";
+    anchor.title = "拖到其他角色上建立关系";
     anchor.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
       const rect = elements.graphCanvas.getBoundingClientRect();
@@ -380,11 +380,11 @@ async function handleOutlineSubmit(event) {
   event.preventDefault();
   const payload = buildStoryPayload();
   if (!payload.synopsis) {
-    setStatus("?????????", false, true);
+    setStatus("请先填写故事梗概。", false, true);
     return;
   }
 
-  setBusyState("??? DeepSeek ??????...");
+  setBusyState("正在让 DeepSeek 生成故事大纲...");
   elements.regenerateOutline.disabled = true;
   elements.generateStory.disabled = true;
 
@@ -400,9 +400,9 @@ async function handleOutlineSubmit(event) {
     renderStory();
     elements.regenerateOutline.disabled = false;
     elements.generateStory.disabled = false;
-    setStatus("???????????????????????????", false);
+    setStatus("大纲已生成，可以继续重生成，或直接按当前大纲生成全文。", false);
   } catch (error) {
-    setStatus(error.message || "???????", false, true);
+    setStatus(error.message || "大纲生成失败。", false, true);
   }
 }
 
@@ -411,7 +411,7 @@ async function handleOutlineRegenerate() {
     return;
   }
 
-  setBusyState("???????????...");
+  setBusyState("正在根据反馈重生成大纲...");
   elements.regenerateOutline.disabled = true;
   elements.generateStory.disabled = true;
 
@@ -425,9 +425,9 @@ async function handleOutlineRegenerate() {
     renderOutline();
     elements.regenerateOutline.disabled = false;
     elements.generateStory.disabled = false;
-    setStatus("????????????????????????", false);
+    setStatus("新的大纲已经生成，可以继续调整，或开始逐章创作。", false);
   } catch (error) {
-    setStatus(error.message || "??????", false, true);
+    setStatus(error.message || "重生成失败。", false, true);
   }
 }
 
@@ -436,7 +436,7 @@ async function handleStoryGenerate() {
     return;
   }
 
-  setBusyState("??????????????????????...");
+  setBusyState("正在依次生成章节正文，这一步可能需要一些时间...");
   elements.generateStory.disabled = true;
   elements.regenerateOutline.disabled = true;
 
@@ -449,9 +449,9 @@ async function handleStoryGenerate() {
     renderStory();
     elements.generateStory.disabled = false;
     elements.regenerateOutline.disabled = false;
-    setStatus("?????????????????????????", false);
+    setStatus("全文生成完成。你可以继续修改设定后重新走一次流程。", false);
   } catch (error) {
-    setStatus(error.message || "???????", false, true);
+    setStatus(error.message || "正文生成失败。", false, true);
   }
 }
 
@@ -474,7 +474,7 @@ function buildStoryPayload() {
 function renderOutline() {
   if (!state.outline) {
     elements.outlineResult.className = "outline-result empty-state";
-    elements.outlineResult.textContent = "????????";
+    elements.outlineResult.textContent = "还没有生成大纲。";
     return;
   }
 
@@ -483,8 +483,8 @@ function renderOutline() {
       (section) => `
         <li>
           <strong>${escapeHtml(section.stage)}</strong>
-          <div>?????${escapeHtml(section.content)}</div>
-          <div>?????${escapeHtml(section.chapter_range)}</div>
+          <div>内容简介：${escapeHtml(section.content)}</div>
+          <div>篇章范围：${escapeHtml(section.chapter_range)}</div>
         </li>
       `,
     )
@@ -494,39 +494,39 @@ function renderOutline() {
   elements.outlineResult.innerHTML = `
     <article class="outline-card">
       <div class="outline-meta">
-        <div><strong>???</strong>${escapeHtml(state.outline.title)}</div>
-        <div><strong>??????</strong>${escapeHtml(state.outline.logline)}</div>
-        <div><strong>?????</strong>${escapeHtml(state.outline.summary)}</div>
-        <div><strong>????</strong>${state.outline.chapter_count}</div>
+        <div><strong>标题：</strong>${escapeHtml(state.outline.title)}</div>
+        <div><strong>一句话简介：</strong>${escapeHtml(state.outline.logline)}</div>
+        <div><strong>故事概述：</strong>${escapeHtml(state.outline.summary)}</div>
+        <div><strong>章节数：</strong>${state.outline.chapter_count}</div>
       </div>
       <div>
-        <strong>?????</strong>
+        <strong>四段式结构</strong>
         <ol class="chapter-plan-list">
-          ${actStructureHtml || "<li>?????????????</li>"}
+          ${actStructureHtml || "<li>本轮大纲未返回四段式结构。</li>"}
         </ol>
       </div>
       <div>
-        <strong>LLM ????</strong>
+        <strong>LLM 补完信息</strong>
         <ul class="inferred-list">
           ${
             state.outline.inferred_details.length
               ? state.outline.inferred_details.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
-              : "<li>???????????</li>"
+              : "<li>本轮没有额外补完信息。</li>"
           }
         </ul>
       </div>
       <div>
-        <strong>????</strong>
+        <strong>章节规划</strong>
         <ol class="chapter-plan-list">
           ${state.outline.chapters
             .map(
               (chapter) => `
                 <li>
-                  <strong>? ${chapter.chapter_number} ??${escapeHtml(chapter.title)}</strong>
-                  <div>?????${chapter.target_words}</div>
-                  <div>???${escapeHtml(chapter.summary)}</div>
-                  <div>?????${chapter.key_events.map(escapeHtml).join(" / ")}</div>
-                  <div>?????${escapeHtml(chapter.cliffhanger || "?")}</div>
+                  <strong>第 ${chapter.chapter_number} 章｜${escapeHtml(chapter.title)}</strong>
+                  <div>目标字数：${chapter.target_words}</div>
+                  <div>概要：${escapeHtml(chapter.summary)}</div>
+                  <div>关键事件：${chapter.key_events.map(escapeHtml).join(" / ")}</div>
+                  <div>章末收束：${escapeHtml(chapter.cliffhanger || "无")}</div>
                 </li>`,
             )
             .join("")}
@@ -539,7 +539,7 @@ function renderOutline() {
 function renderStory() {
   if (!state.generatedStory) {
     elements.storyResult.className = "story-result empty-state";
-    elements.storyResult.textContent = "?????????????????????";
+    elements.storyResult.textContent = "大纲确认后，这里会依次展示每个篇章的正文。";
     return;
   }
 
@@ -548,8 +548,8 @@ function renderStory() {
     .map(
       (chapter, index) => `
         <details class="chapter-card" ${index === 0 ? "open" : ""}>
-          <summary>? ${chapter.chapter_number} ??${escapeHtml(chapter.title)}</summary>
-          <p><strong>?????</strong>${escapeHtml(chapter.summary)}</p>
+          <summary>第 ${chapter.chapter_number} 章｜${escapeHtml(chapter.title)}</summary>
+          <p><strong>章节摘要：</strong>${escapeHtml(chapter.summary)}</p>
           <div class="chapter-content">${escapeHtml(chapter.content)}</div>
         </details>
       `,
@@ -558,13 +558,13 @@ function renderStory() {
 }
 
 function setBusyState(message) {
-  elements.statusPill.textContent = "???";
+  elements.statusPill.textContent = "处理中";
   elements.statusPill.classList.add("busy");
   elements.statusBox.textContent = message;
 }
 
 function setStatus(message, keepBusy = false, isError = false) {
-  elements.statusPill.textContent = isError ? "???" : keepBusy ? "???" : "??";
+  elements.statusPill.textContent = isError ? "出错了" : keepBusy ? "处理中" : "就绪";
   elements.statusPill.classList.toggle("busy", keepBusy);
   elements.statusBox.textContent = message;
 }
@@ -579,7 +579,7 @@ async function postJson(url, payload) {
   });
 
   if (!response.ok) {
-    let message = "?????";
+    let message = "请求失败。";
     try {
       const error = await response.json();
       message = error.detail || message;
