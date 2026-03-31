@@ -45,7 +45,9 @@ class StoryDraftRequest(BaseModel):
 class ActOutlineSection(BaseModel):
     stage: str
     content: str
-    chapter_range: str
+    chapter_range: str = ""
+    start_chapter: Optional[int] = Field(default=None, ge=1)
+    end_chapter: Optional[int] = Field(default=None, ge=1)
 
 
 class OutlineChapter(BaseModel):

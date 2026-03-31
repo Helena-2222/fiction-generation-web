@@ -12,6 +12,7 @@ const CHARACTER_FIELDS = [
   ["core_motivation", "核心目标/行为动机/欲望"],
 ];
 const TEXTAREA_FIELDS = new Set(["personality", "appearance", "values", "core_motivation"]);
+const STAGE_ORDER = ["开端", "发展", "高潮", "结局"];
 
 const state = {
   genre: "科幻",
@@ -394,7 +395,7 @@ async function handleOutlineSubmit(event) {
       feedback: "",
       previous_outline: null,
     });
-    state.outline = outline;
+    state.outline = normalizeOutline(outline);
     state.generatedStory = null;
     renderOutline();
     renderStory();
@@ -421,7 +422,7 @@ async function handleOutlineRegenerate() {
       feedback: elements.outlineFeedback.value.trim(),
       previous_outline: state.outline,
     });
-    state.outline = outline;
+    state.outline = normalizeOutline(outline);
     renderOutline();
     elements.regenerateOutline.disabled = false;
     elements.generateStory.disabled = false;
@@ -433,6 +434,10 @@ async function handleOutlineRegenerate() {
 
 async function handleStoryGenerate() {
   if (!state.outline) {
+    return;
+  }
+
+  if (!saveActStructureEdits(true)) {
     return;
   }
 
@@ -471,6 +476,47 @@ function buildStoryPayload() {
   };
 }
 
+function normalizeOutline(outline) {
+  const chapterCount = Number(outline.chapter_count || outline.chapters?.length || 1);
+  const actStructure = (outline.act_structure || []).map((section, index) => {
+    const [parsedStart, parsedEnd] = extractRangeNumbers(section.chapter_range);
+    const start = Number(section.start_chapter || parsedStart || (index === 0 ? 1 : parsedStart || 1));
+    const end = Number(section.end_chapter || parsedEnd || start || 1);
+    return {
+      ...section,
+      stage: section.stage || STAGE_ORDER[index] || `阶段${index + 1}`,
+      content: section.content || "",
+      start_chapter: start,
+      end_chapter: end,
+      chapter_range: `第${start}章-第${end}章`,
+    };
+  });
+
+  if (actStructure.length > 0) {
+    actStructure[0].start_chapter = 1;
+    actStructure[0].chapter_range = `第${actStructure[0].start_chapter}章-第${actStructure[0].end_chapter}章`;
+    actStructure[actStructure.length - 1].end_chapter = chapterCount;
+    actStructure[actStructure.length - 1].chapter_range = `第${actStructure[actStructure.length - 1].start_chapter}章-第${actStructure[actStructure.length - 1].end_chapter}章`;
+  }
+
+  return {
+    ...outline,
+    chapter_count: chapterCount,
+    act_structure: actStructure,
+  };
+}
+
+function extractRangeNumbers(rangeText) {
+  const matches = String(rangeText || "").match(/\d+/g);
+  if (!matches || !matches.length) {
+    return [1, 1];
+  }
+  if (matches.length === 1) {
+    return [Number(matches[0]), Number(matches[0])];
+  }
+  return [Number(matches[0]), Number(matches[1])];
+}
+
 function renderOutline() {
   if (!state.outline) {
     elements.outlineResult.className = "outline-result empty-state";
@@ -478,13 +524,24 @@ function renderOutline() {
     return;
   }
 
+  const lastStageIndex = state.outline.act_structure.length - 1;
   const actStructureHtml = (state.outline.act_structure || [])
     .map(
-      (section) => `
-        <li>
-          <strong>${escapeHtml(section.stage)}</strong>
+      (section, index) => `
+        <li class="stage-editor-card">
+          <div><strong>${escapeHtml(section.stage)}</strong></div>
           <div>内容简介：${escapeHtml(section.content)}</div>
-          <div>篇章范围：${escapeHtml(section.chapter_range)}</div>
+          <div class="stage-range-editor">
+            <label>
+              起始章
+              <input id="stage-start-${index}" type="number" min="1" max="${state.outline.chapter_count}" value="${section.start_chapter}" ${index === 0 ? "disabled" : ""} />
+            </label>
+            <label>
+              结束章
+              <input id="stage-end-${index}" type="number" min="1" max="${state.outline.chapter_count}" value="${section.end_chapter}" ${index === lastStageIndex ? "disabled" : ""} />
+            </label>
+          </div>
+          <div>当前范围：第${section.start_chapter}章-第${section.end_chapter}章</div>
         </li>
       `,
     )
@@ -495,16 +552,18 @@ function renderOutline() {
     <article class="outline-card">
       <div class="outline-meta">
         <div><strong>标题：</strong>${escapeHtml(state.outline.title)}</div>
-        <div><strong>一句话简介：</strong>${escapeHtml(state.outline.logline)}</div>
+        <div><strong>一句话卖点：</strong>${escapeHtml(state.outline.logline)}</div>
         <div><strong>故事概述：</strong>${escapeHtml(state.outline.summary)}</div>
         <div><strong>章节数：</strong>${state.outline.chapter_count}</div>
       </div>
-      <div>
+      <div class="action-row">
         <strong>四段式结构</strong>
-        <ol class="chapter-plan-list">
-          ${actStructureHtml || "<li>本轮大纲未返回四段式结构。</li>"}
-        </ol>
+        <button type="button" id="save-stage-ranges" class="ghost-button">保存篇章范围</button>
       </div>
+      <p class="micro-tip">第一段起始章固定为 1；结局段结束章固定为总篇章数；某一段的结束章不能超过下一段的起始章。</p>
+      <ol class="chapter-plan-list">
+        ${actStructureHtml || "<li>本轮大纲未返回四段式结构。</li>"}
+      </ol>
       <div>
         <strong>LLM 补完信息</strong>
         <ul class="inferred-list">
@@ -534,6 +593,67 @@ function renderOutline() {
       </div>
     </article>
   `;
+
+  const saveButton = document.querySelector("#save-stage-ranges");
+  if (saveButton) {
+    saveButton.addEventListener("click", () => saveActStructureEdits(false));
+  }
+}
+
+function saveActStructureEdits(silentSuccess = false) {
+  if (!state.outline || !state.outline.act_structure?.length) {
+    return true;
+  }
+
+  const totalChapters = state.outline.chapter_count;
+  const updated = state.outline.act_structure.map((section, index) => {
+    const startInput = document.querySelector(`#stage-start-${index}`);
+    const endInput = document.querySelector(`#stage-end-${index}`);
+    const startValue = index === 0 ? 1 : Number(startInput?.value);
+    const endValue = index === state.outline.act_structure.length - 1 ? totalChapters : Number(endInput?.value);
+    return {
+      ...section,
+      start_chapter: startValue,
+      end_chapter: endValue,
+      chapter_range: `第${startValue}章-第${endValue}章`,
+    };
+  });
+
+  for (let index = 0; index < updated.length; index += 1) {
+    const current = updated[index];
+    if (!Number.isInteger(current.start_chapter) || !Number.isInteger(current.end_chapter)) {
+      setStatus("请把四段式的起止章都填写为整数。", false, true);
+      return false;
+    }
+    if (current.start_chapter < 1 || current.end_chapter < 1 || current.start_chapter > totalChapters || current.end_chapter > totalChapters) {
+      setStatus(`第 ${index + 1} 段的章数必须落在 1 到 ${totalChapters} 之间。`, false, true);
+      return false;
+    }
+    if (current.start_chapter > current.end_chapter) {
+      setStatus(`第 ${index + 1} 段的起始章不能大于结束章。`, false, true);
+      return false;
+    }
+    if (index < updated.length - 1 && current.end_chapter > updated[index + 1].start_chapter) {
+      setStatus(`第 ${index + 1} 段的结束章不能超过下一段的起始章。`, false, true);
+      return false;
+    }
+  }
+
+  updated[0].start_chapter = 1;
+  updated[0].chapter_range = `第${updated[0].start_chapter}章-第${updated[0].end_chapter}章`;
+  updated[updated.length - 1].end_chapter = totalChapters;
+  updated[updated.length - 1].chapter_range = `第${updated[updated.length - 1].start_chapter}章-第${updated[updated.length - 1].end_chapter}章`;
+
+  state.outline = {
+    ...state.outline,
+    act_structure: updated,
+  };
+
+  renderOutline();
+  if (!silentSuccess) {
+    setStatus("四段式篇章范围已保存，后续正文会按这个分段布局。", false);
+  }
+  return true;
 }
 
 function renderStory() {

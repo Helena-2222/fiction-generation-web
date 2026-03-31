@@ -9,6 +9,7 @@ from typing import Dict, List
 
 from app.llm import DeepSeekClient
 from app.models import (
+    ActOutlineSection,
     GeneratedChapter,
     GeneratedOutline,
     OutlineGenerationRequest,
@@ -48,14 +49,14 @@ class StoryService:
                 ensure_ascii=False,
                 indent=2,
             )
-            feedback = request.feedback or "用户希望在保留核心设定的前提下，产出一个更有新鲜感、更强戏剧性的版本。"
+            feedback = request.feedback or "请保留核心设定，但让结构更有文学性、人物关系更复杂、伏笔更细密。"
             regeneration_block = "\n\n".join(
                 [
-                    "请参考上一版大纲和反馈，生成一版新的大纲。",
+                    "上一版大纲：",
                     previous_outline_text,
                     "用户反馈：",
                     feedback,
-                    "请根据上述内容生成新的一版大纲。",
+                    "请据此重生成一版新的大纲。",
                 ]
             )
 
@@ -80,17 +81,32 @@ class StoryService:
             ],
             temperature=0.85,
         )
-        return GeneratedOutline.model_validate(result)
+        outline = GeneratedOutline.model_validate(result)
+        outline.act_structure = self._normalize_act_structure(outline.act_structure, outline.chapter_count)
+        return outline
 
     async def generate_story(self, request: StoryGenerationRequest) -> StoryGenerationResponse:
         story = self._normalize_story(request.story)
         outline = request.outline
+        outline.act_structure = self._normalize_act_structure(outline.act_structure, outline.chapter_count)
+
         generated_chapters: List[GeneratedChapter] = []
         continuity_summaries: List[Dict[str, str]] = []
         chapter_targets = self._chapter_targets(story.total_words, story.chapter_words or 2000)
         outline_json = json.dumps(outline.model_dump(), ensure_ascii=False, indent=2)
 
         for chapter in outline.chapters:
+            stage_context = self._get_stage_context(outline, chapter.chapter_number)
+            stage_chapters = [
+                {
+                    "chapter_number": item.chapter_number,
+                    "title": item.title,
+                    "summary": item.summary,
+                }
+                for item in outline.chapters
+                if stage_context["start_chapter"] <= item.chapter_number <= stage_context["end_chapter"]
+            ]
+
             chapter_spec = {
                 "chapter_number": chapter.chapter_number,
                 "title": chapter.title,
@@ -98,7 +114,10 @@ class StoryService:
                 "summary": chapter.summary,
                 "key_events": chapter.key_events,
                 "cliffhanger": chapter.cliffhanger,
-                "stage": self._find_stage_for_chapter(outline, chapter.chapter_number),
+                "stage": stage_context["stage"],
+                "stage_range": stage_context["chapter_range"],
+                "stage_content": stage_context["content"],
+                "stage_chapters": stage_chapters,
             }
 
             user_prompt = _render_prompt(
@@ -111,7 +130,7 @@ class StoryService:
                         continuity_summaries,
                         ensure_ascii=False,
                         indent=2,
-                    ) if continuity_summaries else "暂无前文，请从头开始写作。",
+                    ) if continuity_summaries else "尚无前文，请从开篇写起。",
                     "CHAPTER_SPEC": json.dumps(chapter_spec, ensure_ascii=False, indent=2),
                     "CHAPTER_TITLE_JSON": json.dumps(chapter.title, ensure_ascii=False),
                 },
@@ -181,12 +200,59 @@ class StoryService:
         return json.dumps(payload, ensure_ascii=False, indent=2)
 
     @staticmethod
-    def _find_stage_for_chapter(outline: GeneratedOutline, chapter_number: int) -> str:
+    def _extract_range_numbers(section: ActOutlineSection) -> tuple[int, int]:
+        if section.start_chapter and section.end_chapter:
+            return section.start_chapter, section.end_chapter
+
+        numbers = [int(value) for value in re.findall(r"\d+", section.chapter_range or "")]
+        if len(numbers) >= 2:
+            return numbers[0], numbers[1]
+        if len(numbers) == 1:
+            return numbers[0], numbers[0]
+        return 1, 1
+
+    def _normalize_act_structure(
+        self,
+        sections: List[ActOutlineSection],
+        chapter_count: int,
+    ) -> List[ActOutlineSection]:
+        normalized: List[ActOutlineSection] = []
+        defaults = ["开端", "发展", "高潮", "结局"]
+
+        for index, section in enumerate(sections or []):
+            start, end = self._extract_range_numbers(section)
+            start = max(1, min(start, chapter_count))
+            end = max(1, min(end, chapter_count))
+            if start > end:
+                start, end = end, start
+            normalized.append(
+                section.model_copy(
+                    update={
+                        "stage": section.stage or defaults[index] if index < len(defaults) else section.stage,
+                        "start_chapter": start,
+                        "end_chapter": end,
+                        "chapter_range": f"第{start}章-第{end}章",
+                    }
+                )
+            )
+
+        return normalized
+
+    def _get_stage_context(self, outline: GeneratedOutline, chapter_number: int) -> Dict[str, object]:
         for section in outline.act_structure:
-            numbers = [int(value) for value in re.findall(r"\d+", section.chapter_range)]
-            if len(numbers) < 2:
-                continue
-            start, end = numbers[0], numbers[1]
+            start, end = self._extract_range_numbers(section)
             if start <= chapter_number <= end:
-                return section.stage
-        return "待标记阶段"
+                return {
+                    "stage": section.stage,
+                    "content": section.content,
+                    "start_chapter": start,
+                    "end_chapter": end,
+                    "chapter_range": f"第{start}章-第{end}章",
+                }
+        return {
+            "stage": "未标注环节",
+            "content": "",
+            "start_chapter": chapter_number,
+            "end_chapter": chapter_number,
+            "chapter_range": f"第{chapter_number}章-第{chapter_number}章",
+        }
