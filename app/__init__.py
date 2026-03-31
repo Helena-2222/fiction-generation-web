@@ -1,0 +1,1 @@
+"""StoryGeneration Web application package."""

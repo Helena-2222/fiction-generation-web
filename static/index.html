@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>神经元脚本</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Human x AI Story Studio</p>
+          <h1>神经元脚本</h1>
+          <p class="hero-text">
+            把故事梗概、世界观、角色卡和人物关系网交给 AI，一起从策划走到逐章创作。
+          </p>
+        </div>
+        <div class="hero-card">
+          <p>流程</p>
+          <ol>
+            <li>整理创作设定</li>
+            <li>生成并重塑大纲</li>
+            <li>确认后逐章生成正文</li>
+          </ol>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Step 1</p>
+              <h2>创作输入</h2>
+            </div>
+            <span class="tag">故事梗概与总篇幅必填</span>
+          </div>
+
+          <form id="story-form" class="story-form">
+            <div class="field-group">
+              <label>故事类型</label>
+              <div id="genre-options" class="chip-group"></div>
+              <input id="custom-genre" type="text" placeholder="自定义类型，例如：赛博武侠" />
+            </div>
+
+            <div class="field-group">
+              <label for="synopsis">故事梗概</label>
+              <textarea
+                id="synopsis"
+                rows="5"
+                placeholder="至少写下核心冲突、主人公想要什么、会遭遇什么阻碍。"
+                required
+              ></textarea>
+            </div>
+
+            <div class="field-grid two">
+              <div class="field-group">
+                <label>语言风格</label>
+                <div id="style-options" class="chip-group"></div>
+                <input id="custom-style" type="text" placeholder="自定义风格，例如：冷峻纪实感" />
+              </div>
+
+              <div class="field-group">
+                <label for="total-words">小说整体篇幅</label>
+                <input id="total-words" type="number" min="1000" step="100" value="12000" required />
+              </div>
+            </div>
+
+            <div class="field-grid three">
+              <div class="field-group">
+                <label for="worldview-time">世界观：时间背景</label>
+                <textarea id="worldview-time" rows="4" placeholder="例如：晚清、近未来、架空王朝"></textarea>
+              </div>
+              <div class="field-group">
+                <label for="worldview-physical">世界观：物理环境</label>
+                <textarea id="worldview-physical" rows="4" placeholder="例如：漂浮城市、边疆雪原、海底殖民地"></textarea>
+              </div>
+              <div class="field-group">
+                <label for="worldview-social">世界观：社会环境</label>
+                <textarea id="worldview-social" rows="4" placeholder="例如：门阀秩序、企业统治、宗教国家"></textarea>
+              </div>
+            </div>
+
+            <div class="field-grid two">
+              <div class="field-group">
+                <label for="chapter-words">每章目标字数</label>
+                <input id="chapter-words" type="number" min="500" step="100" value="2000" />
+                <small>可留空，系统默认按 2000 字左右规划。</small>
+              </div>
+              <div class="field-group inline-stat">
+                <label>预估章节数</label>
+                <div id="chapter-count" class="stat-card">6 章</div>
+              </div>
+            </div>
+
+            <div class="section-heading compact">
+              <div>
+                <p class="section-kicker">Step 1A</p>
+                <h3>角色卡片</h3>
+              </div>
+              <button type="button" id="add-character" class="ghost-button">新增角色</button>
+            </div>
+            <div id="character-list" class="character-list"></div>
+
+            <div class="section-heading compact">
+              <div>
+                <p class="section-kicker">Step 1B</p>
+                <h3>角色关系网</h3>
+              </div>
+              <span class="micro-tip">拖动椭圆可调整布局；从节点右侧锚点拖到另一个角色即可建立关系。</span>
+            </div>
+            <div class="graph-wrap">
+              <div id="graph-canvas" class="graph-canvas">
+                <svg id="graph-svg" class="graph-svg"></svg>
+                <div id="graph-nodes" class="graph-nodes"></div>
+                <div id="relation-labels" class="relation-labels"></div>
+              </div>
+            </div>
+
+            <div class="action-row">
+              <button type="submit" id="generate-outline" class="primary-button">确认并生成大纲</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel output-panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Step 2</p>
+              <h2>大纲与正文</h2>
+            </div>
+            <div id="status-pill" class="status-pill">等待输入</div>
+          </div>
+
+          <div id="status-box" class="status-box">
+            填写左侧信息后，先生成故事大纲；若不满意，可以补充反馈并重生成。
+          </div>
+
+          <section class="output-block">
+            <div class="output-header">
+              <h3>故事大纲</h3>
+              <div class="action-row">
+                <button type="button" id="regenerate-outline" class="ghost-button" disabled>重生成大纲</button>
+                <button type="button" id="generate-story" class="primary-button" disabled>按大纲生成全文</button>
+              </div>
+            </div>
+            <textarea
+              id="outline-feedback"
+              rows="3"
+              placeholder="如果对大纲不满意，可以写下重生成方向，例如：加强情感张力、增加悬疑感、减少支线。"
+            ></textarea>
+            <div id="outline-result" class="outline-result empty-state">还没有生成大纲。</div>
+          </section>
+
+          <section class="output-block">
+            <div class="output-header">
+              <h3>章节正文</h3>
+            </div>
+            <div id="story-result" class="story-result empty-state">大纲确认后，这里会依次展示每个篇章的正文。</div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <datalist id="relation-presets">
+      <option value="朋友"></option>
+      <option value="亲人"></option>
+      <option value="恋人"></option>
+      <option value="师生"></option>
+      <option value="同事"></option>
+      <option value="宿敌"></option>
+      <option value="盟友"></option>
+      <option value="上下级"></option>
+    </datalist>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
