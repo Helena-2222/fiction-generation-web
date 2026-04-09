@@ -1,4 +1,4 @@
-const GENRE_OPTIONS = ["爱情", "科幻", "悬疑", "奇幻", "历史", "现实主义", "成长"];
+﻿const GENRE_OPTIONS = ["爱情", "科幻", "悬疑", "奇幻", "历史", "现实主义", "成长"];
 const STYLE_OPTIONS = ["幽默", "张爱玲式", "雨果式", "电影感", "冷峻克制", "轻盈浪漫"];
 const CHARACTER_FIELDS = [
   ["name", "姓名"],
@@ -13,6 +13,11 @@ const CHARACTER_FIELDS = [
 ];
 const TEXTAREA_FIELDS = new Set(["personality", "appearance", "values", "core_motivation"]);
 const STAGE_ORDER = ["开端", "发展", "高潮", "结局"];
+const GRAPH = {
+  nodeWidth: 154,
+  nodeHeight: 76,
+  curveOffset: 54,
+};
 
 const state = {
   genre: "科幻",
@@ -22,7 +27,8 @@ const state = {
   outline: null,
   generatedStory: null,
   pendingEdge: null,
-  draggingNode: null,
+  relationEditor: null,
+  relationDeleteRequest: null,
 };
 
 const elements = {
@@ -47,6 +53,18 @@ const elements = {
   regenerateOutline: document.querySelector("#regenerate-outline"),
   generateStory: document.querySelector("#generate-story"),
   outlineFeedback: document.querySelector("#outline-feedback"),
+  relationModal: document.querySelector("#relation-modal"),
+  relationModalClose: document.querySelector("#relation-modal-close"),
+  relationDirection: document.querySelector("#relation-direction"),
+  relationLabelInput: document.querySelector("#relation-label-input"),
+  relationReverseToggle: document.querySelector("#relation-reverse-toggle"),
+  reverseRelationGroup: document.querySelector("#reverse-relation-group"),
+  reverseRelationLabelInput: document.querySelector("#reverse-relation-label-input"),
+  relationSaveButton: document.querySelector("#relation-save-button"),
+  relationDeleteModal: document.querySelector("#relation-delete-modal"),
+  relationDeleteMessage: document.querySelector("#relation-delete-message"),
+  relationDeleteConfirm: document.querySelector("#relation-delete-confirm"),
+  relationDeleteCancel: document.querySelector("#relation-delete-cancel"),
 };
 
 function generateId(prefix) {
@@ -88,6 +106,31 @@ function init() {
   elements.storyForm.addEventListener("submit", handleOutlineSubmit);
   elements.regenerateOutline.addEventListener("click", handleOutlineRegenerate);
   elements.generateStory.addEventListener("click", handleStoryGenerate);
+  elements.relationModalClose.addEventListener("click", closeRelationModal);
+  elements.relationSaveButton.addEventListener("click", saveRelationModal);
+  elements.relationLabelInput.addEventListener("input", () => {
+    if (elements.relationReverseToggle.checked) {
+      elements.reverseRelationLabelInput.value = elements.relationLabelInput.value.trim();
+    }
+  });
+  elements.relationReverseToggle.addEventListener("change", () => {
+    elements.reverseRelationGroup.classList.add("hidden");
+    elements.reverseRelationLabelInput.value = elements.relationReverseToggle.checked
+      ? elements.relationLabelInput.value.trim()
+      : "";
+  });
+  elements.relationModal.addEventListener("click", (event) => {
+    if (event.target === elements.relationModal) {
+      closeRelationModal();
+    }
+  });
+  elements.relationDeleteConfirm.addEventListener("click", confirmRelationDelete);
+  elements.relationDeleteCancel.addEventListener("click", closeRelationDeleteModal);
+  elements.relationDeleteModal.addEventListener("click", (event) => {
+    if (event.target === elements.relationDeleteModal) {
+      closeRelationDeleteModal();
+    }
+  });
   window.addEventListener("resize", renderGraph);
   setupGraphInteractions();
   updateChapterEstimate();
@@ -114,7 +157,7 @@ function renderChipGroup(container, options, key) {
 function updateChapterEstimate() {
   const totalWords = Number(elements.totalWords.value) || 0;
   const chapterWords = Number(elements.chapterWords.value) || 2000;
-  const count = Math.max(1, Math.ceil(totalWords / chapterWords || 1));
+  const count = Math.max(1, Math.ceil(totalWords / (chapterWords || 1)));
   elements.chapterCount.textContent = `${count} 章`;
 }
 
@@ -191,190 +234,656 @@ function removeCharacter(characterId) {
 }
 
 function setupGraphInteractions() {
-  elements.graphCanvas.addEventListener("pointermove", (event) => {
-    const rect = elements.graphCanvas.getBoundingClientRect();
-    if (state.draggingNode) {
-      const character = state.characters.find((item) => item.id === state.draggingNode.id);
-      if (!character) {
-        return;
+  elements.graphCanvas.addEventListener("pointerdown", handleGraphPointerDown);
+  elements.graphCanvas.addEventListener("pointermove", handleGraphPointerMove);
+  window.addEventListener("pointerup", handleGlobalPointerUp);
+  window.addEventListener("pointercancel", handlePendingEdgeCancel);
+}
+
+function handleGraphPointerDown(event) {
+  if (event.button !== 0) {
+    return;
+  }
+
+  const point = getGraphPointFromClient(event.clientX, event.clientY);
+  const source = findCharacterAtGraphPoint(point.x, point.y);
+  if (!source) {
+    return;
+  }
+
+  event.preventDefault();
+  if (typeof elements.graphCanvas.setPointerCapture === "function") {
+    elements.graphCanvas.setPointerCapture(event.pointerId);
+  }
+
+  state.pendingEdge = {
+    sourceId: source.id,
+    pointerId: event.pointerId,
+    currentPoint: point,
+    candidateTargetId: null,
+  };
+  renderGraph();
+}
+
+function handleGraphPointerMove(event) {
+  if (!state.pendingEdge || state.pendingEdge.pointerId !== event.pointerId) {
+    return;
+  }
+
+  const point = getGraphPointFromClient(event.clientX, event.clientY);
+  const hoveredTarget = findCharacterAtGraphPoint(point.x, point.y);
+  state.pendingEdge.currentPoint = point;
+  state.pendingEdge.candidateTargetId =
+    hoveredTarget && hoveredTarget.id !== state.pendingEdge.sourceId ? hoveredTarget.id : null;
+  renderGraph();
+}
+
+function handleGlobalPointerUp(event) {
+  if (!state.pendingEdge || state.pendingEdge.pointerId !== event.pointerId) {
+    return;
+  }
+
+  releaseGraphPointerCapture(event.pointerId);
+  const point = getGraphPointFromClient(event.clientX, event.clientY);
+  const target = findCharacterAtGraphPoint(point.x, point.y);
+  const sourceId = state.pendingEdge.sourceId;
+  state.pendingEdge = null;
+  renderGraph();
+
+  if (target && target.id !== sourceId) {
+    openRelationModal(sourceId, target.id);
+  }
+}
+
+function handlePendingEdgeCancel(event) {
+  if (!state.pendingEdge || state.pendingEdge.pointerId !== event.pointerId) {
+    return;
+  }
+
+  releaseGraphPointerCapture(event.pointerId);
+  state.pendingEdge = null;
+  renderGraph();
+}
+
+function releaseGraphPointerCapture(pointerId) {
+  if (
+    pointerId == null ||
+    typeof elements.graphCanvas.hasPointerCapture !== "function" ||
+    !elements.graphCanvas.hasPointerCapture(pointerId)
+  ) {
+    return;
+  }
+  elements.graphCanvas.releasePointerCapture(pointerId);
+}
+
+function getGraphPointFromClient(clientX, clientY) {
+  const rect = elements.graphCanvas.getBoundingClientRect();
+  const width = elements.graphCanvas.clientWidth || rect.width || 0;
+  const height = elements.graphCanvas.clientHeight || rect.height || 0;
+  return {
+    x: clamp(clientX - rect.left, 0, width),
+    y: clamp(clientY - rect.top, 0, height),
+  };
+}
+
+function findCharacterAtGraphPoint(x, y) {
+  for (let index = state.characters.length - 1; index >= 0; index -= 1) {
+    const character = state.characters[index];
+    if (isPointInCharacterEllipse(character, x, y)) {
+      return character;
+    }
+  }
+  return null;
+}
+
+function isPointInCharacterEllipse(character, x, y) {
+  const rx = GRAPH.nodeWidth / 2;
+  const ry = GRAPH.nodeHeight / 2;
+  const offsetX = x - character.graph_x - rx;
+  const offsetY = y - character.graph_y - ry;
+  const normalized =
+    (offsetX * offsetX) / (rx * rx) +
+    (offsetY * offsetY) / (ry * ry);
+  return normalized <= 1;
+}
+
+function resolveAnchorPoint(character, anchor) {
+  if (!anchor) {
+    return getNodeCenter(character);
+  }
+  return {
+    x: character.graph_x + clamp(anchor.x, 0, GRAPH.nodeWidth),
+    y: character.graph_y + clamp(anchor.y, 0, GRAPH.nodeHeight),
+  };
+}
+
+function projectPointToEllipse(character, towardX, towardY) {
+  const center = getNodeCenter(character);
+  const rx = GRAPH.nodeWidth / 2;
+  const ry = GRAPH.nodeHeight / 2;
+  const dx = towardX - center.x;
+  const dy = towardY - center.y;
+
+  if (!dx && !dy) {
+    return { x: center.x + rx, y: center.y };
+  }
+
+  const scale = 1 / Math.sqrt((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry));
+  return {
+    x: center.x + dx * scale,
+    y: center.y + dy * scale,
+  };
+}
+
+function getFallbackRelationEndpoints(sourceCharacter, targetCharacter) {
+  const sourceCenter = getNodeCenter(sourceCharacter);
+  const targetCenter = getNodeCenter(targetCharacter);
+  return {
+    start: projectPointToEllipse(sourceCharacter, targetCenter.x, targetCenter.y),
+    end: projectPointToEllipse(targetCharacter, sourceCenter.x, sourceCenter.y),
+  };
+}
+
+function getPendingEdgePoints() {
+  const source = getCharacterById(state.pendingEdge.sourceId);
+  if (!source || !state.pendingEdge.currentPoint) {
+    return null;
+  }
+
+  return {
+    start: getNodeCenter(source),
+    end: state.pendingEdge.currentPoint,
+  };
+}
+
+function getCurveControlPoint(start, end, offset) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const px = -dy / length;
+  const py = dx / length;
+  return {
+    x: (start.x + end.x) / 2 + px * offset,
+    y: (start.y + end.y) / 2 + py * offset,
+  };
+}
+
+function buildCurveGeometryFromEndpoints(start, end, offset) {
+  const control = getCurveControlPoint(start, end, offset);
+  return buildCurveGeometryFromPoints(start, end, control);
+}
+
+function buildCurveGeometryFromRelation(relation, offset) {
+  const sourceCharacter = getCharacterById(relation.source_id);
+  const targetCharacter = getCharacterById(relation.target_id);
+  if (!sourceCharacter || !targetCharacter) {
+    return null;
+  }
+
+  const hasStoredAnchors = relation.source_anchor && relation.target_anchor;
+  const { start, end } = hasStoredAnchors
+    ? {
+        start: resolveAnchorPoint(sourceCharacter, relation.source_anchor),
+        end: resolveAnchorPoint(targetCharacter, relation.target_anchor),
       }
-      character.graph_x = clamp(event.clientX - rect.left - 77, 0, rect.width - 154);
-      character.graph_y = clamp(event.clientY - rect.top - 38, 0, rect.height - 76);
-      renderGraph();
-      return;
-    }
-
-    if (state.pendingEdge) {
-      state.pendingEdge.currentX = event.clientX - rect.left;
-      state.pendingEdge.currentY = event.clientY - rect.top;
-      renderGraph();
-    }
-  });
-
-  window.addEventListener("pointerup", () => {
-    state.draggingNode = null;
-    if (state.pendingEdge) {
-      state.pendingEdge = null;
-      renderGraph();
-    }
-  });
+    : getFallbackRelationEndpoints(sourceCharacter, targetCharacter);
+  return buildCurveGeometryFromEndpoints(start, end, offset);
 }
 
 function renderGraph() {
   const width = elements.graphCanvas.clientWidth || 700;
   const height = elements.graphCanvas.clientHeight || 440;
   elements.graphSvg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  elements.graphSvg.innerHTML = "";
+  elements.graphSvg.innerHTML = buildSvgDefs();
   elements.graphNodes.innerHTML = "";
   elements.relationLabels.innerHTML = "";
 
+  getRelationGroups().forEach((group) => renderRelationGroup(group));
+  if (state.pendingEdge) {
+    renderPendingEdge();
+  }
+  state.characters.forEach((character, index) => renderCharacterNode(character, index));
+}
+
+function buildSvgDefs() {
+  return `
+    <defs>
+      <marker id="arrow-end" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 8 4 L 0 8 z" fill="#8e4a38"></path>
+      </marker>
+      <marker id="arrow-start" viewBox="0 0 8 8" refX="2" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 8 0 L 0 4 L 8 8 z" fill="#8e4a38"></path>
+      </marker>
+    </defs>
+  `;
+}
+
+function renderCharacterNode(character, index) {
+  const node = document.createElement("div");
+  node.className = [
+    "graph-node",
+    state.pendingEdge?.sourceId === character.id ? "is-source" : "",
+    state.pendingEdge?.candidateTargetId === character.id ? "is-target" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  node.style.left = `${character.graph_x}px`;
+  node.style.top = `${character.graph_y}px`;
+  node.dataset.id = character.id;
+
+  const name = document.createElement("div");
+  name.className = "graph-node-name";
+  name.textContent = character.name || `角色 ${index + 1}`;
+
+  node.addEventListener("contextmenu", (event) => event.preventDefault());
+
+  node.appendChild(name);
+  elements.graphNodes.appendChild(node);
+}
+
+function getRelationGroups() {
+  const groups = new Map();
   state.relations.forEach((relation) => {
-    const source = state.characters.find((character) => character.id === relation.source_id);
-    const target = state.characters.find((character) => character.id === relation.target_id);
-    if (!source || !target) {
-      return;
+    const key = makePairKey(relation.source_id, relation.target_id);
+    if (!groups.has(key)) {
+      const [aId, bId] = key.split("--");
+      groups.set(key, { key, aId, bId, relations: [] });
     }
-
-    const x1 = source.graph_x + 77;
-    const y1 = source.graph_y + 38;
-    const x2 = target.graph_x + 77;
-    const y2 = target.graph_y + 38;
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("x1", x1);
-    line.setAttribute("y1", y1);
-    line.setAttribute("x2", x2);
-    line.setAttribute("y2", y2);
-    line.setAttribute("stroke", "#8e4a38");
-    line.setAttribute("stroke-width", "2.4");
-    line.setAttribute("stroke-linecap", "round");
-    elements.graphSvg.appendChild(line);
-
-    const badge = document.createElement("div");
-    badge.className = "relation-badge";
-    badge.style.left = `${(x1 + x2) / 2}px`;
-    badge.style.top = `${(y1 + y2) / 2}px`;
-
-    const input = document.createElement("input");
-    input.type = "text";
-    input.value = relation.label || "";
-    input.setAttribute("list", "relation-presets");
-    input.placeholder = `${source.name || "角色"} 与 ${target.name || "角色"}`;
-    input.addEventListener("input", (event) => {
-      relation.label = event.target.value;
-    });
-
-    const removeButton = document.createElement("button");
-    removeButton.type = "button";
-    removeButton.className = "tiny-button";
-    removeButton.textContent = "删";
-    removeButton.addEventListener("click", () => {
-      state.relations = state.relations.filter((item) => item.id !== relation.id);
-      renderGraph();
-    });
-
-    badge.append(input, removeButton);
-    elements.relationLabels.appendChild(badge);
+    groups.get(key).relations.push(relation);
   });
 
-  if (state.pendingEdge) {
-    const preview = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    preview.setAttribute("x1", state.pendingEdge.startX);
-    preview.setAttribute("y1", state.pendingEdge.startY);
-    preview.setAttribute("x2", state.pendingEdge.currentX);
-    preview.setAttribute("y2", state.pendingEdge.currentY);
-    preview.setAttribute("stroke", "#9d3a2f");
-    preview.setAttribute("stroke-width", "2");
-    preview.setAttribute("stroke-dasharray", "8 6");
-    elements.graphSvg.appendChild(preview);
-  }
-
-  state.characters.forEach((character, index) => {
-    const node = document.createElement("div");
-    node.className = `graph-node ${state.draggingNode?.id === character.id ? "dragging" : ""}`;
-    node.style.left = `${clamp(character.graph_x, 0, width - 154)}px`;
-    node.style.top = `${clamp(character.graph_y, 0, height - 76)}px`;
-    node.dataset.id = character.id;
-
-    const name = document.createElement("div");
-    name.className = "graph-node-name";
-    name.textContent = character.name || `角色 ${index + 1}`;
-
-    const anchor = document.createElement("div");
-    anchor.className = "graph-anchor";
-    anchor.title = "拖到其他角色上建立关系";
-    anchor.addEventListener("pointerdown", (event) => {
-      event.stopPropagation();
-      const rect = elements.graphCanvas.getBoundingClientRect();
-      state.pendingEdge = {
-        sourceId: character.id,
-        startX: character.graph_x + 154,
-        startY: character.graph_y + 38,
-        currentX: event.clientX - rect.left,
-        currentY: event.clientY - rect.top,
-      };
-      renderGraph();
-    });
-
-    node.addEventListener("pointerdown", (event) => {
-      if (event.target === anchor) {
-        return;
-      }
-      state.draggingNode = { id: character.id };
-      node.setPointerCapture(event.pointerId);
-    });
-
-    node.addEventListener("pointerup", () => {
-      if (state.pendingEdge && state.pendingEdge.sourceId !== character.id) {
-        createOrFocusRelation(state.pendingEdge.sourceId, character.id);
-        state.pendingEdge = null;
-      }
-      state.draggingNode = null;
-      renderGraph();
-    });
-
-    node.append(name, anchor);
-    elements.graphNodes.appendChild(node);
+  return Array.from(groups.values()).map((group) => {
+    const forward = group.relations.find((relation) => relation.source_id === group.aId && relation.target_id === group.bId) || null;
+    const reverse = group.relations.find((relation) => relation.source_id === group.bId && relation.target_id === group.aId) || null;
+    return {
+      ...group,
+      forward,
+      reverse,
+    };
   });
 }
 
-function createOrFocusRelation(sourceId, targetId) {
-  const relationKey = [sourceId, targetId].sort().join("--");
-  const existing = state.relations.find((relation) => {
-    const currentKey = [relation.source_id, relation.target_id].sort().join("--");
-    return currentKey === relationKey;
+function renderRelationGroup(group) {
+  getRenderableRelationItems(group).forEach((item) => renderRelationItem(item));
+}
+
+function renderPendingEdge() {
+  const points = getPendingEdgePoints();
+  if (!points) {
+    return;
+  }
+
+  const preview = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  preview.setAttribute("x1", points.start.x);
+  preview.setAttribute("y1", points.start.y);
+  preview.setAttribute("x2", points.end.x);
+  preview.setAttribute("y2", points.end.y);
+  preview.setAttribute("stroke", "#9d3a2f");
+  preview.setAttribute("stroke-width", "2.4");
+  preview.setAttribute("stroke-dasharray", "8 6");
+  preview.setAttribute("stroke-linecap", "round");
+  preview.setAttribute("pointer-events", "none");
+  elements.graphSvg.appendChild(preview);
+}
+
+function buildCurveGeometryFromPoints(start, end, control) {
+  const t = 0.5;
+  const labelX = (1 - t) * (1 - t) * start.x + 2 * (1 - t) * t * control.x + t * t * end.x;
+  const labelY = (1 - t) * (1 - t) * start.y + 2 * (1 - t) * t * control.y + t * t * end.y;
+  return {
+    pathD: `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`,
+    labelX,
+    labelY,
+  };
+}
+
+function curveSign(key) {
+  const value = Array.from(key).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return value % 2 === 0 ? 1 : -1;
+}
+
+function getRenderableRelationItems(group) {
+  if (shouldMergeBidirectionalGroup(group)) {
+    return [createMergedRelationRenderItem(group)];
+  }
+
+  const items = [];
+  if (group.forward) {
+    items.push(createDirectionalRelationRenderItem(group.forward, group.reverse ? GRAPH.curveOffset : curveSign(group.key) * GRAPH.curveOffset));
+  }
+  if (group.reverse) {
+    items.push(createDirectionalRelationRenderItem(group.reverse, group.forward ? GRAPH.curveOffset : curveSign(group.key) * GRAPH.curveOffset));
+  }
+  return items;
+}
+
+function shouldMergeBidirectionalGroup(group) {
+  return isBidirectionalRelationPair(group.forward, group.reverse);
+}
+
+function isBidirectionalRelationPair(forward, reverse) {
+  return Boolean(
+    forward &&
+      reverse &&
+      forward.bidirectional &&
+      reverse.bidirectional &&
+      normalizeRelationLabel(forward.label) === normalizeRelationLabel(reverse.label),
+  );
+}
+
+function normalizeRelationLabel(label) {
+  return String(label || "").trim();
+}
+
+function createDirectionalRelationRenderItem(relation, offset) {
+  return {
+    relation,
+    sourceId: relation.source_id,
+    targetId: relation.target_id,
+    offset,
+    markerStart: false,
+    markerEnd: true,
+    label: getDirectionalRelationDisplayText(relation),
+    deleteRequest: {
+      mode: "direction",
+      sourceId: relation.source_id,
+      targetId: relation.target_id,
+      message: `确认删除 ${getDirectionalRelationDisplayText(relation)} 吗？`,
+    },
+  };
+}
+
+function createMergedRelationRenderItem(group) {
+  const relation = group.forward || group.reverse;
+  const mergedLabel = normalizeRelationLabel(relation?.label) || "未命名关系";
+  return {
+    relation,
+    sourceId: group.forward?.source_id || relation.source_id,
+    targetId: group.forward?.target_id || relation.target_id,
+    offset: 0,
+    markerStart: true,
+    markerEnd: true,
+    label: mergedLabel,
+    deleteRequest: {
+      mode: "pair",
+      pairKey: group.key,
+      message: `确认删除 ${getCharacterName(group.aId)} 与 ${getCharacterName(group.bId)} 的双向关系“${mergedLabel}”吗？`,
+    },
+  };
+}
+
+function renderRelationItem(item) {
+  const geometry = buildCurveGeometryFromRelation(item.relation, item.offset);
+  if (!geometry) {
+    return;
+  }
+
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", geometry.pathD);
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "#8e4a38");
+  path.setAttribute("stroke-width", "2.6");
+  if (item.markerStart) {
+    path.setAttribute("marker-start", "url(#arrow-start)");
+  }
+  if (item.markerEnd) {
+    path.setAttribute("marker-end", "url(#arrow-end)");
+  }
+  bindRelationItemEvents(path, item);
+  elements.graphSvg.appendChild(path);
+
+  const hitPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  hitPath.setAttribute("d", geometry.pathD);
+  hitPath.setAttribute("fill", "none");
+  hitPath.setAttribute("stroke", "transparent");
+  hitPath.setAttribute("stroke-width", "18");
+  bindRelationItemEvents(hitPath, item);
+  elements.graphSvg.appendChild(hitPath);
+
+  const badge = document.createElement("button");
+  badge.type = "button";
+  badge.className = "relation-badge relation-badge-button";
+  badge.style.left = `${geometry.labelX}px`;
+  badge.style.top = `${geometry.labelY}px`;
+  badge.innerHTML = `<span>${escapeHtml(item.label)}</span>`;
+  bindRelationItemEvents(badge, item);
+  elements.relationLabels.appendChild(badge);
+}
+
+function bindRelationItemEvents(target, item) {
+  target.addEventListener("click", () => openRelationModal(item.sourceId, item.targetId));
+  target.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    openRelationDeleteModal(item.deleteRequest);
   });
-  if (existing) {
-    renderGraph();
-    return;
-  }
+}
 
-  const source = state.characters.find((character) => character.id === sourceId);
-  const target = state.characters.find((character) => character.id === targetId);
-  if (!source || !target) {
-    return;
+function getDirectionalRelationDisplayText(relation) {
+  if (!relation) {
+    return "未命名关系";
   }
+  const label = normalizeRelationLabel(relation.label) || "未命名关系";
+  return `${getCharacterName(relation.source_id)}→${getCharacterName(relation.target_id)}: ${label}`;
+}
 
-  state.relations.push({
+function cloneAnchor(anchor) {
+  if (!anchor) {
+    return null;
+  }
+  return {
+    x: anchor.x,
+    y: anchor.y,
+  };
+}
+
+function createRelationRecord(
+  source,
+  target,
+  label,
+  sourceAnchor = null,
+  targetAnchor = null,
+  bidirectional = false,
+) {
+  return {
     id: generateId("relation"),
-    source_id: sourceId,
-    target_id: targetId,
-    label: "",
+    source_id: source.id,
+    target_id: target.id,
+    label,
     source_name: source.name || "",
     target_name: target.name || "",
-  });
+    source_anchor: cloneAnchor(sourceAnchor),
+    target_anchor: cloneAnchor(targetAnchor),
+    bidirectional: Boolean(bidirectional),
+  };
+}
+
+function openRelationModal(sourceId, targetId, draftAnchors = null) {
+  const sourceName = getCharacterName(sourceId);
+  const targetName = getCharacterName(targetId);
+  const forward = state.relations.find((relation) => relation.source_id === sourceId && relation.target_id === targetId) || null;
+  const reverse = state.relations.find((relation) => relation.source_id === targetId && relation.target_id === sourceId) || null;
+  const hadBidirectionalReverse = isBidirectionalRelationPair(forward, reverse);
+
+  state.relationEditor = {
+    sourceId,
+    targetId,
+    key: makePairKey(sourceId, targetId),
+    forwardSourceAnchor: cloneAnchor(draftAnchors?.forwardSourceAnchor || forward?.source_anchor),
+    forwardTargetAnchor: cloneAnchor(draftAnchors?.forwardTargetAnchor || forward?.target_anchor),
+    reverseSourceAnchor: cloneAnchor(draftAnchors?.reverseSourceAnchor || reverse?.source_anchor),
+    reverseTargetAnchor: cloneAnchor(draftAnchors?.reverseTargetAnchor || reverse?.target_anchor),
+    hadBidirectionalReverse,
+  };
+  elements.relationDirection.textContent = `${sourceName} → ${targetName}`;
+  elements.relationLabelInput.value = forward?.label || "";
+  elements.relationReverseToggle.checked = hadBidirectionalReverse;
+  elements.reverseRelationGroup.classList.add("hidden");
+  elements.reverseRelationLabelInput.value = hadBidirectionalReverse ? forward?.label || "" : "";
+  elements.relationModal.classList.remove("hidden");
+  elements.relationModal.setAttribute("aria-hidden", "false");
+  elements.relationLabelInput.focus();
+}
+
+function closeRelationModal() {
+  state.relationEditor = null;
+  elements.relationModal.classList.add("hidden");
+  elements.relationModal.setAttribute("aria-hidden", "true");
+  elements.relationLabelInput.value = "";
+  elements.reverseRelationLabelInput.value = "";
+  elements.relationReverseToggle.checked = false;
+  elements.reverseRelationGroup.classList.add("hidden");
+}
+
+function saveRelationModal() {
+  if (!state.relationEditor) {
+    return;
+  }
+  const forwardLabel = elements.relationLabelInput.value.trim();
+  const wantsReverse = elements.relationReverseToggle.checked;
+  const reverseLabel = wantsReverse ? forwardLabel : "";
+
+  if (!forwardLabel) {
+    setStatus("请先填写正向关系。", false, true);
+    return;
+  }
+
+  const source = getCharacterById(state.relationEditor.sourceId);
+  const target = getCharacterById(state.relationEditor.targetId);
+  if (!source || !target) {
+    closeRelationModal();
+    return;
+  }
+
+  upsertDirectionalRelation(
+    source.id,
+    target.id,
+    createRelationRecord(
+      source,
+      target,
+      forwardLabel,
+      state.relationEditor.forwardSourceAnchor,
+      state.relationEditor.forwardTargetAnchor,
+      wantsReverse,
+    ),
+  );
+
+  if (wantsReverse) {
+    const reverseSourceAnchor =
+      state.relationEditor.reverseSourceAnchor || cloneAnchor(state.relationEditor.forwardTargetAnchor);
+    const reverseTargetAnchor =
+      state.relationEditor.reverseTargetAnchor || cloneAnchor(state.relationEditor.forwardSourceAnchor);
+    upsertDirectionalRelation(
+      target.id,
+      source.id,
+      createRelationRecord(
+        target,
+        source,
+        reverseLabel,
+        reverseSourceAnchor,
+        reverseTargetAnchor,
+        true,
+      ),
+    );
+  } else if (state.relationEditor.hadBidirectionalReverse) {
+    state.relations = state.relations.filter(
+      (relation) => !isSameRelationDirection(relation, target.id, source.id),
+    );
+  }
+
+  syncRelationNames();
   renderGraph();
+  closeRelationModal();
+  setStatus("角色关系已保存。", false);
+}
+
+function upsertDirectionalRelation(sourceId, targetId, relationRecord) {
+  state.relations = state.relations.filter(
+    (relation) => !isSameRelationDirection(relation, sourceId, targetId),
+  );
+  state.relations.push(relationRecord);
+}
+
+function openRelationDeleteModal(deleteRequest) {
+  closeRelationModal();
+  state.relationDeleteRequest = deleteRequest;
+  elements.relationDeleteMessage.textContent = deleteRequest?.message || "确认删除这条关系吗？";
+  elements.relationDeleteModal.classList.remove("hidden");
+  elements.relationDeleteModal.setAttribute("aria-hidden", "false");
+  elements.relationDeleteConfirm.focus();
+}
+
+function closeRelationDeleteModal() {
+  state.relationDeleteRequest = null;
+  elements.relationDeleteModal.classList.add("hidden");
+  elements.relationDeleteModal.setAttribute("aria-hidden", "true");
+  elements.relationDeleteMessage.textContent = "";
+}
+
+function confirmRelationDelete() {
+  if (!state.relationDeleteRequest) {
+    return;
+  }
+
+  const request = state.relationDeleteRequest;
+  closeRelationDeleteModal();
+  if (request.mode === "direction") {
+    deleteDirectionalRelation(request.sourceId, request.targetId);
+    return;
+  }
+  if (request.mode === "pair") {
+    deleteRelationPair(request.pairKey);
+  }
+}
+
+function deleteDirectionalRelation(sourceId, targetId, silent = false) {
+  const before = state.relations.length;
+  state.relations = state.relations.filter(
+    (relation) => !isSameRelationDirection(relation, sourceId, targetId),
+  );
+  renderGraph();
+  if (!silent && before !== state.relations.length) {
+    setStatus("角色关系已删除。", false);
+  }
+}
+
+function deleteRelationPair(pairKey, silent = false) {
+  state.relations = state.relations.filter((relation) => makePairKey(relation.source_id, relation.target_id) !== pairKey);
+  renderGraph();
+  if (!silent) {
+    setStatus("角色关系已删除。", false);
+  }
+}
+
+function isSameRelationDirection(relation, sourceId, targetId) {
+  return relation.source_id === sourceId && relation.target_id === targetId;
+}
+
+function makePairKey(aId, bId) {
+  return [aId, bId].sort().join("--");
+}
+
+function getCharacterById(characterId) {
+  return state.characters.find((character) => character.id === characterId) || null;
+}
+
+function getCharacterName(characterId) {
+  const character = getCharacterById(characterId);
+  return character?.name || "未命名角色";
+}
+
+function getNodeCenter(character) {
+  return {
+    x: character.graph_x + GRAPH.nodeWidth / 2,
+    y: character.graph_y + GRAPH.nodeHeight / 2,
+  };
 }
 
 function syncRelationNames() {
-  state.relations = state.relations.map((relation) => {
-    const source = state.characters.find((character) => character.id === relation.source_id);
-    const target = state.characters.find((character) => character.id === relation.target_id);
-    return {
-      ...relation,
-      source_name: source?.name || "",
-      target_name: target?.name || "",
-    };
-  });
+  state.relations = state.relations.map((relation) => ({
+    ...relation,
+    source_name: getCharacterById(relation.source_id)?.name || "",
+    target_name: getCharacterById(relation.target_id)?.name || "",
+  }));
 }
 
 async function handleOutlineSubmit(event) {
@@ -472,7 +981,14 @@ function buildStoryPayload() {
     total_words: Number(elements.totalWords.value) || 0,
     chapter_words: Number(elements.chapterWords.value) || null,
     characters: state.characters,
-    relations: state.relations,
+    relations: state.relations.map((relation) => ({
+      id: relation.id,
+      source_id: relation.source_id,
+      target_id: relation.target_id,
+      label: relation.label,
+      source_name: relation.source_name || "",
+      target_name: relation.target_name || "",
+    })),
   };
 }
 
@@ -492,7 +1008,7 @@ function normalizeOutline(outline) {
     };
   });
 
-  if (actStructure.length > 0) {
+  if (actStructure.length) {
     actStructure[0].start_chapter = 1;
     actStructure[0].chapter_range = `第${actStructure[0].start_chapter}章-第${actStructure[0].end_chapter}章`;
     actStructure[actStructure.length - 1].end_chapter = chapterCount;

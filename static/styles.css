@@ -130,6 +130,10 @@ small {
   gap: 12px;
 }
 
+#relation-modal .action-row {
+  justify-content: flex-end;
+}
+
 .section-heading {
   margin-bottom: 18px;
 }
@@ -338,12 +342,26 @@ button:disabled {
   background: radial-gradient(circle at 30% 30%, #fffdf9, #ecd3b2 82%);
   border: 1px solid rgba(96, 64, 42, 0.22);
   box-shadow: 0 12px 28px rgba(91, 61, 39, 0.14);
-  cursor: grab;
+  cursor: crosshair;
   user-select: none;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
 }
 
-.graph-node.dragging {
-  cursor: grabbing;
+.graph-node.is-source {
+  transform: translateY(-2px);
+  border-color: rgba(123, 46, 39, 0.48);
+  box-shadow: 0 16px 30px rgba(123, 46, 39, 0.22);
+  background: radial-gradient(circle at 30% 30%, #fffdf9, #f1cfa9 82%);
+}
+
+.graph-node.is-target {
+  border-color: rgba(142, 74, 56, 0.42);
+  box-shadow: 0 14px 28px rgba(142, 74, 56, 0.18);
+  background: radial-gradient(circle at 30% 30%, #fffdf9, #f4dcc1 82%);
 }
 
 .graph-node-name {
@@ -468,6 +486,10 @@ button:disabled {
     align-items: flex-start;
   }
 
+  #relation-modal .action-row {
+    align-items: flex-end;
+  }
+
   .graph-canvas {
     min-height: 520px;
   }
@@ -497,4 +519,64 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.relation-badge-button {
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  width: max-content;
+  max-width: 260px;
+}
+
+.relation-badge-button span {
+  display: block;
+  line-height: 1.5;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(43, 31, 26, 0.4);
+  padding: 20px;
+  z-index: 30;
+}
+
+.modal-overlay.hidden,
+.hidden {
+  display: none;
+}
+
+.modal-card {
+  width: min(520px, 100%);
+  border-radius: 24px;
+  background: rgba(255, 251, 243, 0.97);
+  border: 1px solid rgba(90, 60, 40, 0.15);
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+.modal-card-compact {
+  width: min(420px, 100%);
+}
+
+.modal-confirm-actions {
+  justify-content: flex-start;
+}
+
+.danger-button {
+  background: linear-gradient(135deg, #9d3a2f, #6a2018);
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+}
+
+.check-row input {
+  width: auto;
 }

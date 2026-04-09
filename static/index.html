@@ -107,7 +107,7 @@
                 <p class="section-kicker">Step 1B</p>
                 <h3>角色关系网</h3>
               </div>
-              <span class="micro-tip">拖动椭圆可调整布局；从节点右侧锚点拖到另一个角色即可建立关系。</span>
+              <span class="micro-tip">按下角色椭圆后会从中心拖出预览线；松开到另一个角色上可创建关系，左键点击已有关系可编辑，右键已有关系可删除。</span>
             </div>
             <div class="graph-wrap">
               <div id="graph-canvas" class="graph-canvas">
@@ -162,6 +162,50 @@
       </main>
     </div>
 
+    <div id="relation-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal-card">
+        <div class="section-heading compact">
+          <div>
+            <p class="section-kicker">Relation Editor</p>
+            <h3>编辑角色关系</h3>
+          </div>
+          <button type="button" id="relation-modal-close" class="tiny-button">关闭</button>
+        </div>
+        <p id="relation-direction" class="micro-tip"></p>
+        <div class="field-group">
+          <label for="relation-label-input">正向关系</label>
+          <input id="relation-label-input" type="text" list="relation-presets" placeholder="例如：朋友、同事、爱慕者" />
+        </div>
+        <label class="check-row">
+          <input id="relation-reverse-toggle" type="checkbox" />
+          <span>同时设定为反向关系</span>
+        </label>
+        <div id="reverse-relation-group" class="field-group hidden">
+          <label for="reverse-relation-label-input">反向关系</label>
+          <input id="reverse-relation-label-input" type="text" list="relation-presets" placeholder="例如：朋友、同事、子女、下属" />
+        </div>
+        <div class="action-row">
+          <button type="button" id="relation-save-button" class="primary-button">保存关系</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="relation-delete-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal-card modal-card-compact">
+        <div class="section-heading compact">
+          <div>
+            <p class="section-kicker">Delete Relation</p>
+            <h3>删除关系</h3>
+          </div>
+        </div>
+        <p id="relation-delete-message" class="micro-tip"></p>
+        <div class="action-row modal-confirm-actions">
+          <button type="button" id="relation-delete-confirm" class="primary-button danger-button">确认</button>
+          <button type="button" id="relation-delete-cancel" class="ghost-button">取消</button>
+        </div>
+      </div>
+    </div>
+
     <datalist id="relation-presets">
       <option value="朋友"></option>
       <option value="亲人"></option>
@@ -171,6 +215,10 @@
       <option value="宿敌"></option>
       <option value="盟友"></option>
       <option value="上下级"></option>
+      <option value="爱慕者"></option>
+      <option value="母亲"></option>
+      <option value="父亲"></option>
+      <option value="子女"></option>
     </datalist>
 
     <script src="/static/app.js" defer></script>
