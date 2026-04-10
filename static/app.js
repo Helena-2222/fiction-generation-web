@@ -17,6 +17,20 @@ const GRAPH = {
   nodeWidth: 154,
   nodeHeight: 76,
   curveOffset: 54,
+  gapX: 60,
+  gapY: 54,
+  paddingX: 32,
+  paddingY: 40,
+  minGapX: 24,
+  minHeight: 440,
+  nodeColors: [
+    { fill: "#f7d9c9", stroke: "#9d3a2f", text: "#4d241f", shadow: "rgba(157, 58, 47, 0.2)" },
+    { fill: "#f4e4c8", stroke: "#8c6238", text: "#4f3520", shadow: "rgba(140, 98, 56, 0.18)" },
+    { fill: "#e8ead8", stroke: "#68713d", text: "#323a1f", shadow: "rgba(104, 113, 61, 0.18)" },
+    { fill: "#e1ede8", stroke: "#527766", text: "#213d34", shadow: "rgba(82, 119, 102, 0.18)" },
+    { fill: "#f2d7d2", stroke: "#ad5c54", text: "#5a2824", shadow: "rgba(173, 92, 84, 0.18)" },
+    { fill: "#eadbc7", stroke: "#785a3c", text: "#3e2c20", shadow: "rgba(120, 90, 60, 0.18)" },
+  ],
 };
 
 const state = {
@@ -30,6 +44,8 @@ const state = {
   relationEditor: null,
   relationDeleteRequest: null,
 };
+
+let nextCharacterColorIndex = 0;
 
 const elements = {
   genreOptions: document.querySelector("#genre-options"),
@@ -75,7 +91,11 @@ function generateId(prefix) {
 }
 
 function createCharacter(index) {
-  const angle = (index / 3) * Math.PI * 2;
+  const colorIndex = nextCharacterColorIndex;
+  nextCharacterColorIndex += 1;
+  const color = getCharacterGraphColorByIndex(colorIndex);
+  const position = getCharacterGraphPosition(index, Math.max(index + 1, 1));
+
   return {
     id: generateId("character"),
     name: "",
@@ -87,19 +107,178 @@ function createCharacter(index) {
     appearance: "",
     values: "",
     core_motivation: "",
-    graph_x: 240 + Math.cos(angle) * 120,
-    graph_y: 180 + Math.sin(angle) * 90,
+    graph_x: position.x,
+    graph_y: position.y,
+    graph_color_index: colorIndex,
+    graph_color: color,
   };
+}
+
+function getCharacterGraphColorByIndex(index) {
+  return GRAPH.nodeColors[index % GRAPH.nodeColors.length];
+}
+
+function getCharacterGraphColor(character, index) {
+  if (character.graph_color) {
+    return character.graph_color;
+  }
+
+  const colorIndex = Number.isInteger(character.graph_color_index)
+    ? character.graph_color_index
+    : index;
+  const color = getCharacterGraphColorByIndex(colorIndex);
+  character.graph_color_index = colorIndex;
+  character.graph_color = color;
+  return color;
+}
+
+function getCharacterGraphPosition(index, total) {
+  const layout = calculateCharacterGraphLayout(total);
+  return layout.positions[index] || { x: GRAPH.paddingX, y: GRAPH.paddingY };
+}
+
+function calculateCharacterGraphLayout(total) {
+  if (total <= 0) {
+    return { positions: [], height: GRAPH.minHeight };
+  }
+
+  const slots = orderCharacterGraphSlotsFromCenter(computeCharacterGraphSlots(total));
+  const maxCol = Math.max(...slots.map((slot) => slot.col));
+  const maxRow = Math.max(...slots.map((slot) => slot.row));
+  const canvasWidth = elements.graphCanvas?.clientWidth || 700;
+  const preferredSpacingX = GRAPH.nodeWidth + GRAPH.gapX;
+  const minimumSpacingX = GRAPH.nodeWidth + GRAPH.minGapX;
+  const availableSpacingX = maxCol > 0
+    ? (canvasWidth - GRAPH.nodeWidth - GRAPH.paddingX * 2) / maxCol
+    : preferredSpacingX;
+  const spacingX = maxCol > 0
+    ? Math.max(minimumSpacingX, Math.min(preferredSpacingX, availableSpacingX))
+    : preferredSpacingX;
+  const spacingY = getCharacterGraphRowSpacing(total, spacingX);
+  const contentWidth = GRAPH.nodeWidth + maxCol * spacingX;
+  const contentHeight = GRAPH.nodeHeight + maxRow * spacingY;
+  const minCanvasHeight = getGraphCanvasMinimumHeight();
+  const canvasHeight = Math.max(minCanvasHeight, contentHeight + GRAPH.paddingY * 2);
+  const offsetX = Math.max(0, (canvasWidth - contentWidth) / 2);
+  const offsetY = Math.max(GRAPH.paddingY, (canvasHeight - contentHeight) / 2);
+
+  return {
+    height: canvasHeight,
+    positions: slots.map((slot) => ({
+      x: offsetX + slot.col * spacingX,
+      y: offsetY + slot.row * spacingY,
+    })),
+  };
+}
+
+function getCharacterGraphRowSpacing(total, spacingX) {
+  if (total === 3) {
+    return spacingX * Math.sqrt(3) / 2;
+  }
+  if (total === 4) {
+    return spacingX;
+  }
+  return Math.max(GRAPH.nodeHeight + GRAPH.gapY, Math.min(spacingX * 0.72, 168));
+}
+
+function getGraphCanvasMinimumHeight() {
+  if (!elements.graphCanvas) {
+    return GRAPH.minHeight;
+  }
+  const minHeight = Number.parseFloat(window.getComputedStyle(elements.graphCanvas).minHeight);
+  return Number.isFinite(minHeight) ? minHeight : GRAPH.minHeight;
+}
+
+function computeCharacterGraphSlots(total) {
+  if (total <= 2) {
+    return Array.from({ length: total }, (_, index) => ({ col: index, row: 0 }));
+  }
+  if (total === 3) {
+    return [
+      { col: 0.5, row: 0 },
+      { col: 0, row: 1 },
+      { col: 1, row: 1 },
+    ];
+  }
+  if (total === 4) {
+    return [
+      { col: 0, row: 0 },
+      { col: 1, row: 0 },
+      { col: 0, row: 1 },
+      { col: 1, row: 1 },
+    ];
+  }
+
+  const rowCounts = [];
+  const fullRows = Math.floor(total / 3);
+  const remainder = total % 3;
+
+  if (remainder === 0) {
+    rowCounts.push(...Array(fullRows).fill(3));
+  } else if (remainder === 1) {
+    rowCounts.push(...Array(Math.max(0, fullRows - 1)).fill(3), 2, 2);
+  } else {
+    rowCounts.push(...Array(fullRows).fill(3), 2);
+  }
+
+  return rowCounts.flatMap((count, row) => {
+    const offset = count === 2 ? 0.5 : count === 1 ? 1 : 0;
+    return Array.from({ length: count }, (_, col) => ({ col: col + offset, row }));
+  });
+}
+
+function orderCharacterGraphSlotsFromCenter(slots) {
+  if (slots.length <= 1) {
+    return slots;
+  }
+
+  const minCol = Math.min(...slots.map((slot) => slot.col));
+  const maxCol = Math.max(...slots.map((slot) => slot.col));
+  const minRow = Math.min(...slots.map((slot) => slot.row));
+  const maxRow = Math.max(...slots.map((slot) => slot.row));
+  const centerCol = (minCol + maxCol) / 2;
+  const centerRow = (minRow + maxRow) / 2;
+
+  return [...slots].sort((a, b) => {
+    const distanceA = (a.col - centerCol) ** 2 + (a.row - centerRow) ** 2;
+    const distanceB = (b.col - centerCol) ** 2 + (b.row - centerRow) ** 2;
+    if (distanceA !== distanceB) {
+      return distanceA - distanceB;
+    }
+    if (a.row !== b.row) {
+      return a.row - b.row;
+    }
+    return a.col - b.col;
+  });
+}
+
+function arrangeCharacterGraph() {
+  const layout = calculateCharacterGraphLayout(state.characters.length);
+  if (elements.graphCanvas) {
+    elements.graphCanvas.style.height = `${layout.height}px`;
+  }
+
+  state.characters.forEach((character, index) => {
+    const position = layout.positions[index];
+    if (!position) {
+      return;
+    }
+    character.graph_x = position.x;
+    character.graph_y = position.y;
+    getCharacterGraphColor(character, index);
+  });
 }
 
 function init() {
   state.characters = [createCharacter(0), createCharacter(1), createCharacter(2)];
+  arrangeCharacterGraph();
   renderChipGroup(elements.genreOptions, GENRE_OPTIONS, "genre");
   renderChipGroup(elements.styleOptions, STYLE_OPTIONS, "style");
   elements.totalWords.addEventListener("input", updateChapterEstimate);
   elements.chapterWords.addEventListener("input", updateChapterEstimate);
   elements.addCharacter.addEventListener("click", () => {
     state.characters.push(createCharacter(state.characters.length));
+    arrangeCharacterGraph();
     renderCharacters();
     renderGraph();
   });
@@ -228,6 +407,16 @@ function removeCharacter(characterId) {
   state.relations = state.relations.filter(
     (relation) => relation.source_id !== characterId && relation.target_id !== characterId,
   );
+  if (state.pendingEdge?.sourceId === characterId || state.pendingEdge?.candidateTargetId === characterId) {
+    state.pendingEdge = null;
+  }
+  if (
+    state.relationEditor &&
+    (state.relationEditor.sourceId === characterId || state.relationEditor.targetId === characterId)
+  ) {
+    closeRelationModal();
+  }
+  arrangeCharacterGraph();
   syncRelationNames();
   renderCharacters();
   renderGraph();
@@ -431,6 +620,7 @@ function buildCurveGeometryFromRelation(relation, offset) {
 }
 
 function renderGraph() {
+  arrangeCharacterGraph();
   const width = elements.graphCanvas.clientWidth || 700;
   const height = elements.graphCanvas.clientHeight || 440;
   elements.graphSvg.setAttribute("viewBox", `0 0 ${width} ${height}`);
@@ -459,16 +649,25 @@ function buildSvgDefs() {
 }
 
 function renderCharacterNode(character, index) {
+  const color = getCharacterGraphColor(character, index);
+  const isSource = state.pendingEdge?.sourceId === character.id;
+  const isTarget = state.pendingEdge?.candidateTargetId === character.id;
   const node = document.createElement("div");
   node.className = [
     "graph-node",
-    state.pendingEdge?.sourceId === character.id ? "is-source" : "",
-    state.pendingEdge?.candidateTargetId === character.id ? "is-target" : "",
+    isSource ? "is-source" : "",
+    isTarget ? "is-target" : "",
   ]
     .filter(Boolean)
     .join(" ");
   node.style.left = `${character.graph_x}px`;
   node.style.top = `${character.graph_y}px`;
+  node.style.background = `radial-gradient(circle at 30% 30%, #fffdf9, ${color.fill} 82%)`;
+  node.style.borderColor = color.stroke;
+  node.style.color = color.text;
+  if (isSource || isTarget) {
+    node.style.boxShadow = `0 16px 30px ${color.shadow}`;
+  }
   node.dataset.id = character.id;
 
   const name = document.createElement("div");
