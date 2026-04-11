@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -149,6 +149,7 @@
             <div class="output-header">
               <h3>故事大纲</h3>
               <div class="action-row">
+                <button type="button" id="export-outline" class="ghost-button" disabled>导出大纲</button>
                 <button type="button" id="regenerate-outline" class="ghost-button" disabled>重生成大纲</button>
                 <button type="button" id="generate-story" class="primary-button" disabled>按大纲生成全文</button>
               </div>
@@ -164,12 +165,40 @@
           <section class="output-block">
             <div class="output-header">
               <h3>章节正文</h3>
+              <div class="action-row">
+                <button type="button" id="export-all-story" class="ghost-button" disabled>导出全部正文</button>
+              </div>
             </div>
             <div id="story-result" class="story-result empty-state">大纲确认后，这里会依次展示每个篇章的正文。</div>
           </section>
         </section>
       </main>
     </div>
+
+    <aside id="llm-activity-panel" class="llm-activity-panel" aria-live="polite" aria-label="AI 运行面板">
+      <div class="llm-activity-header">
+        <div>
+          <p class="section-kicker">Live Progress</p>
+          <h3 id="llm-activity-title">AI 运行面板</h3>
+        </div>
+        <button type="button" id="llm-activity-close" class="tiny-button">收起</button>
+      </div>
+      <div class="llm-activity-meta">
+        <div id="llm-activity-status" class="status-pill">待命</div>
+        <p id="llm-activity-summary" class="micro-tip">调用 LLM 时，这里会实时展示当前处理阶段。</p>
+      </div>
+      <ol id="llm-activity-log" class="llm-activity-log"></ol>
+    </aside>
+    <button
+      type="button"
+      id="llm-activity-toggle"
+      class="llm-activity-toggle"
+      aria-label="展开 AI 运行面板"
+      title="展开 AI 运行面板"
+    >
+      <span class="llm-activity-toggle-dot" aria-hidden="true"></span>
+      <span class="llm-activity-toggle-text">AI</span>
+    </button>
 
     <div id="relation-modal" class="modal-overlay hidden" aria-hidden="true">
       <div class="modal-card">

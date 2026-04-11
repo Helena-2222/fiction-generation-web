@@ -49,6 +49,14 @@ const state = {
 };
 
 let nextCharacterColorIndex = 0;
+const llmActivity = {
+  active: false,
+  runId: 0,
+  panelOpen: false,
+  waitTimer: null,
+  waitIndex: 0,
+  waitingMessages: [],
+};
 
 const elements = {
   genreOptions: document.querySelector("#genre-options"),
@@ -76,8 +84,10 @@ const elements = {
   storyResult: document.querySelector("#story-result"),
   statusBox: document.querySelector("#status-box"),
   statusPill: document.querySelector("#status-pill"),
+  exportOutline: document.querySelector("#export-outline"),
   regenerateOutline: document.querySelector("#regenerate-outline"),
   generateStory: document.querySelector("#generate-story"),
+  exportAllStory: document.querySelector("#export-all-story"),
   outlineFeedback: document.querySelector("#outline-feedback"),
   relationModal: document.querySelector("#relation-modal"),
   relationModalClose: document.querySelector("#relation-modal-close"),
@@ -91,6 +101,13 @@ const elements = {
   relationDeleteMessage: document.querySelector("#relation-delete-message"),
   relationDeleteConfirm: document.querySelector("#relation-delete-confirm"),
   relationDeleteCancel: document.querySelector("#relation-delete-cancel"),
+  llmActivityPanel: document.querySelector("#llm-activity-panel"),
+  llmActivityTitle: document.querySelector("#llm-activity-title"),
+  llmActivityClose: document.querySelector("#llm-activity-close"),
+  llmActivityToggle: document.querySelector("#llm-activity-toggle"),
+  llmActivityStatus: document.querySelector("#llm-activity-status"),
+  llmActivitySummary: document.querySelector("#llm-activity-summary"),
+  llmActivityLog: document.querySelector("#llm-activity-log"),
 };
 
 function generateId(prefix) {
@@ -281,6 +298,7 @@ function arrangeCharacterGraph() {
 
 function init() {
   const restoredWorkspace = loadWorkspaceSnapshot();
+  const restoredGeneratedContent = Boolean(restoredWorkspace?.outline || restoredWorkspace?.generatedStory);
   if (restoredWorkspace) {
     applyWorkspaceSnapshot(restoredWorkspace);
   } else {
@@ -302,8 +320,11 @@ function init() {
   elements.storyForm.addEventListener("submit", handleOutlineSubmit);
   elements.saveRelations.addEventListener("click", handleSaveRelations);
   elements.supplementRelations.addEventListener("click", handleAiRelationSupplement);
+  elements.exportOutline.addEventListener("click", handleOutlineExport);
   elements.regenerateOutline.addEventListener("click", handleOutlineRegenerate);
   elements.generateStory.addEventListener("click", handleStoryGenerate);
+  elements.exportAllStory.addEventListener("click", handleExportAllStory);
+  elements.storyResult.addEventListener("click", handleStoryResultClick);
   elements.relationModalClose.addEventListener("click", closeRelationModal);
   elements.relationSaveButton.addEventListener("click", saveRelationModal);
   elements.relationLabelInput.addEventListener("input", () => {
@@ -324,6 +345,8 @@ function init() {
   });
   elements.relationDeleteConfirm.addEventListener("click", confirmRelationDelete);
   elements.relationDeleteCancel.addEventListener("click", closeRelationDeleteModal);
+  elements.llmActivityClose.addEventListener("click", closeLlmActivityPanel);
+  elements.llmActivityToggle.addEventListener("click", openLlmActivityPanel);
   elements.relationDeleteModal.addEventListener("click", (event) => {
     if (event.target === elements.relationDeleteModal) {
       closeRelationDeleteModal();
@@ -334,8 +357,17 @@ function init() {
   updateChapterEstimate();
   renderCharacters();
   renderGraph();
+  renderOutline();
+  renderStory();
   updateRelationActionState();
-  setStatus("填写左侧信息后，先生成故事大纲；若不满意，可以补充反馈并重生成。", false);
+  updateOutputActionState();
+  syncLlmActivityPanelState();
+  setStatus(
+    restoredGeneratedContent
+      ? "已恢复上次填写内容与已生成结果，可以继续编辑、导出或生成。"
+      : "填写左侧信息后，先生成故事大纲；若不满意，可以补充反馈并重生成。",
+    false,
+  );
 }
 
 function loadWorkspaceSnapshot() {
@@ -366,7 +398,7 @@ function saveWorkspaceSnapshot() {
 function buildWorkspaceSnapshot() {
   syncRelationNames();
   return {
-    version: 1,
+    version: 2,
     genre: state.genre,
     style: state.style,
     characters: state.characters.map((character) => ({
@@ -380,6 +412,8 @@ function buildWorkspaceSnapshot() {
     })),
     savedStoryDraft: state.savedStoryDraft,
     isStorySaved: state.isStorySaved,
+    outline: state.outline,
+    generatedStory: state.generatedStory,
     form: {
       customGenre: elements.customGenre.value,
       customStyle: elements.customStyle.value,
@@ -419,6 +453,12 @@ function applyWorkspaceSnapshot(snapshot) {
     ? snapshot.savedStoryDraft
     : null;
   state.isStorySaved = Boolean(snapshot.isStorySaved && state.savedStoryDraft);
+  state.outline = snapshot.outline && typeof snapshot.outline === "object"
+    ? normalizeOutline(snapshot.outline)
+    : null;
+  state.generatedStory = snapshot.generatedStory && typeof snapshot.generatedStory === "object"
+    ? normalizeGeneratedStory(snapshot.generatedStory, state.outline?.title || "")
+    : null;
 }
 
 function applyPersistedFormValues(form = {}) {
@@ -489,6 +529,225 @@ function updateRelationActionState() {
   if (elements.supplementRelations) {
     elements.supplementRelations.disabled = !state.isStorySaved;
   }
+}
+
+function updateOutputActionState() {
+  elements.regenerateOutline.disabled = !state.outline;
+  elements.generateStory.disabled = !state.outline;
+  elements.exportOutline.disabled = !state.outline;
+  elements.exportAllStory.disabled = !state.generatedStory;
+}
+
+function startLlmActivityRun({ title, summary, firstStepTitle, firstStepDetail = "", waitingMessages = [] }) {
+  stopLlmActivityWaitingLoop();
+  llmActivity.active = true;
+  llmActivity.runId += 1;
+  llmActivity.panelOpen = true;
+  llmActivity.waitIndex = 0;
+  llmActivity.waitingMessages = waitingMessages;
+
+  elements.llmActivityTitle.textContent = title;
+  elements.llmActivitySummary.textContent = summary;
+  elements.llmActivityStatus.textContent = "运行中";
+  elements.llmActivityStatus.classList.add("busy");
+  elements.llmActivityLog.innerHTML = "";
+  syncLlmActivityPanelState();
+
+  appendLlmActivityStep(firstStepTitle, firstStepDetail, "info");
+}
+
+function appendLlmActivityStep(title, detail = "", kind = "info") {
+  const item = document.createElement("li");
+  item.className = `llm-activity-log-item${kind === "info" ? "" : ` is-${kind}`}`;
+
+  const dot = document.createElement("span");
+  dot.className = "llm-activity-dot";
+  dot.setAttribute("aria-hidden", "true");
+
+  const body = document.createElement("div");
+  body.className = "llm-activity-item-body";
+
+  const header = document.createElement("div");
+  header.className = "llm-activity-item-header";
+
+  const heading = document.createElement("div");
+  heading.className = "llm-activity-item-title";
+  heading.textContent = title;
+
+  const time = document.createElement("time");
+  time.className = "llm-activity-item-time";
+  time.textContent = formatActivityTime(new Date());
+
+  header.append(heading, time);
+  body.appendChild(header);
+
+  if (detail) {
+    const paragraph = document.createElement("p");
+    paragraph.className = "llm-activity-item-detail";
+    paragraph.textContent = detail;
+    body.appendChild(paragraph);
+  }
+
+  item.append(dot, body);
+  elements.llmActivityLog.appendChild(item);
+  elements.llmActivityLog.scrollTop = elements.llmActivityLog.scrollHeight;
+}
+
+function startLlmActivityWaitingLoop(summary, waitingMessages = []) {
+  if (summary) {
+    elements.llmActivitySummary.textContent = summary;
+  }
+  llmActivity.waitingMessages = waitingMessages;
+  llmActivity.waitIndex = 0;
+  stopLlmActivityWaitingLoop();
+
+  if (!waitingMessages.length) {
+    return;
+  }
+
+  const runId = llmActivity.runId;
+  llmActivity.waitTimer = window.setInterval(() => {
+    if (!llmActivity.active || runId !== llmActivity.runId) {
+      stopLlmActivityWaitingLoop();
+      return;
+    }
+
+    const message = waitingMessages[llmActivity.waitIndex % waitingMessages.length];
+    llmActivity.waitIndex += 1;
+    appendLlmActivityStep(message.title, message.detail, "waiting");
+  }, 2400);
+}
+
+function stopLlmActivityWaitingLoop() {
+  if (llmActivity.waitTimer) {
+    window.clearInterval(llmActivity.waitTimer);
+    llmActivity.waitTimer = null;
+  }
+}
+
+function finishLlmActivityRun(message, kind = "success") {
+  stopLlmActivityWaitingLoop();
+  llmActivity.active = false;
+  elements.llmActivityStatus.textContent = kind === "error" ? "出错了" : "已完成";
+  elements.llmActivityStatus.classList.toggle("busy", false);
+  elements.llmActivitySummary.textContent = message;
+  syncLlmActivityPanelState();
+  appendLlmActivityStep(kind === "error" ? "本次运行中断" : "本次运行完成", message, kind);
+}
+
+function closeLlmActivityPanel() {
+  llmActivity.panelOpen = false;
+  syncLlmActivityPanelState();
+}
+
+function openLlmActivityPanel() {
+  llmActivity.panelOpen = true;
+  syncLlmActivityPanelState();
+}
+
+function syncLlmActivityPanelState() {
+  const hasActivityHistory = elements.llmActivityLog.children.length > 0;
+  elements.llmActivityPanel.classList.toggle("is-open", llmActivity.panelOpen);
+  elements.llmActivityToggle.classList.toggle(
+    "is-visible",
+    !llmActivity.panelOpen && (llmActivity.active || hasActivityHistory),
+  );
+  elements.llmActivityToggle.classList.toggle("is-busy", llmActivity.active);
+  elements.llmActivityToggle.setAttribute(
+    "aria-label",
+    llmActivity.active ? "展开 AI 运行面板（当前正在运行）" : "展开 AI 运行面板",
+  );
+  elements.llmActivityToggle.title = llmActivity.active ? "展开 AI 运行面板（当前正在运行）" : "展开 AI 运行面板";
+}
+
+function formatActivityTime(date) {
+  return date.toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
+function buildRelationSupplementWaitingMessages() {
+  return [
+    {
+      title: "正在比对已有关系",
+      detail: "模型会优先避开你已经保存过的关系方向，不覆盖现有结果。",
+    },
+    {
+      title: "正在推断互动张力",
+      detail: "模型正在结合梗概与角色卡，寻找更有剧情推动力的关系补充点。",
+    },
+    {
+      title: "正在生成关系 JSON",
+      detail: "模型正在把补充关系整理成可回写到关系网的结构化结果。",
+    },
+  ];
+}
+
+function buildOutlineWaitingMessages(isRegeneration) {
+  return [
+    {
+      title: isRegeneration ? "正在参考上一版大纲" : "正在综合人物关系",
+      detail: isRegeneration
+        ? "模型正在对照你给出的反馈与上一版结构，重新取舍冲突和节奏。"
+        : "模型正在把梗概、角色卡和关系网折叠进故事主线。",
+    },
+    {
+      title: "正在规划四段式结构",
+      detail: "模型正在分配开端、发展、高潮、结局的篇幅与情节递进。",
+    },
+    {
+      title: "正在生成逐章规划",
+      detail: "模型正在为每一章安排摘要、关键事件和章末收束。",
+    },
+    {
+      title: "正在整理返回格式",
+      detail: "模型正在把大纲压成结构化 JSON，准备回传到页面。",
+    },
+  ];
+}
+
+function buildStoryWaitingMessages(chapterCount) {
+  const count = Math.max(1, Number(chapterCount) || 1);
+  const messages = [
+    {
+      title: "正在读取大纲与人物关系",
+      detail: "模型正在把四段式结构、章节规划与角色关系转成正文写作上下文。",
+    },
+    {
+      title: "正在推进前段章节",
+      detail: `模型正在铺设开场与前几章的叙事节奏，预计总共处理 ${count} 章。`,
+    },
+  ];
+
+  if (count >= 4) {
+    messages.push({
+      title: "正在推进中段章节",
+      detail: "模型正在衔接人物弧光、关系变化和主要情节转折。",
+    });
+  }
+
+  if (count >= 7) {
+    messages.push({
+      title: "正在推进后段章节",
+      detail: "模型正在收束伏笔、调整高潮后的节奏与结局落点。",
+    });
+  }
+
+  messages.push(
+    {
+      title: "正在整理章节连续性",
+      detail: "模型正在检查章节之间的人物状态、事件承接和叙事连贯性。",
+    },
+    {
+      title: "正在封装全文结果",
+      detail: "模型正在把各章摘要与正文打包成最终返回结构。",
+    },
+  );
+
+  return messages;
 }
 
 function renderChipGroup(container, options, key) {
@@ -1303,6 +1562,19 @@ async function handleAiRelationSupplement() {
     return;
   }
 
+  startLlmActivityRun({
+    title: "AI 补充角色关系",
+    summary: "正在准备角色关系补充请求。",
+    firstStepTitle: "接收补充关系请求",
+    firstStepDetail: "将读取你已保存的梗概、角色卡与关系网，补空白关系位，不覆盖已保存关系。",
+  });
+  appendLlmActivityStep("检查已保存设定", "正在核对故事梗概、角色卡和当前关系网。");
+  appendLlmActivityStep("整理关系补充输入", "正在提取角色节点与已有关系，避免生成重复方向关系。");
+  appendLlmActivityStep("发送给模型", "已将关系补充请求提交给 LLM。");
+  startLlmActivityWaitingLoop(
+    "LLM 正在推断可能的角色互动关系。",
+    buildRelationSupplementWaitingMessages(),
+  );
   setBusyState("正在根据已保存的梗概、角色卡与关系网补充角色关系...");
   elements.saveRelations.disabled = true;
   elements.supplementRelations.disabled = true;
@@ -1320,7 +1592,9 @@ async function handleAiRelationSupplement() {
       }
     });
 
+    appendLlmActivityStep("解析关系 JSON", "正在校验模型返回的关系结构与角色指向。");
     syncRelationNames();
+    appendLlmActivityStep("合并到关系图", "正在把新关系写回当前关系网并更新可视化。");
     renderGraph();
     state.savedStoryDraft = buildStoryPayload();
     state.isStorySaved = true;
@@ -1332,8 +1606,14 @@ async function handleAiRelationSupplement() {
         : "AI 没有补充新的关系，已保留你当前保存的关系网。",
       false,
     );
+    finishLlmActivityRun(
+      mergedCount
+        ? `已补充 ${mergedCount} 条角色关系，并同步到关系网。`
+        : "没有检测到适合新增的角色关系，当前关系网已保持不变。",
+    );
   } catch (error) {
     setStatus(error.message || "AI 补充关系失败。", false, true);
+    finishLlmActivityRun(error.message || "AI 补充关系失败。", "error");
   } finally {
     elements.saveRelations.disabled = false;
     updateRelationActionState();
@@ -1415,6 +1695,19 @@ async function handleOutlineSubmit(event) {
     return;
   }
 
+  startLlmActivityRun({
+    title: "AI 生成大纲",
+    summary: "正在整理故事设定并准备大纲生成请求。",
+    firstStepTitle: "接收大纲生成请求",
+    firstStepDetail: "将综合梗概、角色卡、角色关系网与篇幅要求生成新的故事大纲。",
+  });
+  appendLlmActivityStep("整理创作输入", "正在汇总梗概、世界观、角色卡与角色关系。");
+  appendLlmActivityStep("构建大纲提示词", "正在生成四段式结构与逐章规划所需的提示信息。");
+  appendLlmActivityStep("发送给模型", "已将大纲生成请求提交给 LLM。");
+  startLlmActivityWaitingLoop(
+    "LLM 正在规划故事结构与章节节奏。",
+    buildOutlineWaitingMessages(false),
+  );
   setBusyState("正在让 DeepSeek 生成故事大纲...");
   elements.regenerateOutline.disabled = true;
   elements.generateStory.disabled = true;
@@ -1427,13 +1720,19 @@ async function handleOutlineSubmit(event) {
     });
     state.outline = normalizeOutline(outline);
     state.generatedStory = null;
+    appendLlmActivityStep("解析大纲 JSON", "正在校验章节结构、字数规划与返回字段。");
+    appendLlmActivityStep("整理篇章范围", "正在规范化四段式结构与章节范围。");
     renderOutline();
     renderStory();
-    elements.regenerateOutline.disabled = false;
-    elements.generateStory.disabled = false;
+    appendLlmActivityStep("渲染页面结果", "正在把新大纲写入右侧结果区。");
+    saveWorkspaceSnapshot();
     setStatus("大纲已生成，可以继续重生成，或直接按当前大纲生成全文。", false);
+    finishLlmActivityRun("大纲已生成完成，可以继续调整或直接生成正文。");
   } catch (error) {
     setStatus(error.message || "大纲生成失败。", false, true);
+    finishLlmActivityRun(error.message || "大纲生成失败。", "error");
+  } finally {
+    updateOutputActionState();
   }
 }
 
@@ -1442,6 +1741,19 @@ async function handleOutlineRegenerate() {
     return;
   }
 
+  startLlmActivityRun({
+    title: "AI 重生成大纲",
+    summary: "正在结合你的反馈重塑故事结构。",
+    firstStepTitle: "接收大纲重生成请求",
+    firstStepDetail: "将保留当前设定，并结合反馈重新生成一版大纲。",
+  });
+  appendLlmActivityStep("读取当前大纲与反馈", "正在汇总上一版大纲和你的修改方向。");
+  appendLlmActivityStep("重建大纲提示词", "正在把反馈注入新的结构规划请求。");
+  appendLlmActivityStep("发送给模型", "已将重生成请求提交给 LLM。");
+  startLlmActivityWaitingLoop(
+    "LLM 正在按反馈重组故事结构。",
+    buildOutlineWaitingMessages(true),
+  );
   setBusyState("正在根据反馈重生成大纲...");
   elements.regenerateOutline.disabled = true;
   elements.generateStory.disabled = true;
@@ -1453,12 +1765,20 @@ async function handleOutlineRegenerate() {
       previous_outline: state.outline,
     });
     state.outline = normalizeOutline(outline);
+    state.generatedStory = null;
+    appendLlmActivityStep("解析重生成结果", "正在校验新的大纲 JSON 与章节规划。");
+    appendLlmActivityStep("清理旧正文结果", "由于大纲已变更，旧正文会被清空以避免混用。");
+    renderStory();
+    appendLlmActivityStep("渲染新大纲", "正在将新的大纲内容写回页面。");
     renderOutline();
-    elements.regenerateOutline.disabled = false;
-    elements.generateStory.disabled = false;
+    saveWorkspaceSnapshot();
     setStatus("新的大纲已经生成，可以继续调整，或开始逐章创作。", false);
+    finishLlmActivityRun("新的大纲已经生成，可以继续调整后再生成正文。");
   } catch (error) {
     setStatus(error.message || "重生成失败。", false, true);
+    finishLlmActivityRun(error.message || "重生成失败。", "error");
+  } finally {
+    updateOutputActionState();
   }
 }
 
@@ -1471,6 +1791,19 @@ async function handleStoryGenerate() {
     return;
   }
 
+  startLlmActivityRun({
+    title: "AI 生成正文",
+    summary: "正在锁定当前大纲并准备逐章创作请求。",
+    firstStepTitle: "接收正文生成请求",
+    firstStepDetail: "将根据当前大纲、角色关系和连续性要求生成整部正文。",
+  });
+  appendLlmActivityStep("锁定当前大纲", "正在读取最新四段式结构和逐章规划。");
+  appendLlmActivityStep("整理正文创作输入", "正在汇总故事设定、角色关系与章节目标。");
+  appendLlmActivityStep("发送给模型", "已将整部正文生成请求提交给 LLM。");
+  startLlmActivityWaitingLoop(
+    "LLM 正在逐章创作正文，这一步可能会持续一段时间。",
+    buildStoryWaitingMessages(state.outline?.chapter_count || state.outline?.chapters?.length || 1),
+  );
   setBusyState("正在依次生成章节正文，这一步可能需要一些时间...");
   elements.generateStory.disabled = true;
   elements.regenerateOutline.disabled = true;
@@ -1480,13 +1813,18 @@ async function handleStoryGenerate() {
       story: buildStoryPayload(),
       outline: state.outline,
     });
-    state.generatedStory = story;
+    state.generatedStory = normalizeGeneratedStory(story, state.outline?.title || "");
+    appendLlmActivityStep("解析正文结果", "正在校验章节列表、摘要和正文内容。");
+    appendLlmActivityStep("渲染章节内容", "正在把生成结果写入正文展示区。");
     renderStory();
-    elements.generateStory.disabled = false;
-    elements.regenerateOutline.disabled = false;
+    saveWorkspaceSnapshot();
     setStatus("全文生成完成。你可以继续修改设定后重新走一次流程。", false);
+    finishLlmActivityRun("正文已生成完成，现在可以导出单章或全部正文。");
   } catch (error) {
     setStatus(error.message || "正文生成失败。", false, true);
+    finishLlmActivityRun(error.message || "正文生成失败。", "error");
+  } finally {
+    updateOutputActionState();
   }
 }
 
@@ -1541,6 +1879,28 @@ function normalizeOutline(outline) {
   };
 }
 
+function normalizeGeneratedStory(story, fallbackTitle = "") {
+  const chapters = Array.isArray(story?.chapters)
+    ? story.chapters
+      .map((chapter, index) => ({
+        chapter_number: Number(chapter?.chapter_number || index + 1),
+        title: String(chapter?.title || `第${index + 1}章`),
+        summary: String(chapter?.summary || ""),
+        content: String(chapter?.content || ""),
+      }))
+      .filter((chapter) => chapter.content || chapter.summary || chapter.title)
+    : [];
+
+  if (!chapters.length) {
+    return null;
+  }
+
+  return {
+    title: String(story?.title || fallbackTitle || "未命名作品"),
+    chapters,
+  };
+}
+
 function extractRangeNumbers(rangeText) {
   const matches = String(rangeText || "").match(/\d+/g);
   if (!matches || !matches.length) {
@@ -1550,6 +1910,159 @@ function extractRangeNumbers(rangeText) {
     return [Number(matches[0]), Number(matches[0])];
   }
   return [Number(matches[0]), Number(matches[1])];
+}
+
+function handleOutlineExport() {
+  if (!state.outline) {
+    return;
+  }
+  if (!saveActStructureEdits(true)) {
+    return;
+  }
+
+  downloadTextFile(
+    `${buildExportBaseName()}-大纲.txt`,
+    buildOutlineExportText(),
+  );
+  setStatus("大纲已导出。", false);
+}
+
+function handleExportAllStory() {
+  if (!state.generatedStory) {
+    return;
+  }
+
+  downloadTextFile(
+    `${buildExportBaseName()}-全部正文.txt`,
+    buildAllStoryExportText(),
+  );
+  setStatus("全部正文已导出。", false);
+}
+
+function handleStoryResultClick(event) {
+  const exportButton = event.target.closest("[data-export-chapter]");
+  if (!exportButton) {
+    return;
+  }
+
+  const chapterNumber = Number(exportButton.dataset.exportChapter);
+  if (!Number.isFinite(chapterNumber)) {
+    return;
+  }
+
+  exportSingleChapter(chapterNumber);
+}
+
+function exportSingleChapter(chapterNumber) {
+  const chapter = findGeneratedChapter(chapterNumber);
+  if (!chapter) {
+    setStatus("未找到要导出的章节内容。", false, true);
+    return;
+  }
+
+  downloadTextFile(
+    `${buildExportBaseName()}-第${chapter.chapter_number}章-${sanitizeFilename(chapter.title)}.txt`,
+    buildSingleChapterExportText(chapter),
+  );
+  setStatus(`第 ${chapter.chapter_number} 章已导出。`, false);
+}
+
+function findGeneratedChapter(chapterNumber) {
+  return state.generatedStory?.chapters?.find(
+    (chapter) => Number(chapter.chapter_number) === Number(chapterNumber),
+  ) || null;
+}
+
+function buildOutlineExportText() {
+  const outline = state.outline;
+  if (!outline) {
+    return "";
+  }
+
+  const parts = [
+    `标题：${outline.title || "未命名作品"}`,
+    `一句话概述：${outline.logline || "无"}`,
+    `故事概述：${outline.summary || "无"}`,
+    `章节数：${outline.chapter_count || outline.chapters?.length || 0}`,
+    "",
+    "四段式结构：",
+    ...(outline.act_structure?.length
+      ? outline.act_structure.map(
+        (section) => `${section.stage}｜${section.chapter_range}\n${section.content || "无"}`,
+      )
+      : ["本轮没有返回四段式结构。"]),
+    "",
+    "LLM 补完信息：",
+    ...(outline.inferred_details?.length ? outline.inferred_details : ["本轮没有额外补完信息。"]),
+    "",
+    "章节规划：",
+    ...(outline.chapters?.length
+      ? outline.chapters.map(
+        (chapter) => [
+          `第 ${chapter.chapter_number} 章｜${chapter.title}`,
+          `目标字数：${chapter.target_words}`,
+          `概要：${chapter.summary || "无"}`,
+          `关键事件：${chapter.key_events?.length ? chapter.key_events.join(" / ") : "无"}`,
+          `章末收束：${chapter.cliffhanger || "无"}`,
+        ].join("\n"),
+      )
+      : ["本轮没有章节规划。"]),
+  ];
+
+  return parts.join("\n\n").trim();
+}
+
+function buildSingleChapterExportText(chapter) {
+  const title = state.generatedStory?.title || state.outline?.title || "未命名作品";
+  return [
+    `作品：${title}`,
+    `章节：第 ${chapter.chapter_number} 章｜${chapter.title}`,
+    "",
+    "章节摘要：",
+    chapter.summary || "无",
+    "",
+    "正文：",
+    chapter.content || "",
+  ].join("\n");
+}
+
+function buildAllStoryExportText() {
+  const story = state.generatedStory;
+  if (!story) {
+    return "";
+  }
+
+  const chapterTexts = story.chapters.map((chapter) => buildSingleChapterExportText(chapter));
+  return [
+    `作品：${story.title || state.outline?.title || "未命名作品"}`,
+    `章节总数：${story.chapters.length}`,
+    "",
+    chapterTexts.join("\n\n" + "=".repeat(24) + "\n\n"),
+  ].join("\n");
+}
+
+function buildExportBaseName() {
+  return sanitizeFilename(state.generatedStory?.title || state.outline?.title || "未命名作品");
+}
+
+function sanitizeFilename(value) {
+  return String(value || "未命名作品")
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80) || "未命名作品";
+}
+
+function downloadTextFile(filename, content) {
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function renderOutline() {
@@ -1587,7 +2100,7 @@ function renderOutline() {
     <article class="outline-card">
       <div class="outline-meta">
         <div><strong>标题：</strong>${escapeHtml(state.outline.title)}</div>
-        <div><strong>一句话卖点：</strong>${escapeHtml(state.outline.logline)}</div>
+        <div><strong>一句话概述：</strong>${escapeHtml(state.outline.logline)}</div>
         <div><strong>故事概述：</strong>${escapeHtml(state.outline.summary)}</div>
         <div><strong>章节数：</strong>${state.outline.chapter_count}</div>
       </div>
@@ -1685,6 +2198,8 @@ function saveActStructureEdits(silentSuccess = false) {
   };
 
   renderOutline();
+  saveWorkspaceSnapshot();
+  updateOutputActionState();
   if (!silentSuccess) {
     setStatus("四段式篇章范围已保存，后续正文会按这个分段布局。", false);
   }
@@ -1704,6 +2219,9 @@ function renderStory() {
       (chapter, index) => `
         <details class="chapter-card" ${index === 0 ? "open" : ""}>
           <summary>第 ${chapter.chapter_number} 章｜${escapeHtml(chapter.title)}</summary>
+          <div class="chapter-card-toolbar">
+            <button type="button" class="ghost-button" data-export-chapter="${chapter.chapter_number}">导出本章</button>
+          </div>
           <p><strong>章节摘要：</strong>${escapeHtml(chapter.summary)}</p>
           <div class="chapter-content">${escapeHtml(chapter.content)}</div>
         </details>
