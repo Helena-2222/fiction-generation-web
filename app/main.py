@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app.llm_runtime import DeepSeekClient
 from app.models import (
     OutlineGenerationRequest,
+    OutlineGenerationResponse,
     RelationSupplementRequest,
     StoryGenerationRequest,
 )
@@ -45,8 +46,8 @@ async def health() -> dict:
 @app.post("/api/outline")
 async def generate_outline(request: OutlineGenerationRequest) -> dict:
     try:
-        outline = await story_service.generate_outline(request)
-        return outline.model_dump()
+        response: OutlineGenerationResponse = await story_service.generate_outline(request)
+        return response.model_dump()
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

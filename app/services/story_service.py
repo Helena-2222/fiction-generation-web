@@ -11,11 +11,13 @@ from typing import Any, Dict, List, Optional
 from app.llm_runtime import DeepSeekClient
 from app.models import (
     ActOutlineSection,
+    AutoNamedCharacter,
     CharacterCard,
     CharacterRelation,
     GeneratedChapter,
     GeneratedOutline,
     OutlineGenerationRequest,
+    OutlineGenerationResponse,
     RelationSupplementResponse,
     StoryDraftRequest,
     StoryGenerationRequest,
@@ -43,8 +45,9 @@ class StoryService:
     def __init__(self, client: DeepSeekClient) -> None:
         self.client = client
 
-    async def generate_outline(self, request: OutlineGenerationRequest) -> GeneratedOutline:
+    async def generate_outline(self, request: OutlineGenerationRequest) -> OutlineGenerationResponse:
         story = self._normalize_story(request.story)
+        story, auto_named_characters = await self._assign_names_to_unnamed_characters(story)
         outline_targets = self._chapter_targets(story.total_words, story.chapter_words or 2000)
 
         regeneration_block = ""
@@ -97,7 +100,11 @@ class StoryService:
         )
         outline = GeneratedOutline.model_validate(result)
         outline.act_structure = self._normalize_act_structure(outline.act_structure, outline.chapter_count)
-        return outline
+        return OutlineGenerationResponse(
+            story=story,
+            outline=outline,
+            auto_named_characters=auto_named_characters,
+        )
 
     async def supplement_relations(self, story: StoryDraftRequest) -> RelationSupplementResponse:
         story = self._normalize_story(story)
@@ -232,6 +239,169 @@ class StoryService:
             }
         )
 
+    async def _assign_names_to_unnamed_characters(
+        self,
+        story: StoryDraftRequest,
+    ) -> tuple[StoryDraftRequest, List[AutoNamedCharacter]]:
+        if not story.characters:
+            return story, []
+
+        working_story = story
+        auto_named_characters: List[AutoNamedCharacter] = []
+        used_name_keys = {
+            self._character_name_key(character.name)
+            for character in working_story.characters
+            if self._clean_character_name(character.name)
+        }
+
+        for character in working_story.characters:
+            if self._clean_character_name(character.name):
+                continue
+
+            generated_name = await self._generate_name_for_character(
+                working_story,
+                character.id,
+                used_name_keys,
+            )
+            working_story = self._update_character_name(
+                working_story,
+                character.id,
+                generated_name,
+            )
+            auto_named_characters.append(
+                AutoNamedCharacter(id=character.id, name=generated_name)
+            )
+            used_name_keys.add(self._character_name_key(generated_name))
+
+        return working_story, auto_named_characters
+
+    async def _generate_name_for_character(
+        self,
+        story: StoryDraftRequest,
+        target_character_id: str,
+        used_name_keys: set[str],
+    ) -> str:
+        user_prompt = _render_prompt(
+            "character_name_prompt.txt",
+            {
+                "TARGET_CHARACTER_ID": json.dumps(target_character_id, ensure_ascii=False),
+                "NAMING_CONTEXT_JSON": self._build_character_naming_context_json(
+                    story,
+                    target_character_id,
+                ),
+            },
+        )
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You name one story character at a time. Output exactly one character "
+                    "name only, with no explanation, markdown, JSON, numbering, or quotes."
+                ),
+            },
+            {"role": "user", "content": user_prompt},
+        ]
+
+        for _ in range(3):
+            raw_name = await self.client.chat(messages=messages, temperature=0.8)
+            candidate = self._sanitize_generated_character_name(raw_name)
+            validation_error = self._validate_generated_character_name(
+                candidate,
+                used_name_keys,
+            )
+            if not validation_error:
+                return candidate
+
+            messages.extend(
+                [
+                    {"role": "assistant", "content": raw_name},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"你刚才输出的内容不符合要求：{validation_error}。"
+                            "请重新输出一个不重复、符合语境的角色姓名，仍然只输出名字。"
+                        ),
+                    },
+                ]
+            )
+
+        raise ValueError("AI 未能为未命名角色生成合规姓名，请先手动填写角色姓名后再生成大纲。")
+
+    def _build_character_naming_context_json(
+        self,
+        story: StoryDraftRequest,
+        target_character_id: str,
+    ) -> str:
+        target_character = next(
+            (character for character in story.characters if character.id == target_character_id),
+            None,
+        )
+        if target_character is None:
+            raise ValueError("待命名角色不存在，无法继续生成大纲。")
+
+        reference_names = self._character_reference_names(story.characters)
+        payload = {
+            "genre": story.genre or "to be inferred",
+            "synopsis": story.synopsis,
+            "style": story.style or "to be inferred",
+            "worldview": {
+                "time": story.worldview_time or "to be inferred",
+                "physical_environment": story.worldview_physical or "to be inferred",
+                "social_environment": story.worldview_social or "to be inferred",
+            },
+            "existing_names": [
+                self._clean_character_name(character.name)
+                for character in story.characters
+                if character.id != target_character_id and self._clean_character_name(character.name)
+            ],
+            "target_character": self._serialize_character_for_naming_prompt(
+                target_character,
+                target_character_id,
+                reference_names,
+            ),
+            "target_relations": self._serialize_target_relations_for_naming_prompt(
+                story.relations,
+                reference_names,
+                target_character_id,
+            ),
+            "all_characters": self._serialize_characters_for_naming_prompt(
+                story.characters,
+                target_character_id,
+                reference_names,
+            ),
+            "all_relations": self._serialize_compact_relations_for_prompt(
+                story.relations,
+                reference_names,
+                include_relation_ids=True,
+            ),
+        }
+        return json.dumps(payload, ensure_ascii=False, indent=2)
+
+    @staticmethod
+    def _update_character_name(
+        story: StoryDraftRequest,
+        target_character_id: str,
+        name: str,
+    ) -> StoryDraftRequest:
+        cleaned_name = StoryService._clean_character_name(name)
+        if not cleaned_name:
+            return story
+
+        updated_characters = [
+            character.model_copy(update={"name": cleaned_name})
+            if character.id == target_character_id
+            else character
+            for character in story.characters
+        ]
+        display_names = StoryService._character_display_names(updated_characters)
+        updated_relations = StoryService._normalize_relations(story.relations, display_names)
+        return story.model_copy(
+            update={
+                "characters": updated_characters,
+                "relations": updated_relations,
+            }
+        )
+
     @staticmethod
     def _normalize_characters(characters: List[CharacterCard]) -> List[CharacterCard]:
         normalized: List[CharacterCard] = []
@@ -239,7 +409,7 @@ class StoryService:
             normalized.append(
                 character.model_copy(
                     update={
-                        "name": re.sub(r"\s+", " ", character.name).strip(),
+                        "name": StoryService._clean_character_name(character.name),
                         "gender": re.sub(r"\s+", " ", character.gender).strip(),
                         "age": re.sub(r"\s+", " ", character.age).strip(),
                         "occupation": re.sub(r"\s+", " ", character.occupation).strip(),
@@ -252,6 +422,161 @@ class StoryService:
                 )
             )
         return normalized
+
+    @staticmethod
+    def _clean_character_name(name: str) -> str:
+        return re.sub(r"\s+", " ", str(name or "")).strip()
+
+    @classmethod
+    def _character_name_key(cls, name: str) -> str:
+        return re.sub(r"\s+", "", cls._clean_character_name(name)).casefold()
+
+    @staticmethod
+    def _character_reference_names(characters: List[CharacterCard]) -> Dict[str, str]:
+        reference_names: Dict[str, str] = {}
+        unnamed_index = 1
+
+        for character in characters:
+            cleaned_name = StoryService._clean_character_name(character.name)
+            if cleaned_name:
+                reference_names[character.id] = cleaned_name
+                continue
+            reference_names[character.id] = f"待命名角色{unnamed_index}"
+            unnamed_index += 1
+
+        return reference_names
+
+    @staticmethod
+    def _character_optional_prompt_fields(character: CharacterCard) -> Dict[str, str]:
+        optional_fields = {
+            "gender": character.gender,
+            "age": character.age,
+            "occupation": character.occupation,
+            "nationality": character.nationality,
+            "personality": character.personality,
+            "appearance": character.appearance,
+            "values": character.values,
+            "core_motivation": character.core_motivation,
+        }
+        serialized: Dict[str, str] = {}
+
+        for key, value in optional_fields.items():
+            cleaned = re.sub(r"\s+", " ", str(value or "")).strip()
+            if cleaned:
+                serialized[key] = cleaned
+
+        return serialized
+
+    @classmethod
+    def _serialize_character_for_naming_prompt(
+        cls,
+        character: CharacterCard,
+        target_character_id: str,
+        reference_names: Dict[str, str],
+    ) -> Dict[str, Any]:
+        item: Dict[str, Any] = {
+            "id": character.id,
+            "name": reference_names.get(character.id, ""),
+            "needs_naming": character.id == target_character_id,
+        }
+        item.update(cls._character_optional_prompt_fields(character))
+        return item
+
+    @classmethod
+    def _serialize_characters_for_naming_prompt(
+        cls,
+        characters: List[CharacterCard],
+        target_character_id: str,
+        reference_names: Dict[str, str],
+    ) -> List[Dict[str, Any]]:
+        return [
+            cls._serialize_character_for_naming_prompt(
+                character,
+                target_character_id,
+                reference_names,
+            )
+            for character in characters
+        ]
+
+    @staticmethod
+    def _serialize_target_relations_for_naming_prompt(
+        relations: List[CharacterRelation],
+        reference_names: Dict[str, str],
+        target_character_id: str,
+    ) -> List[Dict[str, Any]]:
+        serialized: List[Dict[str, Any]] = []
+
+        for relation in relations:
+            if target_character_id not in {relation.source_id, relation.target_id}:
+                continue
+
+            source_name = re.sub(
+                r"\s+",
+                " ",
+                reference_names.get(relation.source_id, relation.source_name or ""),
+            ).strip()
+            target_name = re.sub(
+                r"\s+",
+                " ",
+                reference_names.get(relation.target_id, relation.target_name or ""),
+            ).strip()
+            label = re.sub(r"\s+", " ", relation.label).strip()
+            if not source_name or not target_name or not label:
+                continue
+
+            other_character_id = (
+                relation.target_id if relation.source_id == target_character_id else relation.source_id
+            )
+            serialized.append(
+                {
+                    "direction": "outgoing" if relation.source_id == target_character_id else "incoming",
+                    "source_name": source_name,
+                    "target_name": target_name,
+                    "other_character_id": other_character_id,
+                    "other_character_name": reference_names.get(other_character_id, ""),
+                    "label": label,
+                    "bidirectional": bool(relation.bidirectional),
+                    "relation_source": relation.relation_source,
+                }
+            )
+
+        return serialized
+
+    @classmethod
+    def _sanitize_generated_character_name(cls, content: str) -> str:
+        stripped = content.strip()
+        if stripped.startswith("```"):
+            fence_match = re.search(r"```(?:\w+)?\s*(.*?)```", stripped, re.DOTALL)
+            if fence_match:
+                stripped = fence_match.group(1).strip()
+
+        lines = [line.strip() for line in stripped.splitlines() if line.strip()]
+        if lines:
+            stripped = lines[0]
+
+        stripped = re.sub(r"^(?:[-*]|\d+[.)、])\s*", "", stripped)
+        stripped = re.sub(r"^(?:名字|姓名|角色名|name)\s*[:：]\s*", "", stripped, flags=re.IGNORECASE)
+        stripped = stripped.strip().strip("\"'“”‘’`")
+        stripped = re.split(r"[，。,；;：:（(【\[]", stripped, maxsplit=1)[0].strip()
+        return cls._clean_character_name(stripped)
+
+    @classmethod
+    def _validate_generated_character_name(
+        cls,
+        candidate: str,
+        used_name_keys: set[str],
+    ) -> str:
+        if not candidate:
+            return "没有输出有效名字"
+        if len(candidate) > 24:
+            return "输出不像一个简洁自然的人名"
+        if any(marker in candidate for marker in ("{", "}", "[", "]", "、", "/", "|")):
+            return "输出包含结构化内容或多个候选"
+        if re.fullmatch(r"(未命名角色|角色\d+|人物\d+|待命名角色\d*)", candidate):
+            return "输出仍是占位名"
+        if cls._character_name_key(candidate) in used_name_keys:
+            return "与已有角色重名"
+        return ""
 
     @staticmethod
     def _character_display_names(characters: List[CharacterCard]) -> Dict[str, str]:
@@ -447,20 +772,7 @@ class StoryService:
                 "id": character.id,
                 "name": display_names.get(character.id, character.name or "Unnamed character"),
             }
-            optional_fields = {
-                "gender": character.gender,
-                "age": character.age,
-                "occupation": character.occupation,
-                "nationality": character.nationality,
-                "personality": character.personality,
-                "appearance": character.appearance,
-                "values": character.values,
-                "core_motivation": character.core_motivation,
-            }
-            for key, value in optional_fields.items():
-                cleaned = re.sub(r"\s+", " ", str(value or "")).strip()
-                if cleaned:
-                    item[key] = cleaned
+            item.update(StoryService._character_optional_prompt_fields(character))
             serialized.append(item)
 
         return serialized

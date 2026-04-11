@@ -77,6 +77,17 @@ class OutlineGenerationRequest(BaseModel):
     previous_outline: Optional[GeneratedOutline] = None
 
 
+class AutoNamedCharacter(BaseModel):
+    id: str
+    name: str
+
+
+class OutlineGenerationResponse(BaseModel):
+    story: StoryDraftRequest
+    outline: GeneratedOutline
+    auto_named_characters: List[AutoNamedCharacter] = Field(default_factory=list)
+
+
 class RelationSupplementRequest(BaseModel):
     story: StoryDraftRequest
 

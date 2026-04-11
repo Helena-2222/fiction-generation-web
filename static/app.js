@@ -1528,6 +1528,55 @@ function syncRelationNames() {
   }));
 }
 
+function applyServerStoryDraft(story) {
+  if (!story || typeof story !== "object") {
+    return;
+  }
+
+  const previousCharacters = new Map(state.characters.map((character) => [character.id, character]));
+  const incomingCharacters = Array.isArray(story.characters) ? story.characters : [];
+  if (incomingCharacters.length) {
+    state.characters = incomingCharacters.map((character, index) => {
+      const previous = previousCharacters.get(character.id);
+      return normalizePersistedCharacter(
+        {
+          ...character,
+          graph_color_index: previous?.graph_color_index,
+          graph_color: previous?.graph_color,
+        },
+        index,
+        incomingCharacters.length,
+      );
+    });
+
+    nextCharacterColorIndex = state.characters.reduce((maxIndex, character, index) => {
+      const candidate = Number.isInteger(character.graph_color_index) ? character.graph_color_index + 1 : index + 1;
+      return Math.max(maxIndex, candidate);
+    }, 0);
+  }
+
+  if (Array.isArray(story.relations)) {
+    state.relations = story.relations
+      .map((relation) => normalizeIncomingRelation(relation, relation?.relation_source || "user"))
+      .filter(Boolean);
+  }
+
+  syncRelationNames();
+  renderCharacters();
+  renderGraph();
+
+  if (state.isStorySaved) {
+    state.savedStoryDraft = buildStoryPayload();
+  }
+}
+
+function formatAutoNamedCharacters(autoNamedCharacters) {
+  return (Array.isArray(autoNamedCharacters) ? autoNamedCharacters : [])
+    .map((character) => String(character?.name || "").trim())
+    .filter(Boolean)
+    .join("、");
+}
+
 function handleSaveRelations() {
   const payload = buildStoryPayload();
   const validationMessage = validateStoryContextForRelationSave(payload);
@@ -1690,6 +1739,7 @@ function serializeRelation(relation) {
 async function handleOutlineSubmit(event) {
   event.preventDefault();
   const payload = buildStoryPayload();
+  const hasUnnamedCharacters = (payload.characters || []).some((character) => !String(character?.name || "").trim());
   if (!payload.synopsis) {
     setStatus("请先填写故事梗概。", false, true);
     return;
@@ -1702,6 +1752,9 @@ async function handleOutlineSubmit(event) {
     firstStepDetail: "将综合梗概、角色卡、角色关系网与篇幅要求生成新的故事大纲。",
   });
   appendLlmActivityStep("整理创作输入", "正在汇总梗概、世界观、角色卡与角色关系。");
+  if (hasUnnamedCharacters) {
+    appendLlmActivityStep("补全角色姓名", "检测到未命名角色，正在先根据关系网与设定为其命名。");
+  }
   appendLlmActivityStep("构建大纲提示词", "正在生成四段式结构与逐章规划所需的提示信息。");
   appendLlmActivityStep("发送给模型", "已将大纲生成请求提交给 LLM。");
   startLlmActivityWaitingLoop(
@@ -1713,21 +1766,42 @@ async function handleOutlineSubmit(event) {
   elements.generateStory.disabled = true;
 
   try {
-    const outline = await postJson("/api/outline", {
+    const response = await postJson("/api/outline", {
       story: payload,
       feedback: "",
       previous_outline: null,
     });
-    state.outline = normalizeOutline(outline);
+    const autoNamedCharacters = Array.isArray(response?.auto_named_characters) ? response.auto_named_characters : [];
+    const outlinePayload = response?.outline || response;
+    if (response?.story) {
+      applyServerStoryDraft(response.story);
+    }
+    state.outline = normalizeOutline(outlinePayload);
     state.generatedStory = null;
+    if (autoNamedCharacters.length) {
+      appendLlmActivityStep("回写角色姓名", "已将 AI 生成的角色姓名同步到角色卡与关系网。");
+    }
     appendLlmActivityStep("解析大纲 JSON", "正在校验章节结构、字数规划与返回字段。");
     appendLlmActivityStep("整理篇章范围", "正在规范化四段式结构与章节范围。");
     renderOutline();
     renderStory();
     appendLlmActivityStep("渲染页面结果", "正在把新大纲写入右侧结果区。");
     saveWorkspaceSnapshot();
-    setStatus("大纲已生成，可以继续重生成，或直接按当前大纲生成全文。", false);
-    finishLlmActivityRun("大纲已生成完成，可以继续调整或直接生成正文。");
+    if (autoNamedCharacters.length) {
+      const namedSummary = formatAutoNamedCharacters(autoNamedCharacters);
+      setStatus(
+        `${namedSummary ? `已先为未命名角色补全姓名：${namedSummary}。` : "已先为未命名角色补全姓名。"}大纲已生成，可以继续重生成，或直接按当前大纲生成全文。`,
+        false,
+      );
+      finishLlmActivityRun(
+        namedSummary
+          ? `已补全角色姓名：${namedSummary}，并生成故事大纲。`
+          : "已补全未命名角色姓名，并生成故事大纲。",
+      );
+    } else {
+      setStatus("大纲已生成，可以继续重生成，或直接按当前大纲生成全文。", false);
+      finishLlmActivityRun("大纲已生成完成，可以继续调整或直接生成正文。");
+    }
   } catch (error) {
     setStatus(error.message || "大纲生成失败。", false, true);
     finishLlmActivityRun(error.message || "大纲生成失败。", "error");
@@ -1740,6 +1814,8 @@ async function handleOutlineRegenerate() {
   if (!state.outline) {
     return;
   }
+  const payload = buildStoryPayload();
+  const hasUnnamedCharacters = (payload.characters || []).some((character) => !String(character?.name || "").trim());
 
   startLlmActivityRun({
     title: "AI 重生成大纲",
@@ -1748,6 +1824,9 @@ async function handleOutlineRegenerate() {
     firstStepDetail: "将保留当前设定，并结合反馈重新生成一版大纲。",
   });
   appendLlmActivityStep("读取当前大纲与反馈", "正在汇总上一版大纲和你的修改方向。");
+  if (hasUnnamedCharacters) {
+    appendLlmActivityStep("补全角色姓名", "检测到未命名角色，正在先根据关系网与设定为其命名。");
+  }
   appendLlmActivityStep("重建大纲提示词", "正在把反馈注入新的结构规划请求。");
   appendLlmActivityStep("发送给模型", "已将重生成请求提交给 LLM。");
   startLlmActivityWaitingLoop(
@@ -1759,21 +1838,42 @@ async function handleOutlineRegenerate() {
   elements.generateStory.disabled = true;
 
   try {
-    const outline = await postJson("/api/outline", {
-      story: buildStoryPayload(),
+    const response = await postJson("/api/outline", {
+      story: payload,
       feedback: elements.outlineFeedback.value.trim(),
       previous_outline: state.outline,
     });
-    state.outline = normalizeOutline(outline);
+    const autoNamedCharacters = Array.isArray(response?.auto_named_characters) ? response.auto_named_characters : [];
+    const outlinePayload = response?.outline || response;
+    if (response?.story) {
+      applyServerStoryDraft(response.story);
+    }
+    state.outline = normalizeOutline(outlinePayload);
     state.generatedStory = null;
+    if (autoNamedCharacters.length) {
+      appendLlmActivityStep("回写角色姓名", "已将 AI 生成的角色姓名同步到角色卡与关系网。");
+    }
     appendLlmActivityStep("解析重生成结果", "正在校验新的大纲 JSON 与章节规划。");
     appendLlmActivityStep("清理旧正文结果", "由于大纲已变更，旧正文会被清空以避免混用。");
     renderStory();
     appendLlmActivityStep("渲染新大纲", "正在将新的大纲内容写回页面。");
     renderOutline();
     saveWorkspaceSnapshot();
-    setStatus("新的大纲已经生成，可以继续调整，或开始逐章创作。", false);
-    finishLlmActivityRun("新的大纲已经生成，可以继续调整后再生成正文。");
+    if (autoNamedCharacters.length) {
+      const namedSummary = formatAutoNamedCharacters(autoNamedCharacters);
+      setStatus(
+        `${namedSummary ? `已先为未命名角色补全姓名：${namedSummary}。` : "已先为未命名角色补全姓名。"}新的大纲已经生成，可以继续调整，或开始逐章创作。`,
+        false,
+      );
+      finishLlmActivityRun(
+        namedSummary
+          ? `已补全角色姓名：${namedSummary}，并完成大纲重生成。`
+          : "已补全未命名角色姓名，并完成大纲重生成。",
+      );
+    } else {
+      setStatus("新的大纲已经生成，可以继续调整，或开始逐章创作。", false);
+      finishLlmActivityRun("新的大纲已经生成，可以继续调整后再生成正文。");
+    }
   } catch (error) {
     setStatus(error.message || "重生成失败。", false, true);
     finishLlmActivityRun(error.message || "重生成失败。", "error");

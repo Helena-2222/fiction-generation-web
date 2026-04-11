@@ -95,7 +95,13 @@ class DeepSeekClient:
                 },
                 json=payload,
             )
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                error_detail = self._extract_error_detail(response)
+                raise RuntimeError(
+                    f"DeepSeek API request failed with status {response.status_code}: {error_detail}"
+                ) from exc
             return response.json()
 
     @staticmethod
@@ -116,6 +122,23 @@ class DeepSeekClient:
             return ""
         finish_reason = choices[0].get("finish_reason")
         return finish_reason if isinstance(finish_reason, str) else ""
+
+    @classmethod
+    def _extract_error_detail(cls, response: httpx.Response) -> str:
+        try:
+            payload = response.json()
+        except ValueError:
+            text = response.text.strip()
+            return text or "No response body returned by DeepSeek."
+
+        if isinstance(payload, dict):
+            error = payload.get("error")
+            if isinstance(error, dict):
+                message = error.get("message")
+                if isinstance(message, str) and message.strip():
+                    return cls._preview_text(message, limit=600)
+
+        return cls._preview_text(json.dumps(payload, ensure_ascii=False), limit=600)
 
     @classmethod
     def _build_json_repair_messages(
