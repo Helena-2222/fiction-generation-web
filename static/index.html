@@ -187,6 +187,11 @@
         <div id="llm-activity-status" class="status-pill">待命</div>
         <p id="llm-activity-summary" class="micro-tip">调用 LLM 时，这里会实时展示当前处理阶段。</p>
       </div>
+      <div id="llm-activity-actions" class="action-row llm-activity-actions hidden">
+        <button type="button" id="llm-activity-stop" class="ghost-button">停止生成</button>
+        <button type="button" id="llm-activity-resume" class="primary-button hidden">继续本次生成</button>
+        <button type="button" id="llm-activity-discard" class="tiny-button hidden">放弃本次生成</button>
+      </div>
       <ol id="llm-activity-log" class="llm-activity-log"></ol>
     </aside>
     <button
@@ -240,6 +245,25 @@
         <div class="action-row modal-confirm-actions">
           <button type="button" id="relation-delete-confirm" class="primary-button danger-button">确认</button>
           <button type="button" id="relation-delete-cancel" class="ghost-button">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="llm-task-pause-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal-card modal-card-compact">
+        <div class="section-heading compact">
+          <div>
+            <p class="section-kicker">LLM Task</p>
+            <h3>本次生成已暂停</h3>
+          </div>
+          <button type="button" id="llm-task-pause-close" class="tiny-button">关闭</button>
+        </div>
+        <p id="llm-task-pause-message" class="micro-tip">
+          当前 LLM 调用已经暂停。你可以先返回编辑；若选择继续，将按暂停前的输入重新发起本次生成。
+        </p>
+        <div class="action-row modal-confirm-actions">
+          <button type="button" id="llm-task-pause-resume" class="primary-button">继续本次生成</button>
+          <button type="button" id="llm-task-pause-discard" class="ghost-button">放弃本次生成</button>
         </div>
       </div>
     </div>

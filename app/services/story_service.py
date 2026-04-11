@@ -76,6 +76,7 @@ class StoryService:
                     outline_targets,
                     include_relation_ids=False,
                 ),
+                "STORY_STYLE_GUIDANCE": self._build_story_style_guidance(story),
                 "CHAPTER_COUNT": str(len(outline_targets)),
                 "CHAPTER_TARGETS": json.dumps(outline_targets, ensure_ascii=False),
                 "FIRST_TARGET_WORDS": str(outline_targets[0]),
@@ -120,6 +121,7 @@ class StoryService:
                     chapter_targets,
                     include_relation_ids=True,
                 ),
+                "STORY_STYLE_GUIDANCE": self._build_story_style_guidance(story),
             },
         )
 
@@ -186,6 +188,7 @@ class StoryService:
                         chapter_targets,
                         include_relation_ids=False,
                     ),
+                    "STORY_STYLE_GUIDANCE": self._build_story_style_guidance(story),
                     "OUTLINE_JSON": outline_json,
                     "CONTINUITY_SUMMARIES": json.dumps(
                         continuity_summaries,
@@ -289,6 +292,7 @@ class StoryService:
                     story,
                     target_character_id,
                 ),
+                "STORY_STYLE_GUIDANCE": self._build_story_style_guidance(story),
             },
         )
         messages = [
@@ -376,6 +380,17 @@ class StoryService:
             ),
         }
         return json.dumps(payload, ensure_ascii=False, indent=2)
+
+    def _build_story_style_guidance(self, story: StoryDraftRequest) -> str:
+        genre = re.sub(r"\s+", " ", str(story.genre or "")).strip()
+        style = re.sub(r"\s+", " ", str(story.style or "")).strip()
+        return _render_prompt(
+            "story_style_guidance_prompt.txt",
+            {
+                "STORY_GENRE": genre or "待模型推断",
+                "STORY_STYLE": style or "待模型推断",
+            },
+        )
 
     @staticmethod
     def _update_character_name(

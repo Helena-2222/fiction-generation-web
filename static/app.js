@@ -14,6 +14,7 @@ const CHARACTER_FIELDS = [
 const TEXTAREA_FIELDS = new Set(["personality", "appearance", "values", "core_motivation"]);
 const STAGE_ORDER = ["开端", "发展", "高潮", "结局"];
 const WORKSPACE_STORAGE_KEY = "story-generation-workspace-v1";
+const LLM_TASK_POLL_INTERVAL_MS = 1400;
 const GRAPH = {
   nodeWidth: 154,
   nodeHeight: 76,
@@ -54,8 +55,14 @@ const llmActivity = {
   runId: 0,
   panelOpen: false,
   waitTimer: null,
+  autoCloseTimer: null,
   waitIndex: 0,
   waitingMessages: [],
+};
+const llmTaskController = {
+  currentTask: null,
+  pollTimer: null,
+  pollInFlight: false,
 };
 
 const elements = {
@@ -78,6 +85,7 @@ const elements = {
   relationSaveState: document.querySelector("#relation-save-state"),
   storyForm: document.querySelector("#story-form"),
   addCharacter: document.querySelector("#add-character"),
+  generateOutline: document.querySelector("#generate-outline"),
   saveRelations: document.querySelector("#save-relations"),
   supplementRelations: document.querySelector("#supplement-relations"),
   outlineResult: document.querySelector("#outline-result"),
@@ -108,6 +116,15 @@ const elements = {
   llmActivityStatus: document.querySelector("#llm-activity-status"),
   llmActivitySummary: document.querySelector("#llm-activity-summary"),
   llmActivityLog: document.querySelector("#llm-activity-log"),
+  llmActivityActions: document.querySelector("#llm-activity-actions"),
+  llmActivityStop: document.querySelector("#llm-activity-stop"),
+  llmActivityResume: document.querySelector("#llm-activity-resume"),
+  llmActivityDiscard: document.querySelector("#llm-activity-discard"),
+  llmTaskPauseModal: document.querySelector("#llm-task-pause-modal"),
+  llmTaskPauseClose: document.querySelector("#llm-task-pause-close"),
+  llmTaskPauseMessage: document.querySelector("#llm-task-pause-message"),
+  llmTaskPauseResume: document.querySelector("#llm-task-pause-resume"),
+  llmTaskPauseDiscard: document.querySelector("#llm-task-pause-discard"),
 };
 
 function generateId(prefix) {
@@ -347,9 +364,20 @@ function init() {
   elements.relationDeleteCancel.addEventListener("click", closeRelationDeleteModal);
   elements.llmActivityClose.addEventListener("click", closeLlmActivityPanel);
   elements.llmActivityToggle.addEventListener("click", openLlmActivityPanel);
+  elements.llmActivityStop.addEventListener("click", handlePauseCurrentLlmTask);
+  elements.llmActivityResume.addEventListener("click", handleResumeCurrentLlmTask);
+  elements.llmActivityDiscard.addEventListener("click", handleDiscardCurrentLlmTask);
+  elements.llmTaskPauseClose.addEventListener("click", closeLlmTaskPauseModal);
+  elements.llmTaskPauseResume.addEventListener("click", handleResumeCurrentLlmTask);
+  elements.llmTaskPauseDiscard.addEventListener("click", handleDiscardCurrentLlmTask);
   elements.relationDeleteModal.addEventListener("click", (event) => {
     if (event.target === elements.relationDeleteModal) {
       closeRelationDeleteModal();
+    }
+  });
+  elements.llmTaskPauseModal.addEventListener("click", (event) => {
+    if (event.target === elements.llmTaskPauseModal) {
+      closeLlmTaskPauseModal();
     }
   });
   window.addEventListener("resize", renderGraph);
@@ -520,26 +548,32 @@ function markStoryDraftDirty() {
 }
 
 function updateRelationActionState() {
+  const relationTaskRunning = llmTaskController.currentTask?.kind === "relations_supplement"
+    && llmTaskController.currentTask?.status === "running";
   if (elements.relationSaveState) {
     elements.relationSaveState.textContent = state.isStorySaved
       ? "当前梗概、角色卡和关系网已保存，AI 只会在空白关系位上继续补充。（可以试试增加空白角色卡片~）"
       : "编辑完故事梗概、角色卡和关系网后，请先点击“保存关系”，再使用 AI 补充关系。";
     elements.relationSaveState.classList.toggle("saved", state.isStorySaved);
   }
+  elements.saveRelations.disabled = relationTaskRunning;
   if (elements.supplementRelations) {
-    elements.supplementRelations.disabled = !state.isStorySaved;
+    elements.supplementRelations.disabled = relationTaskRunning || !state.isStorySaved;
   }
 }
 
 function updateOutputActionState() {
-  elements.regenerateOutline.disabled = !state.outline;
-  elements.generateStory.disabled = !state.outline;
+  const outlineTaskRunning = llmTaskController.currentTask?.kind === "outline"
+    && llmTaskController.currentTask?.status === "running";
+  elements.regenerateOutline.disabled = outlineTaskRunning || !state.outline;
+  elements.generateStory.disabled = outlineTaskRunning || !state.outline;
   elements.exportOutline.disabled = !state.outline;
   elements.exportAllStory.disabled = !state.generatedStory;
 }
 
 function startLlmActivityRun({ title, summary, firstStepTitle, firstStepDetail = "", waitingMessages = [] }) {
   stopLlmActivityWaitingLoop();
+  stopLlmActivityAutoClose();
   llmActivity.active = true;
   llmActivity.runId += 1;
   llmActivity.panelOpen = true;
@@ -548,8 +582,7 @@ function startLlmActivityRun({ title, summary, firstStepTitle, firstStepDetail =
 
   elements.llmActivityTitle.textContent = title;
   elements.llmActivitySummary.textContent = summary;
-  elements.llmActivityStatus.textContent = "运行中";
-  elements.llmActivityStatus.classList.add("busy");
+  setLlmActivityStatus("运行中", { busy: true });
   elements.llmActivityLog.innerHTML = "";
   syncLlmActivityPanelState();
 
@@ -625,14 +658,42 @@ function stopLlmActivityWaitingLoop() {
   }
 }
 
+function stopLlmActivityAutoClose() {
+  if (llmActivity.autoCloseTimer) {
+    window.clearTimeout(llmActivity.autoCloseTimer);
+    llmActivity.autoCloseTimer = null;
+  }
+}
+
+function scheduleLlmActivityAutoClose(delayMs = 2000) {
+  stopLlmActivityAutoClose();
+  llmActivity.autoCloseTimer = window.setTimeout(() => {
+    llmActivity.autoCloseTimer = null;
+    if (!llmActivity.active) {
+      closeLlmActivityPanel();
+    }
+  }, delayMs);
+}
+
 function finishLlmActivityRun(message, kind = "success") {
   stopLlmActivityWaitingLoop();
   llmActivity.active = false;
-  elements.llmActivityStatus.textContent = kind === "error" ? "出错了" : "已完成";
-  elements.llmActivityStatus.classList.toggle("busy", false);
+  setLlmActivityStatus(
+    kind === "error" ? "出错了" : kind === "stopped" ? "已停止" : "已完成",
+    { busy: false },
+  );
   elements.llmActivitySummary.textContent = message;
   syncLlmActivityPanelState();
-  appendLlmActivityStep(kind === "error" ? "本次运行中断" : "本次运行完成", message, kind);
+  appendLlmActivityStep(
+    kind === "error" ? "本次运行中断" : kind === "stopped" ? "本次运行已放弃" : "本次运行完成",
+    message,
+    kind === "stopped" ? "stopped" : kind,
+  );
+  if (kind === "success") {
+    scheduleLlmActivityAutoClose();
+  } else {
+    stopLlmActivityAutoClose();
+  }
 }
 
 function closeLlmActivityPanel() {
@@ -641,6 +702,7 @@ function closeLlmActivityPanel() {
 }
 
 function openLlmActivityPanel() {
+  stopLlmActivityAutoClose();
   llmActivity.panelOpen = true;
   syncLlmActivityPanelState();
 }
@@ -658,6 +720,260 @@ function syncLlmActivityPanelState() {
     llmActivity.active ? "展开 AI 运行面板（当前正在运行）" : "展开 AI 运行面板",
   );
   elements.llmActivityToggle.title = llmActivity.active ? "展开 AI 运行面板（当前正在运行）" : "展开 AI 运行面板";
+}
+
+function setLlmActivityStatus(label, { busy = false, paused = false } = {}) {
+  elements.llmActivityStatus.textContent = label;
+  elements.llmActivityStatus.classList.toggle("busy", busy);
+  elements.llmActivityStatus.classList.toggle("paused", paused);
+}
+
+function updateLlmTaskActionState() {
+  const task = llmTaskController.currentTask;
+  const isRunning = task?.status === "running";
+  const isPaused = task?.status === "paused";
+  const disableActions = Boolean(task?.actionPending);
+
+  elements.llmActivityActions.classList.toggle("hidden", !task || (!isRunning && !isPaused));
+  elements.llmActivityStop.classList.toggle("hidden", !isRunning);
+  elements.llmActivityResume.classList.toggle("hidden", !isPaused);
+  elements.llmActivityDiscard.classList.toggle("hidden", !isPaused);
+
+  elements.llmActivityStop.disabled = !isRunning || disableActions;
+  elements.llmActivityResume.disabled = !isPaused || disableActions;
+  elements.llmActivityDiscard.disabled = !isPaused || disableActions;
+  elements.llmTaskPauseResume.disabled = !isPaused || disableActions;
+  elements.llmTaskPauseDiscard.disabled = !isPaused || disableActions;
+}
+
+function closeLlmTaskPauseModal() {
+  elements.llmTaskPauseModal.classList.add("hidden");
+  elements.llmTaskPauseModal.setAttribute("aria-hidden", "true");
+}
+
+function openLlmTaskPauseModal(message = "") {
+  elements.llmTaskPauseMessage.textContent = message
+    || "当前 LLM 调用已经暂停。你可以先返回编辑；若选择继续，将按暂停前的输入重新发起本次生成。";
+  elements.llmTaskPauseModal.classList.remove("hidden");
+  elements.llmTaskPauseModal.setAttribute("aria-hidden", "false");
+}
+
+function hasBlockingLlmTask() {
+  const status = llmTaskController.currentTask?.status;
+  return ["running", "paused"].includes(status);
+}
+
+function ensureNoBlockingLlmTask() {
+  if (!hasBlockingLlmTask()) {
+    return true;
+  }
+
+  const message = llmTaskController.currentTask?.status === "paused"
+    ? "当前有一项已暂停的 LLM 任务，请先在 AI 运行面板中继续或放弃本次生成。"
+    : "当前已有 LLM 任务正在运行，请等待完成，或先点击“停止生成”。";
+  openLlmActivityPanel();
+  setStatus(message, false, true);
+  return false;
+}
+
+function stopLlmTaskPolling() {
+  if (llmTaskController.pollTimer) {
+    window.clearInterval(llmTaskController.pollTimer);
+    llmTaskController.pollTimer = null;
+  }
+  llmTaskController.pollInFlight = false;
+}
+
+function startLlmTaskPolling() {
+  stopLlmTaskPolling();
+  llmTaskController.pollTimer = window.setInterval(() => {
+    void pollCurrentLlmTask();
+  }, LLM_TASK_POLL_INTERVAL_MS);
+}
+
+async function pollCurrentLlmTask() {
+  const task = llmTaskController.currentTask;
+  if (!task || task.status !== "running" || llmTaskController.pollInFlight) {
+    return;
+  }
+
+  llmTaskController.pollInFlight = true;
+  try {
+    const response = await getJson(`/api/llm-tasks/${task.taskId}`);
+    await handleCurrentLlmTaskStatus(response);
+  } catch (error) {
+    finalizeCurrentLlmTask();
+    closeLlmTaskPauseModal();
+    task.restoreUi();
+    setStatus(error.message || "获取 LLM 任务状态失败。", false, true);
+    finishLlmActivityRun(error.message || "获取 LLM 任务状态失败。", "error");
+  } finally {
+    llmTaskController.pollInFlight = false;
+  }
+}
+
+function registerLlmTask(taskStatus, taskConfig) {
+  llmTaskController.currentTask = {
+    taskId: taskStatus.task_id,
+    kind: taskStatus.kind,
+    status: taskStatus.status,
+    busyMessage: taskConfig.busyMessage,
+    runningSummary: taskConfig.runningSummary,
+    waitingMessages: taskConfig.waitingMessages,
+    pausedSummary: taskConfig.pausedSummary,
+    discardSummary: taskConfig.discardSummary,
+    discardStatusMessage: taskConfig.discardStatusMessage,
+    restoreUi: taskConfig.restoreUi,
+    onCompleted: taskConfig.onCompleted,
+    actionPending: false,
+  };
+  updateLlmTaskActionState();
+  startLlmTaskPolling();
+}
+
+function finalizeCurrentLlmTask() {
+  stopLlmTaskPolling();
+  llmTaskController.currentTask = null;
+  updateLlmTaskActionState();
+}
+
+async function handleCurrentLlmTaskStatus(taskStatus) {
+  const task = llmTaskController.currentTask;
+  if (!task || task.taskId !== taskStatus.task_id) {
+    return;
+  }
+
+  if (taskStatus.status === "running") {
+    task.status = "running";
+    task.actionPending = false;
+    updateLlmTaskActionState();
+    return;
+  }
+
+  if (taskStatus.status === "paused") {
+    stopLlmTaskPolling();
+    task.status = "paused";
+    task.actionPending = false;
+    llmActivity.active = false;
+    stopLlmActivityWaitingLoop();
+    setLlmActivityStatus("已暂停", { paused: true });
+    elements.llmActivitySummary.textContent = task.pausedSummary;
+    updateLlmTaskActionState();
+    syncLlmActivityPanelState();
+    appendLlmActivityStep(
+      "本次生成已暂停",
+      "你可以先返回编辑；若继续，将按暂停前的输入重新发起本次 LLM 调用。",
+      "info",
+    );
+    task.restoreUi();
+    setPausedState("本次生成已暂停。你可以先返回编辑，之后再决定继续还是放弃。");
+    openLlmTaskPauseModal(task.pausedSummary);
+    return;
+  }
+
+  if (taskStatus.status === "completed") {
+    const result = taskStatus.result || {};
+    finalizeCurrentLlmTask();
+    closeLlmTaskPauseModal();
+    task.restoreUi();
+    task.onCompleted(result);
+    return;
+  }
+
+  if (taskStatus.status === "discarded") {
+    finalizeCurrentLlmTask();
+    closeLlmTaskPauseModal();
+    task.restoreUi();
+    setStatus(task.discardStatusMessage, false);
+    finishLlmActivityRun(task.discardSummary, "stopped");
+    return;
+  }
+
+  finalizeCurrentLlmTask();
+  closeLlmTaskPauseModal();
+  task.restoreUi();
+  setStatus(taskStatus.error || "LLM 任务失败。", false, true);
+  finishLlmActivityRun(taskStatus.error || "LLM 任务失败。", "error");
+}
+
+async function createManagedLlmTask(createUrl, payload, taskConfig) {
+  const taskStatus = await postJson(createUrl, payload);
+  registerLlmTask(taskStatus, taskConfig);
+}
+
+async function handlePauseCurrentLlmTask() {
+  const task = llmTaskController.currentTask;
+  if (!task || task.status !== "running" || task.actionPending) {
+    return;
+  }
+
+  task.actionPending = true;
+  updateLlmTaskActionState();
+  appendLlmActivityStep("正在暂停本次生成", "将停止当前 LLM 调用，并保留本次任务供你稍后继续或放弃。", "waiting");
+
+  try {
+    const response = await postJson(`/api/llm-tasks/${task.taskId}/pause`, {});
+    await handleCurrentLlmTaskStatus(response);
+  } catch (error) {
+    task.actionPending = false;
+    updateLlmTaskActionState();
+    setStatus(error.message || "暂停 LLM 任务失败。", false, true);
+    appendLlmActivityStep("暂停失败", error.message || "暂停 LLM 任务失败。", "error");
+  }
+}
+
+async function handleResumeCurrentLlmTask() {
+  const task = llmTaskController.currentTask;
+  if (!task || task.status !== "paused" || task.actionPending) {
+    return;
+  }
+
+  task.actionPending = true;
+  updateLlmTaskActionState();
+  closeLlmTaskPauseModal();
+  appendLlmActivityStep("继续本次生成", "将按暂停前的输入重新发起本次 LLM 调用。", "info");
+
+  try {
+    const response = await postJson(`/api/llm-tasks/${task.taskId}/resume`, {});
+    task.status = "running";
+    task.actionPending = false;
+    llmActivity.active = true;
+    setLlmActivityStatus("运行中", { busy: true });
+    elements.llmActivitySummary.textContent = task.runningSummary;
+    syncLlmActivityPanelState();
+    startLlmActivityWaitingLoop(task.runningSummary, task.waitingMessages);
+    setBusyState(task.busyMessage);
+    updateLlmTaskActionState();
+    startLlmTaskPolling();
+    await handleCurrentLlmTaskStatus(response);
+  } catch (error) {
+    task.actionPending = false;
+    updateLlmTaskActionState();
+    setStatus(error.message || "继续本次生成失败。", false, true);
+    appendLlmActivityStep("继续失败", error.message || "继续本次生成失败。", "error");
+  }
+}
+
+async function handleDiscardCurrentLlmTask() {
+  const task = llmTaskController.currentTask;
+  if (!task || task.status !== "paused" || task.actionPending) {
+    return;
+  }
+
+  task.actionPending = true;
+  updateLlmTaskActionState();
+  closeLlmTaskPauseModal();
+  appendLlmActivityStep("放弃本次生成", "当前暂停任务将被丢弃，你可以返回编辑后重新发起。", "info");
+
+  try {
+    const response = await postJson(`/api/llm-tasks/${task.taskId}/discard`, {});
+    await handleCurrentLlmTaskStatus(response);
+  } catch (error) {
+    task.actionPending = false;
+    updateLlmTaskActionState();
+    setStatus(error.message || "放弃本次生成失败。", false, true);
+    appendLlmActivityStep("放弃失败", error.message || "放弃本次生成失败。", "error");
+  }
 }
 
 function formatActivityTime(date) {
@@ -1577,6 +1893,27 @@ function formatAutoNamedCharacters(autoNamedCharacters) {
     .join("、");
 }
 
+function disableRelationTaskActions() {
+  elements.saveRelations.disabled = true;
+  elements.supplementRelations.disabled = true;
+}
+
+function restoreRelationTaskActions() {
+  elements.saveRelations.disabled = false;
+  updateRelationActionState();
+}
+
+function disableOutlineTaskActions() {
+  elements.generateOutline.disabled = true;
+  elements.regenerateOutline.disabled = true;
+  elements.generateStory.disabled = true;
+}
+
+function restoreOutlineTaskActions() {
+  elements.generateOutline.disabled = false;
+  updateOutputActionState();
+}
+
 function handleSaveRelations() {
   const payload = buildStoryPayload();
   const validationMessage = validateStoryContextForRelationSave(payload);
@@ -1606,6 +1943,9 @@ function validateStoryContextForRelationSave(payload) {
 }
 
 async function handleAiRelationSupplement() {
+  if (!ensureNoBlockingLlmTask()) {
+    return;
+  }
   if (!state.isStorySaved || !state.savedStoryDraft) {
     setStatus("请先保存当前梗概、角色卡和关系网，再进行 AI 补充。", false, true);
     return;
@@ -1625,47 +1965,54 @@ async function handleAiRelationSupplement() {
     buildRelationSupplementWaitingMessages(),
   );
   setBusyState("正在根据已保存的梗概、角色卡与关系网补充角色关系...");
-  elements.saveRelations.disabled = true;
-  elements.supplementRelations.disabled = true;
+  disableRelationTaskActions();
 
   try {
-    const response = await postJson("/api/relations/supplement", {
+    await createManagedLlmTask("/api/llm-tasks/relations/supplement", {
       story: state.savedStoryDraft,
-    });
-    const addedRelations = Array.isArray(response.added_relations) ? response.added_relations : [];
-    let mergedCount = 0;
+    }, {
+      busyMessage: "正在根据已保存的梗概、角色卡与关系网补充角色关系...",
+      runningSummary: "LLM 正在推断可能的角色互动关系。",
+      waitingMessages: buildRelationSupplementWaitingMessages(),
+      pausedSummary: "角色关系补充已暂停。你可以先回去调整梗概、角色卡或关系网；若继续，将按暂停前的输入重新补充关系。",
+      discardSummary: "本次角色关系补充已放弃，你可以修改后重新发起。",
+      discardStatusMessage: "本次角色关系补充已放弃。你可以继续编辑并重新发起补充。",
+      restoreUi: restoreRelationTaskActions,
+      onCompleted: (response) => {
+        const addedRelations = Array.isArray(response.added_relations) ? response.added_relations : [];
+        let mergedCount = 0;
 
-    addedRelations.forEach((relation) => {
-      if (appendAiRelation(relation)) {
-        mergedCount += 1;
-      }
-    });
+        addedRelations.forEach((relation) => {
+          if (appendAiRelation(relation)) {
+            mergedCount += 1;
+          }
+        });
 
-    appendLlmActivityStep("解析关系 JSON", "正在校验模型返回的关系结构与角色指向。");
-    syncRelationNames();
-    appendLlmActivityStep("合并到关系图", "正在把新关系写回当前关系网并更新可视化。");
-    renderGraph();
-    state.savedStoryDraft = buildStoryPayload();
-    state.isStorySaved = true;
-    updateRelationActionState();
-    saveWorkspaceSnapshot();
-    setStatus(
-      mergedCount
-        ? `AI 已补充 ${mergedCount} 条新关系，并同步到当前关系网。`
-        : "AI 没有补充新的关系，已保留你当前保存的关系网。",
-      false,
-    );
-    finishLlmActivityRun(
-      mergedCount
-        ? `已补充 ${mergedCount} 条角色关系，并同步到关系网。`
-        : "没有检测到适合新增的角色关系，当前关系网已保持不变。",
-    );
+        appendLlmActivityStep("解析关系 JSON", "正在校验模型返回的关系结构与角色指向。");
+        syncRelationNames();
+        appendLlmActivityStep("合并到关系图", "正在把新关系写回当前关系网并更新可视化。");
+        renderGraph();
+        state.savedStoryDraft = buildStoryPayload();
+        state.isStorySaved = true;
+        updateRelationActionState();
+        saveWorkspaceSnapshot();
+        setStatus(
+          mergedCount
+            ? `AI 已补充 ${mergedCount} 条新关系，并同步到当前关系网。`
+            : "AI 没有补充新的关系，已保留你当前保存的关系网。",
+          false,
+        );
+        finishLlmActivityRun(
+          mergedCount
+            ? `已补充 ${mergedCount} 条角色关系，并同步到关系网。`
+            : "没有检测到适合新增的角色关系，当前关系网已保持不变。",
+        );
+      },
+    });
   } catch (error) {
     setStatus(error.message || "AI 补充关系失败。", false, true);
     finishLlmActivityRun(error.message || "AI 补充关系失败。", "error");
-  } finally {
-    elements.saveRelations.disabled = false;
-    updateRelationActionState();
+    restoreRelationTaskActions();
   }
 }
 
@@ -1738,6 +2085,9 @@ function serializeRelation(relation) {
 
 async function handleOutlineSubmit(event) {
   event.preventDefault();
+  if (!ensureNoBlockingLlmTask()) {
+    return;
+  }
   const payload = buildStoryPayload();
   const hasUnnamedCharacters = (payload.characters || []).some((character) => !String(character?.name || "").trim());
   if (!payload.synopsis) {
@@ -1756,62 +2106,73 @@ async function handleOutlineSubmit(event) {
     appendLlmActivityStep("补全角色姓名", "检测到未命名角色，正在先根据关系网与设定为其命名。");
   }
   appendLlmActivityStep("构建大纲提示词", "正在生成四段式结构与逐章规划所需的提示信息。");
-  appendLlmActivityStep("发送给模型", "已将大纲生成请求提交给 LLM。");
+  appendLlmActivityStep("发送给模型", "已将大纲生成请求提交给 Neuro AI。");
   startLlmActivityWaitingLoop(
-    "LLM 正在规划故事结构与章节节奏。",
+    "Neuro AI 正在规划故事结构与章节节奏。",
     buildOutlineWaitingMessages(false),
   );
   setBusyState("正在让 DeepSeek 生成故事大纲...");
-  elements.regenerateOutline.disabled = true;
-  elements.generateStory.disabled = true;
+  disableOutlineTaskActions();
 
   try {
-    const response = await postJson("/api/outline", {
+    await createManagedLlmTask("/api/llm-tasks/outline", {
       story: payload,
       feedback: "",
       previous_outline: null,
+    }, {
+      busyMessage: "正在让 DeepSeek 生成故事大纲...",
+      runningSummary: "LLM 正在规划故事结构与章节节奏。",
+      waitingMessages: buildOutlineWaitingMessages(false),
+      pausedSummary: "大纲生成已暂停。你可以先回去修改设定；若继续，将按暂停前的输入重新生成本次大纲。",
+      discardSummary: "本次大纲生成已放弃，你可以修改后重新发起。",
+      discardStatusMessage: "本次大纲生成已放弃。你可以继续编辑后重新生成大纲。",
+      restoreUi: restoreOutlineTaskActions,
+      onCompleted: (response) => {
+        const autoNamedCharacters = Array.isArray(response?.auto_named_characters) ? response.auto_named_characters : [];
+        const outlinePayload = response?.outline || response;
+        if (response?.story) {
+          applyServerStoryDraft(response.story);
+        }
+        state.outline = normalizeOutline(outlinePayload);
+        state.generatedStory = null;
+        if (autoNamedCharacters.length) {
+          appendLlmActivityStep("回写角色姓名", "已将 AI 生成的角色姓名同步到角色卡与关系网。");
+        }
+        appendLlmActivityStep("解析大纲 JSON", "正在校验章节结构、字数规划与返回字段。");
+        appendLlmActivityStep("整理篇章范围", "正在规范化四段式结构与章节范围。");
+        renderOutline();
+        renderStory();
+        appendLlmActivityStep("渲染页面结果", "正在把新大纲写入右侧结果区。");
+        saveWorkspaceSnapshot();
+        if (autoNamedCharacters.length) {
+          const namedSummary = formatAutoNamedCharacters(autoNamedCharacters);
+          setStatus(
+            `${namedSummary ? `已先为未命名角色补全姓名：${namedSummary}。` : "已先为未命名角色补全姓名。"}大纲已生成，可以继续重生成，或直接按当前大纲生成全文。`,
+            false,
+          );
+          finishLlmActivityRun(
+            namedSummary
+              ? `已补全角色姓名：${namedSummary}，并生成故事大纲。`
+              : "已补全未命名角色姓名，并生成故事大纲。",
+          );
+        } else {
+          setStatus("大纲已生成，可以继续重生成，或直接按当前大纲生成全文。", false);
+          finishLlmActivityRun("大纲已生成完成，可以继续调整或直接生成正文。");
+        }
+      },
     });
-    const autoNamedCharacters = Array.isArray(response?.auto_named_characters) ? response.auto_named_characters : [];
-    const outlinePayload = response?.outline || response;
-    if (response?.story) {
-      applyServerStoryDraft(response.story);
-    }
-    state.outline = normalizeOutline(outlinePayload);
-    state.generatedStory = null;
-    if (autoNamedCharacters.length) {
-      appendLlmActivityStep("回写角色姓名", "已将 AI 生成的角色姓名同步到角色卡与关系网。");
-    }
-    appendLlmActivityStep("解析大纲 JSON", "正在校验章节结构、字数规划与返回字段。");
-    appendLlmActivityStep("整理篇章范围", "正在规范化四段式结构与章节范围。");
-    renderOutline();
-    renderStory();
-    appendLlmActivityStep("渲染页面结果", "正在把新大纲写入右侧结果区。");
-    saveWorkspaceSnapshot();
-    if (autoNamedCharacters.length) {
-      const namedSummary = formatAutoNamedCharacters(autoNamedCharacters);
-      setStatus(
-        `${namedSummary ? `已先为未命名角色补全姓名：${namedSummary}。` : "已先为未命名角色补全姓名。"}大纲已生成，可以继续重生成，或直接按当前大纲生成全文。`,
-        false,
-      );
-      finishLlmActivityRun(
-        namedSummary
-          ? `已补全角色姓名：${namedSummary}，并生成故事大纲。`
-          : "已补全未命名角色姓名，并生成故事大纲。",
-      );
-    } else {
-      setStatus("大纲已生成，可以继续重生成，或直接按当前大纲生成全文。", false);
-      finishLlmActivityRun("大纲已生成完成，可以继续调整或直接生成正文。");
-    }
   } catch (error) {
     setStatus(error.message || "大纲生成失败。", false, true);
     finishLlmActivityRun(error.message || "大纲生成失败。", "error");
-  } finally {
-    updateOutputActionState();
+    restoreOutlineTaskActions();
   }
 }
 
 async function handleOutlineRegenerate() {
   if (!state.outline) {
+    return;
+  }
+  if (!ensureNoBlockingLlmTask()) {
     return;
   }
   const payload = buildStoryPayload();
@@ -1828,61 +2189,72 @@ async function handleOutlineRegenerate() {
     appendLlmActivityStep("补全角色姓名", "检测到未命名角色，正在先根据关系网与设定为其命名。");
   }
   appendLlmActivityStep("重建大纲提示词", "正在把反馈注入新的结构规划请求。");
-  appendLlmActivityStep("发送给模型", "已将重生成请求提交给 LLM。");
+  appendLlmActivityStep("发送给模型", "已将重生成请求提交给 Neuro AI。");
   startLlmActivityWaitingLoop(
-    "LLM 正在按反馈重组故事结构。",
+    "Neuro AI 正在按反馈重组故事结构。",
     buildOutlineWaitingMessages(true),
   );
   setBusyState("正在根据反馈重生成大纲...");
-  elements.regenerateOutline.disabled = true;
-  elements.generateStory.disabled = true;
+  disableOutlineTaskActions();
 
   try {
-    const response = await postJson("/api/outline", {
+    await createManagedLlmTask("/api/llm-tasks/outline", {
       story: payload,
       feedback: elements.outlineFeedback.value.trim(),
       previous_outline: state.outline,
+    }, {
+      busyMessage: "正在根据反馈重生成大纲...",
+      runningSummary: "LLM 正在按反馈重组故事结构。",
+      waitingMessages: buildOutlineWaitingMessages(true),
+      pausedSummary: "大纲重生成已暂停。你可以先回去修改设定或反馈；若继续，将按暂停前的输入重新生成本次大纲。",
+      discardSummary: "本次大纲重生成已放弃，你可以修改后重新发起。",
+      discardStatusMessage: "本次大纲重生成已放弃。你可以继续编辑后重新生成大纲。",
+      restoreUi: restoreOutlineTaskActions,
+      onCompleted: (response) => {
+        const autoNamedCharacters = Array.isArray(response?.auto_named_characters) ? response.auto_named_characters : [];
+        const outlinePayload = response?.outline || response;
+        if (response?.story) {
+          applyServerStoryDraft(response.story);
+        }
+        state.outline = normalizeOutline(outlinePayload);
+        state.generatedStory = null;
+        if (autoNamedCharacters.length) {
+          appendLlmActivityStep("回写角色姓名", "已将 AI 生成的角色姓名同步到角色卡与关系网。");
+        }
+        appendLlmActivityStep("解析重生成结果", "正在校验新的大纲 JSON 与章节规划。");
+        appendLlmActivityStep("清理旧正文结果", "由于大纲已变更，旧正文会被清空以避免混用。");
+        renderStory();
+        appendLlmActivityStep("渲染新大纲", "正在将新的大纲内容写回页面。");
+        renderOutline();
+        saveWorkspaceSnapshot();
+        if (autoNamedCharacters.length) {
+          const namedSummary = formatAutoNamedCharacters(autoNamedCharacters);
+          setStatus(
+            `${namedSummary ? `已先为未命名角色补全姓名：${namedSummary}。` : "已先为未命名角色补全姓名。"}新的大纲已经生成，可以继续调整，或开始逐章创作。`,
+            false,
+          );
+          finishLlmActivityRun(
+            namedSummary
+              ? `已补全角色姓名：${namedSummary}，并完成大纲重生成。`
+              : "已补全未命名角色姓名，并完成大纲重生成。",
+          );
+        } else {
+          setStatus("新的大纲已经生成，可以继续调整，或开始逐章创作。", false);
+          finishLlmActivityRun("新的大纲已经生成，可以继续调整后再生成正文。");
+        }
+      },
     });
-    const autoNamedCharacters = Array.isArray(response?.auto_named_characters) ? response.auto_named_characters : [];
-    const outlinePayload = response?.outline || response;
-    if (response?.story) {
-      applyServerStoryDraft(response.story);
-    }
-    state.outline = normalizeOutline(outlinePayload);
-    state.generatedStory = null;
-    if (autoNamedCharacters.length) {
-      appendLlmActivityStep("回写角色姓名", "已将 AI 生成的角色姓名同步到角色卡与关系网。");
-    }
-    appendLlmActivityStep("解析重生成结果", "正在校验新的大纲 JSON 与章节规划。");
-    appendLlmActivityStep("清理旧正文结果", "由于大纲已变更，旧正文会被清空以避免混用。");
-    renderStory();
-    appendLlmActivityStep("渲染新大纲", "正在将新的大纲内容写回页面。");
-    renderOutline();
-    saveWorkspaceSnapshot();
-    if (autoNamedCharacters.length) {
-      const namedSummary = formatAutoNamedCharacters(autoNamedCharacters);
-      setStatus(
-        `${namedSummary ? `已先为未命名角色补全姓名：${namedSummary}。` : "已先为未命名角色补全姓名。"}新的大纲已经生成，可以继续调整，或开始逐章创作。`,
-        false,
-      );
-      finishLlmActivityRun(
-        namedSummary
-          ? `已补全角色姓名：${namedSummary}，并完成大纲重生成。`
-          : "已补全未命名角色姓名，并完成大纲重生成。",
-      );
-    } else {
-      setStatus("新的大纲已经生成，可以继续调整，或开始逐章创作。", false);
-      finishLlmActivityRun("新的大纲已经生成，可以继续调整后再生成正文。");
-    }
   } catch (error) {
     setStatus(error.message || "重生成失败。", false, true);
     finishLlmActivityRun(error.message || "重生成失败。", "error");
-  } finally {
-    updateOutputActionState();
+    restoreOutlineTaskActions();
   }
 }
 
 async function handleStoryGenerate() {
+  if (!ensureNoBlockingLlmTask()) {
+    return;
+  }
   if (!state.outline) {
     return;
   }
@@ -1899,9 +2271,9 @@ async function handleStoryGenerate() {
   });
   appendLlmActivityStep("锁定当前大纲", "正在读取最新四段式结构和逐章规划。");
   appendLlmActivityStep("整理正文创作输入", "正在汇总故事设定、角色关系与章节目标。");
-  appendLlmActivityStep("发送给模型", "已将整部正文生成请求提交给 LLM。");
+  appendLlmActivityStep("发送给模型", "已将整部正文生成请求提交给 Neuro AI。");
   startLlmActivityWaitingLoop(
-    "LLM 正在逐章创作正文，这一步可能会持续一段时间。",
+    "Neuro AI 正在逐章创作正文，这一步可能会持续一段时间。",
     buildStoryWaitingMessages(state.outline?.chapter_count || state.outline?.chapters?.length || 1),
   );
   setBusyState("正在依次生成章节正文，这一步可能需要一些时间...");
@@ -2012,7 +2384,7 @@ function extractRangeNumbers(rangeText) {
   return [Number(matches[0]), Number(matches[1])];
 }
 
-function handleOutlineExport() {
+async function handleOutlineExport() {
   if (!state.outline) {
     return;
   }
@@ -2020,23 +2392,33 @@ function handleOutlineExport() {
     return;
   }
 
-  downloadTextFile(
-    `${buildExportBaseName()}-大纲.txt`,
-    buildOutlineExportText(),
-  );
-  setStatus("大纲已导出。", false);
+  try {
+    await downloadDocxFile(
+      `${buildExportBaseName()}-大纲_神经元脚本.docx`,
+      state.outline.title || "未命名作品",
+      buildOutlineExportText(),
+    );
+    setStatus("大纲已导出为 Word 文档。", false);
+  } catch (error) {
+    setStatus(error.message || "大纲导出失败。", false, true);
+  }
 }
 
-function handleExportAllStory() {
+async function handleExportAllStory() {
   if (!state.generatedStory) {
     return;
   }
 
-  downloadTextFile(
-    `${buildExportBaseName()}-全部正文.txt`,
-    buildAllStoryExportText(),
-  );
-  setStatus("全部正文已导出。", false);
+  try {
+    await downloadDocxFile(
+      `${buildExportBaseName()}-全部正文_神经元脚本.docx`,
+      state.generatedStory.title || state.outline?.title || "未命名作品",
+      buildAllStoryExportText(),
+    );
+    setStatus("全部正文已导出为 Word 文档。", false);
+  } catch (error) {
+    setStatus(error.message || "正文导出失败。", false, true);
+  }
 }
 
 function handleStoryResultClick(event) {
@@ -2050,21 +2432,26 @@ function handleStoryResultClick(event) {
     return;
   }
 
-  exportSingleChapter(chapterNumber);
+  void exportSingleChapter(chapterNumber);
 }
 
-function exportSingleChapter(chapterNumber) {
+async function exportSingleChapter(chapterNumber) {
   const chapter = findGeneratedChapter(chapterNumber);
   if (!chapter) {
     setStatus("未找到要导出的章节内容。", false, true);
     return;
   }
 
-  downloadTextFile(
-    `${buildExportBaseName()}-第${chapter.chapter_number}章-${sanitizeFilename(chapter.title)}.txt`,
-    buildSingleChapterExportText(chapter),
-  );
-  setStatus(`第 ${chapter.chapter_number} 章已导出。`, false);
+  try {
+    await downloadDocxFile(
+      `${buildExportBaseName()}-第${chapter.chapter_number}章-${sanitizeFilename(chapter.title)}_神经元脚本.docx`,
+      `${state.generatedStory?.title || state.outline?.title || "未命名作品"} 第${chapter.chapter_number}章`,
+      buildSingleChapterExportText(chapter),
+    );
+    setStatus(`第 ${chapter.chapter_number} 章已导出为 Word 文档。`, false);
+  } catch (error) {
+    setStatus(error.message || `第 ${chapter.chapter_number} 章导出失败。`, false, true);
+  }
 }
 
 function findGeneratedChapter(chapterNumber) {
@@ -2153,8 +2540,31 @@ function sanitizeFilename(value) {
     .slice(0, 80) || "未命名作品";
 }
 
-function downloadTextFile(filename, content) {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+async function downloadDocxFile(filename, title, content) {
+  const response = await fetch("/api/export/docx", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      filename,
+      title,
+      content,
+    }),
+  });
+
+  if (!response.ok) {
+    let message = "导出失败。";
+    try {
+      const error = await response.json();
+      message = error.detail || message;
+    } catch (parseError) {
+      message = response.statusText || message;
+    }
+    throw new Error(message);
+  }
+
+  const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -2333,12 +2743,21 @@ function renderStory() {
 function setBusyState(message) {
   elements.statusPill.textContent = "处理中";
   elements.statusPill.classList.add("busy");
+  elements.statusPill.classList.remove("paused");
+  elements.statusBox.textContent = message;
+}
+
+function setPausedState(message) {
+  elements.statusPill.textContent = "已暂停";
+  elements.statusPill.classList.remove("busy");
+  elements.statusPill.classList.add("paused");
   elements.statusBox.textContent = message;
 }
 
 function setStatus(message, keepBusy = false, isError = false) {
   elements.statusPill.textContent = isError ? "出错了" : keepBusy ? "处理中" : "就绪";
   elements.statusPill.classList.toggle("busy", keepBusy);
+  elements.statusPill.classList.remove("paused");
   elements.statusBox.textContent = message;
 }
 
@@ -2349,6 +2768,25 @@ async function postJson(url, payload) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    let message = "请求失败。";
+    try {
+      const error = await response.json();
+      message = error.detail || message;
+    } catch (parseError) {
+      message = response.statusText || message;
+    }
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+async function getJson(url) {
+  const response = await fetch(url, {
+    method: "GET",
   });
 
   if (!response.ok) {

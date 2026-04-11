@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -111,3 +111,19 @@ class StoryGenerationRequest(BaseModel):
 class StoryGenerationResponse(BaseModel):
     title: str
     chapters: List[GeneratedChapter]
+
+
+class DocxExportRequest(BaseModel):
+    filename: str
+    title: str = ""
+    content: str
+
+
+class LlmTaskStatusResponse(BaseModel):
+    task_id: str
+    kind: Literal["outline", "relations_supplement"]
+    status: Literal["running", "paused", "completed", "failed", "discarded"]
+    created_at: str
+    updated_at: str
+    result: Optional[Dict[str, Any]] = None
+    error: str = ""

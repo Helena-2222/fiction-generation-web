@@ -137,6 +137,17 @@ textarea {
   margin: 0;
 }
 
+.llm-activity-actions {
+  margin-top: -4px;
+  justify-content: flex-start;
+}
+
+.llm-activity-actions .primary-button,
+.llm-activity-actions .ghost-button,
+.llm-activity-actions .tiny-button {
+  min-height: 40px;
+}
+
 .llm-activity-log {
   margin: 0;
   padding: 0;
@@ -170,6 +181,11 @@ textarea {
   border-color: rgba(157, 58, 47, 0.2);
 }
 
+.llm-activity-log-item.is-stopped {
+  background: rgba(244, 239, 231, 0.96);
+  border-color: rgba(120, 90, 60, 0.18);
+}
+
 .llm-activity-dot {
   width: 10px;
   height: 10px;
@@ -192,6 +208,11 @@ textarea {
 .llm-activity-log-item.is-error .llm-activity-dot {
   background: #9d3a2f;
   box-shadow: 0 0 0 5px rgba(157, 58, 47, 0.08);
+}
+
+.llm-activity-log-item.is-stopped .llm-activity-dot {
+  background: #8c6238;
+  box-shadow: 0 0 0 5px rgba(140, 98, 56, 0.08);
 }
 
 .llm-activity-item-body {
@@ -380,6 +401,12 @@ small {
 .status-pill.busy {
   color: #fff;
   background: linear-gradient(120deg, var(--accent), #7b2e27);
+}
+
+.status-pill.paused {
+  color: #6f4b2f;
+  background: rgba(140, 98, 56, 0.12);
+  border-color: rgba(140, 98, 56, 0.18);
 }
 
 .story-form,
@@ -734,7 +761,8 @@ button:disabled {
   .section-heading,
   .output-header,
   .action-row,
-  .relation-toolbar {
+  .relation-toolbar,
+  .llm-activity-actions {
     flex-direction: column;
     align-items: flex-start;
   }
