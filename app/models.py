@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -27,6 +27,8 @@ class CharacterRelation(BaseModel):
     label: str = ""
     source_name: str = ""
     target_name: str = ""
+    bidirectional: bool = False
+    relation_source: Literal["user", "ai"] = "user"
 
 
 class StoryDraftRequest(BaseModel):
@@ -73,6 +75,14 @@ class OutlineGenerationRequest(BaseModel):
     story: StoryDraftRequest
     feedback: str = ""
     previous_outline: Optional[GeneratedOutline] = None
+
+
+class RelationSupplementRequest(BaseModel):
+    story: StoryDraftRequest
+
+
+class RelationSupplementResponse(BaseModel):
+    added_relations: List[CharacterRelation] = Field(default_factory=list)
 
 
 class GeneratedChapter(BaseModel):

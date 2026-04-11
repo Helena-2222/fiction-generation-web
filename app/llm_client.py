@@ -45,15 +45,56 @@ class DeepSeekClient:
         return data["choices"][0]["message"]["content"]
 
     async def chat_json(self, messages: List[Dict[str, str]], temperature: float = 0.7) -> Dict[str, Any]:
-        content = await self.chat(messages=messages, temperature=temperature)
-        return self._extract_json(content)
+        last_error: ValueError | None = None
+        last_content = ""
+        current_messages = messages
+        current_temperature = temperature
+
+        for attempt in range(2):
+            last_content = await self.chat(messages=current_messages, temperature=current_temperature)
+            try:
+                return self._extract_json(last_content)
+            except ValueError as exc:
+                last_error = exc
+                if attempt == 0:
+                    current_messages = self._build_json_repair_messages(messages, last_content)
+                    current_temperature = min(temperature, 0.2)
+                    continue
+                break
+
+        if last_error is not None:
+            raise ValueError(
+                f"{last_error}；LLM 原始输出摘录：{self._preview_text(last_content)}"
+            ) from last_error
+        raise ValueError("LLM 未返回可解析的 JSON。")
+
+    @classmethod
+    def _build_json_repair_messages(
+        cls,
+        messages: List[Dict[str, str]],
+        content: str,
+    ) -> List[Dict[str, str]]:
+        return [
+            *messages,
+            {"role": "assistant", "content": content},
+            {
+                "role": "user",
+                "content": (
+                    "请只修复你上一条回复的格式，并重新输出一个严格合法的 JSON 对象。"
+                    "要求：只能输出一个 JSON 对象；必须可被 Python json.loads 直接解析；"
+                    "不要使用 Markdown 代码块、注释、额外说明；不要出现尾随逗号；"
+                    "字符串中的英文双引号必须转义，或改写成不含未转义双引号的表达；"
+                    "尽量保持原有字段和语义不变。"
+                ),
+            },
+        ]
 
     @classmethod
     def _extract_json(cls, content: str) -> Dict[str, Any]:
         stripped = cls._unwrap_code_fence(content)
         candidates: List[str] = []
 
-        for candidate in [stripped, cls._extract_balanced_json_object(stripped)]:
+        for candidate in (stripped, cls._extract_balanced_json_object(stripped)):
             if candidate and candidate not in candidates:
                 candidates.append(candidate)
 
@@ -62,16 +103,20 @@ class DeepSeekClient:
             for variant in cls._build_parse_variants(candidate):
                 try:
                     parsed = json.loads(variant)
-                    if not isinstance(parsed, dict):
-                        raise ValueError("模型返回的 JSON 根节点不是对象。")
-                    return parsed
                 except json.JSONDecodeError as exc:
                     last_error = exc
+                    continue
+
+                if not isinstance(parsed, dict):
+                    raise ValueError("模型返回的 JSON 根节点不是对象。")
+                return parsed
 
         if last_error is None:
             raise ValueError("模型返回的内容不是合法 JSON。")
 
-        raise ValueError(cls._format_json_error(last_error, candidates[-1] if candidates else stripped)) from last_error
+        raise ValueError(
+            cls._format_json_error(last_error, candidates[-1] if candidates else stripped)
+        ) from last_error
 
     @staticmethod
     def _unwrap_code_fence(content: str) -> str:
@@ -118,25 +163,54 @@ class DeepSeekClient:
 
     @classmethod
     def _build_parse_variants(cls, content: str) -> List[str]:
-        variants = [content]
-        sanitized = cls._sanitize_json_like_text(content)
-        if sanitized != content:
-            variants.append(sanitized)
+        variants: List[str] = []
+        for candidate in (content, cls._sanitize_json_like_text(content)):
+            if candidate and candidate not in variants:
+                variants.append(candidate)
         return variants
 
     @classmethod
     def _sanitize_json_like_text(cls, content: str) -> str:
-        sanitized = (
-            content.replace("\ufeff", "")
-            .replace("\u00a0", " ")
-            .replace("“", "\"")
-            .replace("”", "\"")
-            .replace("‘", "'")
-            .replace("’", "'")
-        )
+        sanitized = content.replace("\ufeff", "").replace("\u00a0", " ").replace("\u3000", " ")
+        sanitized = sanitized.replace("\u201c", "\"").replace("\u201d", "\"")
+        sanitized = sanitized.replace("\u2018", "'").replace("\u2019", "'")
+        sanitized = cls._normalize_structural_punctuation(sanitized)
         sanitized = cls._escape_problematic_chars_in_strings(sanitized)
-        sanitized = re.sub(r",(\s*[}\]])", r"\1", sanitized)
+        sanitized = cls._remove_trailing_commas(sanitized)
         return sanitized.strip()
+
+    @staticmethod
+    def _normalize_structural_punctuation(content: str) -> str:
+        replacements = {
+            "｛": "{",
+            "｝": "}",
+            "［": "[",
+            "］": "]",
+            "：": ":",
+            "，": ",",
+        }
+        result: List[str] = []
+        in_string = False
+        escaped = False
+
+        for char in content:
+            if in_string:
+                result.append(char)
+                if escaped:
+                    escaped = False
+                    continue
+                if char == "\\":
+                    escaped = True
+                elif char == "\"":
+                    in_string = False
+                continue
+
+            normalized = replacements.get(char, char)
+            result.append(normalized)
+            if normalized == "\"":
+                in_string = True
+
+        return "".join(result)
 
     @staticmethod
     def _escape_problematic_chars_in_strings(content: str) -> str:
@@ -182,6 +256,9 @@ class DeepSeekClient:
                 if char == "\t":
                     result.append("\\t")
                     continue
+                if ord(char) < 32:
+                    result.append(" ")
+                    continue
 
                 result.append(char)
                 continue
@@ -189,6 +266,51 @@ class DeepSeekClient:
             if char == "\"":
                 in_string = True
             result.append(char)
+
+        return "".join(result)
+
+    @staticmethod
+    def _remove_trailing_commas(content: str) -> str:
+        result: List[str] = []
+        in_string = False
+        escaped = False
+        index = 0
+        length = len(content)
+
+        while index < length:
+            char = content[index]
+            if in_string:
+                result.append(char)
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == "\"":
+                    in_string = False
+                index += 1
+                continue
+
+            if char == "\"":
+                in_string = True
+                result.append(char)
+                index += 1
+                continue
+
+            if char == ",":
+                next_significant = ""
+                for look_ahead in range(index + 1, length):
+                    probe = content[look_ahead]
+                    if probe in {" ", "\n", "\r", "\t"}:
+                        continue
+                    next_significant = probe
+                    break
+
+                if next_significant in {"}", "]"}:
+                    index += 1
+                    continue
+
+            result.append(char)
+            index += 1
 
         return "".join(result)
 
@@ -202,3 +324,10 @@ class DeepSeekClient:
             f"(line {exc.lineno}, column {exc.colno}, char {exc.pos})。"
             f" 附近内容：{snippet}"
         )
+
+    @staticmethod
+    def _preview_text(content: str, limit: int = 220) -> str:
+        preview = re.sub(r"\s+", " ", content).strip()
+        if len(preview) <= limit:
+            return preview
+        return f"{preview[:limit]}..."

@@ -134,6 +134,34 @@ small {
   justify-content: flex-end;
 }
 
+.relation-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.relation-action-group {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.relation-save-state {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px dashed rgba(91, 61, 39, 0.18);
+  background: rgba(255, 251, 245, 0.84);
+}
+
+.relation-save-state.saved {
+  color: #27503f;
+  border-style: solid;
+  border-color: rgba(39, 80, 63, 0.18);
+  background: rgba(233, 245, 239, 0.92);
+}
+
 .section-heading {
   margin-bottom: 18px;
 }
@@ -481,13 +509,23 @@ button:disabled {
 
   .section-heading,
   .output-header,
-  .action-row {
+  .action-row,
+  .relation-toolbar {
     flex-direction: column;
     align-items: flex-start;
   }
 
   #relation-modal .action-row {
     align-items: flex-end;
+  }
+
+  .relation-action-group {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .relation-save-state {
+    width: 100%;
   }
 
   .graph-canvas {

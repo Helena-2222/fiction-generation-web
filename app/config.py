@@ -27,6 +27,7 @@ class Settings:
     deepseek_base_url: str = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     deepseek_model: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
     request_timeout_seconds: float = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "180"))
+    deepseek_json_max_tokens: int = int(os.getenv("DEEPSEEK_JSON_MAX_TOKENS", "8192"))
 
 
 settings = Settings()

@@ -13,6 +13,7 @@ const CHARACTER_FIELDS = [
 ];
 const TEXTAREA_FIELDS = new Set(["personality", "appearance", "values", "core_motivation"]);
 const STAGE_ORDER = ["开端", "发展", "高潮", "结局"];
+const WORKSPACE_STORAGE_KEY = "story-generation-workspace-v1";
 const GRAPH = {
   nodeWidth: 154,
   nodeHeight: 76,
@@ -38,6 +39,8 @@ const state = {
   style: "电影感",
   characters: [],
   relations: [],
+  savedStoryDraft: null,
+  isStorySaved: false,
   outline: null,
   generatedStory: null,
   pendingEdge: null,
@@ -52,16 +55,23 @@ const elements = {
   styleOptions: document.querySelector("#style-options"),
   customGenre: document.querySelector("#custom-genre"),
   customStyle: document.querySelector("#custom-style"),
+  synopsis: document.querySelector("#synopsis"),
   totalWords: document.querySelector("#total-words"),
   chapterWords: document.querySelector("#chapter-words"),
   chapterCount: document.querySelector("#chapter-count"),
+  worldviewTime: document.querySelector("#worldview-time"),
+  worldviewPhysical: document.querySelector("#worldview-physical"),
+  worldviewSocial: document.querySelector("#worldview-social"),
   characterList: document.querySelector("#character-list"),
   graphCanvas: document.querySelector("#graph-canvas"),
   graphSvg: document.querySelector("#graph-svg"),
   graphNodes: document.querySelector("#graph-nodes"),
   relationLabels: document.querySelector("#relation-labels"),
+  relationSaveState: document.querySelector("#relation-save-state"),
   storyForm: document.querySelector("#story-form"),
   addCharacter: document.querySelector("#add-character"),
+  saveRelations: document.querySelector("#save-relations"),
+  supplementRelations: document.querySelector("#supplement-relations"),
   outlineResult: document.querySelector("#outline-result"),
   storyResult: document.querySelector("#story-result"),
   statusBox: document.querySelector("#status-box"),
@@ -270,10 +280,16 @@ function arrangeCharacterGraph() {
 }
 
 function init() {
-  state.characters = [createCharacter(0), createCharacter(1), createCharacter(2)];
-  arrangeCharacterGraph();
+  const restoredWorkspace = loadWorkspaceSnapshot();
+  if (restoredWorkspace) {
+    applyWorkspaceSnapshot(restoredWorkspace);
+  } else {
+    state.characters = [createCharacter(0), createCharacter(1), createCharacter(2)];
+    arrangeCharacterGraph();
+  }
   renderChipGroup(elements.genreOptions, GENRE_OPTIONS, "genre");
   renderChipGroup(elements.styleOptions, STYLE_OPTIONS, "style");
+  bindStoryDraftInputs();
   elements.totalWords.addEventListener("input", updateChapterEstimate);
   elements.chapterWords.addEventListener("input", updateChapterEstimate);
   elements.addCharacter.addEventListener("click", () => {
@@ -281,21 +297,24 @@ function init() {
     arrangeCharacterGraph();
     renderCharacters();
     renderGraph();
+    markStoryDraftDirty();
   });
   elements.storyForm.addEventListener("submit", handleOutlineSubmit);
+  elements.saveRelations.addEventListener("click", handleSaveRelations);
+  elements.supplementRelations.addEventListener("click", handleAiRelationSupplement);
   elements.regenerateOutline.addEventListener("click", handleOutlineRegenerate);
   elements.generateStory.addEventListener("click", handleStoryGenerate);
   elements.relationModalClose.addEventListener("click", closeRelationModal);
   elements.relationSaveButton.addEventListener("click", saveRelationModal);
   elements.relationLabelInput.addEventListener("input", () => {
-    if (elements.relationReverseToggle.checked) {
+    if (elements.relationReverseToggle.checked && !elements.reverseRelationLabelInput.value.trim()) {
       elements.reverseRelationLabelInput.value = elements.relationLabelInput.value.trim();
     }
   });
   elements.relationReverseToggle.addEventListener("change", () => {
-    elements.reverseRelationGroup.classList.add("hidden");
+    elements.reverseRelationGroup.classList.toggle("hidden", !elements.relationReverseToggle.checked);
     elements.reverseRelationLabelInput.value = elements.relationReverseToggle.checked
-      ? elements.relationLabelInput.value.trim()
+      ? elements.reverseRelationLabelInput.value.trim() || elements.relationLabelInput.value.trim()
       : "";
   });
   elements.relationModal.addEventListener("click", (event) => {
@@ -315,7 +334,161 @@ function init() {
   updateChapterEstimate();
   renderCharacters();
   renderGraph();
+  updateRelationActionState();
   setStatus("填写左侧信息后，先生成故事大纲；若不满意，可以补充反馈并重生成。", false);
+}
+
+function loadWorkspaceSnapshot() {
+  try {
+    const raw = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const snapshot = JSON.parse(raw);
+    return snapshot && typeof snapshot === "object" ? snapshot : null;
+  } catch (error) {
+    console.warn("读取本地工作区缓存失败：", error);
+    return null;
+  }
+}
+
+function saveWorkspaceSnapshot() {
+  try {
+    window.localStorage.setItem(
+      WORKSPACE_STORAGE_KEY,
+      JSON.stringify(buildWorkspaceSnapshot()),
+    );
+  } catch (error) {
+    console.warn("保存本地工作区缓存失败：", error);
+  }
+}
+
+function buildWorkspaceSnapshot() {
+  syncRelationNames();
+  return {
+    version: 1,
+    genre: state.genre,
+    style: state.style,
+    characters: state.characters.map((character) => ({
+      ...character,
+      graph_color: character.graph_color || null,
+    })),
+    relations: state.relations.map((relation) => ({
+      ...relation,
+      source_anchor: cloneAnchor(relation.source_anchor),
+      target_anchor: cloneAnchor(relation.target_anchor),
+    })),
+    savedStoryDraft: state.savedStoryDraft,
+    isStorySaved: state.isStorySaved,
+    form: {
+      customGenre: elements.customGenre.value,
+      customStyle: elements.customStyle.value,
+      synopsis: elements.synopsis.value,
+      totalWords: elements.totalWords.value,
+      chapterWords: elements.chapterWords.value,
+      worldviewTime: elements.worldviewTime.value,
+      worldviewPhysical: elements.worldviewPhysical.value,
+      worldviewSocial: elements.worldviewSocial.value,
+      outlineFeedback: elements.outlineFeedback.value,
+    },
+  };
+}
+
+function applyWorkspaceSnapshot(snapshot) {
+  state.genre = typeof snapshot.genre === "string" && snapshot.genre.trim() ? snapshot.genre : state.genre;
+  state.style = typeof snapshot.style === "string" && snapshot.style.trim() ? snapshot.style : state.style;
+
+  const persistedCharacters = Array.isArray(snapshot.characters) ? snapshot.characters : [];
+  state.characters = persistedCharacters.length
+    ? persistedCharacters.map((character, index) => normalizePersistedCharacter(character, index, persistedCharacters.length))
+    : [createCharacter(0), createCharacter(1), createCharacter(2)];
+  arrangeCharacterGraph();
+
+  nextCharacterColorIndex = state.characters.reduce((maxIndex, character, index) => {
+    const candidate = Number.isInteger(character.graph_color_index) ? character.graph_color_index + 1 : index + 1;
+    return Math.max(maxIndex, candidate);
+  }, 0);
+
+  applyPersistedFormValues(snapshot.form || {});
+  state.relations = Array.isArray(snapshot.relations)
+    ? snapshot.relations
+      .map((relation) => normalizeIncomingRelation(relation, relation?.relation_source || "user"))
+      .filter(Boolean)
+    : [];
+  state.savedStoryDraft = snapshot.savedStoryDraft && typeof snapshot.savedStoryDraft === "object"
+    ? snapshot.savedStoryDraft
+    : null;
+  state.isStorySaved = Boolean(snapshot.isStorySaved && state.savedStoryDraft);
+}
+
+function applyPersistedFormValues(form = {}) {
+  elements.customGenre.value = typeof form.customGenre === "string" ? form.customGenre : "";
+  elements.customStyle.value = typeof form.customStyle === "string" ? form.customStyle : "";
+  elements.synopsis.value = typeof form.synopsis === "string" ? form.synopsis : "";
+  elements.totalWords.value = typeof form.totalWords === "string" && form.totalWords ? form.totalWords : elements.totalWords.value;
+  elements.chapterWords.value = typeof form.chapterWords === "string" ? form.chapterWords : elements.chapterWords.value;
+  elements.worldviewTime.value = typeof form.worldviewTime === "string" ? form.worldviewTime : "";
+  elements.worldviewPhysical.value = typeof form.worldviewPhysical === "string" ? form.worldviewPhysical : "";
+  elements.worldviewSocial.value = typeof form.worldviewSocial === "string" ? form.worldviewSocial : "";
+  elements.outlineFeedback.value = typeof form.outlineFeedback === "string" ? form.outlineFeedback : "";
+}
+
+function normalizePersistedCharacter(character, index, total) {
+  const fallbackPosition = getCharacterGraphPosition(index, Math.max(total, 1));
+  const colorIndex = Number.isInteger(character?.graph_color_index) ? character.graph_color_index : index;
+  return {
+    id: character?.id || generateId("character"),
+    name: character?.name || "",
+    gender: character?.gender || "",
+    age: character?.age || "",
+    occupation: character?.occupation || "",
+    nationality: character?.nationality || "",
+    personality: character?.personality || "",
+    appearance: character?.appearance || "",
+    values: character?.values || "",
+    core_motivation: character?.core_motivation || "",
+    graph_x: Number.isFinite(Number(character?.graph_x)) ? Number(character.graph_x) : fallbackPosition.x,
+    graph_y: Number.isFinite(Number(character?.graph_y)) ? Number(character.graph_y) : fallbackPosition.y,
+    graph_color_index: colorIndex,
+    graph_color: character?.graph_color || getCharacterGraphColorByIndex(colorIndex),
+  };
+}
+
+function bindStoryDraftInputs() {
+  [
+    elements.customGenre,
+    elements.customStyle,
+    elements.synopsis,
+    elements.totalWords,
+    elements.chapterWords,
+    elements.worldviewTime,
+    elements.worldviewPhysical,
+    elements.worldviewSocial,
+    elements.outlineFeedback,
+  ].forEach((control) => {
+    control.addEventListener("input", () => {
+      markStoryDraftDirty();
+    });
+  });
+}
+
+function markStoryDraftDirty() {
+  state.isStorySaved = false;
+  state.savedStoryDraft = null;
+  updateRelationActionState();
+  saveWorkspaceSnapshot();
+}
+
+function updateRelationActionState() {
+  if (elements.relationSaveState) {
+    elements.relationSaveState.textContent = state.isStorySaved
+      ? "当前梗概、角色卡和关系网已保存，AI 只会在空白关系位上继续补充。（可以试试增加空白角色卡片~）"
+      : "编辑完故事梗概、角色卡和关系网后，请先点击“保存关系”，再使用 AI 补充关系。";
+    elements.relationSaveState.classList.toggle("saved", state.isStorySaved);
+  }
+  if (elements.supplementRelations) {
+    elements.supplementRelations.disabled = !state.isStorySaved;
+  }
 }
 
 function renderChipGroup(container, options, key) {
@@ -328,6 +501,7 @@ function renderChipGroup(container, options, key) {
     button.addEventListener("click", () => {
       state[key] = option;
       renderChipGroup(container, options, key);
+      markStoryDraftDirty();
     });
     container.appendChild(button);
   });
@@ -391,6 +565,7 @@ function renderCharacters() {
         }
         syncRelationNames();
         renderGraph();
+        markStoryDraftDirty();
       });
 
       wrapper.append(labelNode, control);
@@ -420,6 +595,7 @@ function removeCharacter(characterId) {
   syncRelationNames();
   renderCharacters();
   renderGraph();
+  markStoryDraftDirty();
 }
 
 function setupGraphInteractions() {
@@ -882,6 +1058,7 @@ function createRelationRecord(
   sourceAnchor = null,
   targetAnchor = null,
   bidirectional = false,
+  relationSource = "user",
 ) {
   return {
     id: generateId("relation"),
@@ -893,6 +1070,7 @@ function createRelationRecord(
     source_anchor: cloneAnchor(sourceAnchor),
     target_anchor: cloneAnchor(targetAnchor),
     bidirectional: Boolean(bidirectional),
+    relation_source: relationSource,
   };
 }
 
@@ -901,7 +1079,7 @@ function openRelationModal(sourceId, targetId, draftAnchors = null) {
   const targetName = getCharacterName(targetId);
   const forward = state.relations.find((relation) => relation.source_id === sourceId && relation.target_id === targetId) || null;
   const reverse = state.relations.find((relation) => relation.source_id === targetId && relation.target_id === sourceId) || null;
-  const hadBidirectionalReverse = isBidirectionalRelationPair(forward, reverse);
+  const hadReverseRelation = Boolean(reverse);
 
   state.relationEditor = {
     sourceId,
@@ -911,13 +1089,13 @@ function openRelationModal(sourceId, targetId, draftAnchors = null) {
     forwardTargetAnchor: cloneAnchor(draftAnchors?.forwardTargetAnchor || forward?.target_anchor),
     reverseSourceAnchor: cloneAnchor(draftAnchors?.reverseSourceAnchor || reverse?.source_anchor),
     reverseTargetAnchor: cloneAnchor(draftAnchors?.reverseTargetAnchor || reverse?.target_anchor),
-    hadBidirectionalReverse,
+    hadReverseRelation,
   };
   elements.relationDirection.textContent = `${sourceName} → ${targetName}`;
   elements.relationLabelInput.value = forward?.label || "";
-  elements.relationReverseToggle.checked = hadBidirectionalReverse;
-  elements.reverseRelationGroup.classList.add("hidden");
-  elements.reverseRelationLabelInput.value = hadBidirectionalReverse ? forward?.label || "" : "";
+  elements.relationReverseToggle.checked = hadReverseRelation;
+  elements.reverseRelationGroup.classList.toggle("hidden", !hadReverseRelation);
+  elements.reverseRelationLabelInput.value = reverse?.label || "";
   elements.relationModal.classList.remove("hidden");
   elements.relationModal.setAttribute("aria-hidden", "false");
   elements.relationLabelInput.focus();
@@ -939,7 +1117,7 @@ function saveRelationModal() {
   }
   const forwardLabel = elements.relationLabelInput.value.trim();
   const wantsReverse = elements.relationReverseToggle.checked;
-  const reverseLabel = wantsReverse ? forwardLabel : "";
+  const reverseLabel = wantsReverse ? elements.reverseRelationLabelInput.value.trim() || forwardLabel : "";
 
   if (!forwardLabel) {
     setStatus("请先填写正向关系。", false, true);
@@ -963,6 +1141,7 @@ function saveRelationModal() {
       state.relationEditor.forwardSourceAnchor,
       state.relationEditor.forwardTargetAnchor,
       wantsReverse,
+      "user",
     ),
   );
 
@@ -981,9 +1160,10 @@ function saveRelationModal() {
         reverseSourceAnchor,
         reverseTargetAnchor,
         true,
+        "user",
       ),
     );
-  } else if (state.relationEditor.hadBidirectionalReverse) {
+  } else if (state.relationEditor.hadReverseRelation) {
     state.relations = state.relations.filter(
       (relation) => !isSameRelationDirection(relation, target.id, source.id),
     );
@@ -992,7 +1172,8 @@ function saveRelationModal() {
   syncRelationNames();
   renderGraph();
   closeRelationModal();
-  setStatus("角色关系已保存。", false);
+  markStoryDraftDirty();
+  setStatus("单条关系已更新，请点击“保存关系”同步整张关系网。", false);
 }
 
 function upsertDirectionalRelation(sourceId, targetId, relationRecord) {
@@ -1041,7 +1222,8 @@ function deleteDirectionalRelation(sourceId, targetId, silent = false) {
   );
   renderGraph();
   if (!silent && before !== state.relations.length) {
-    setStatus("角色关系已删除。", false);
+    markStoryDraftDirty();
+    setStatus("角色关系已删除，请重新保存关系网。", false);
   }
 }
 
@@ -1049,7 +1231,8 @@ function deleteRelationPair(pairKey, silent = false) {
   state.relations = state.relations.filter((relation) => makePairKey(relation.source_id, relation.target_id) !== pairKey);
   renderGraph();
   if (!silent) {
-    setStatus("角色关系已删除。", false);
+    markStoryDraftDirty();
+    setStatus("角色关系已删除，请重新保存关系网。", false);
   }
 }
 
@@ -1082,7 +1265,146 @@ function syncRelationNames() {
     ...relation,
     source_name: getCharacterById(relation.source_id)?.name || "",
     target_name: getCharacterById(relation.target_id)?.name || "",
+    relation_source: relation.relation_source || "user",
   }));
+}
+
+function handleSaveRelations() {
+  const payload = buildStoryPayload();
+  const validationMessage = validateStoryContextForRelationSave(payload);
+  if (validationMessage) {
+    setStatus(validationMessage, false, true);
+    return;
+  }
+
+  state.savedStoryDraft = payload;
+  state.isStorySaved = true;
+  updateRelationActionState();
+  saveWorkspaceSnapshot();
+  setStatus("当前梗概、角色卡和关系网已保存，可以使用 AI 补充关系。", false);
+}
+
+function validateStoryContextForRelationSave(payload) {
+  if (!payload.synopsis) {
+    return "请先填写故事梗概后再保存关系。";
+  }
+  if (!(payload.total_words > 0)) {
+    return "请先填写有效的小说整体篇幅后再保存关系。";
+  }
+  if ((payload.characters || []).length < 2) {
+    return "至少需要两名角色后才能保存关系网。";
+  }
+  return "";
+}
+
+async function handleAiRelationSupplement() {
+  if (!state.isStorySaved || !state.savedStoryDraft) {
+    setStatus("请先保存当前梗概、角色卡和关系网，再进行 AI 补充。", false, true);
+    return;
+  }
+
+  setBusyState("正在根据已保存的梗概、角色卡与关系网补充角色关系...");
+  elements.saveRelations.disabled = true;
+  elements.supplementRelations.disabled = true;
+
+  try {
+    const response = await postJson("/api/relations/supplement", {
+      story: state.savedStoryDraft,
+    });
+    const addedRelations = Array.isArray(response.added_relations) ? response.added_relations : [];
+    let mergedCount = 0;
+
+    addedRelations.forEach((relation) => {
+      if (appendAiRelation(relation)) {
+        mergedCount += 1;
+      }
+    });
+
+    syncRelationNames();
+    renderGraph();
+    state.savedStoryDraft = buildStoryPayload();
+    state.isStorySaved = true;
+    updateRelationActionState();
+    saveWorkspaceSnapshot();
+    setStatus(
+      mergedCount
+        ? `AI 已补充 ${mergedCount} 条新关系，并同步到当前关系网。`
+        : "AI 没有补充新的关系，已保留你当前保存的关系网。",
+      false,
+    );
+  } catch (error) {
+    setStatus(error.message || "AI 补充关系失败。", false, true);
+  } finally {
+    elements.saveRelations.disabled = false;
+    updateRelationActionState();
+  }
+}
+
+function appendAiRelation(relation) {
+  const normalized = normalizeIncomingRelation(relation, "ai");
+  if (!normalized) {
+    return false;
+  }
+  if (state.relations.some((item) => isSameRelationDirection(item, normalized.source_id, normalized.target_id))) {
+    return false;
+  }
+  state.relations.push(normalized);
+  return true;
+}
+
+function normalizeIncomingRelation(relation, fallbackSource = "user") {
+  const source = getCharacterById(relation?.source_id);
+  const target = getCharacterById(relation?.target_id);
+  const label = normalizeRelationLabel(relation?.label);
+  if (!source || !target || !label || source.id === target.id) {
+    return null;
+  }
+  return {
+    id: relation.id || generateId("relation"),
+    source_id: source.id,
+    target_id: target.id,
+    label,
+    source_name: source.name || relation.source_name || "",
+    target_name: target.name || relation.target_name || "",
+    source_anchor: cloneAnchor(relation.source_anchor),
+    target_anchor: cloneAnchor(relation.target_anchor),
+    bidirectional: Boolean(relation.bidirectional),
+    relation_source: relation.relation_source || fallbackSource,
+  };
+}
+
+function serializeCharacter(character) {
+  return {
+    id: character.id,
+    name: character.name || "",
+    gender: character.gender || "",
+    age: character.age || "",
+    occupation: character.occupation || "",
+    nationality: character.nationality || "",
+    personality: character.personality || "",
+    appearance: character.appearance || "",
+    values: character.values || "",
+    core_motivation: character.core_motivation || "",
+    graph_x: Number(character.graph_x) || 120,
+    graph_y: Number(character.graph_y) || 120,
+  };
+}
+
+function serializeRelation(relation) {
+  const label = normalizeRelationLabel(relation.label);
+  if (!relation.source_id || !relation.target_id || !label || relation.source_id === relation.target_id) {
+    return null;
+  }
+  return {
+    id: relation.id || generateId("relation"),
+    source_id: relation.source_id,
+    target_id: relation.target_id,
+    label,
+    source_name: getCharacterById(relation.source_id)?.name || relation.source_name || "",
+    target_name: getCharacterById(relation.target_id)?.name || relation.target_name || "",
+    bidirectional: Boolean(relation.bidirectional),
+    relation_source: relation.relation_source || "user",
+  };
 }
 
 async function handleOutlineSubmit(event) {
@@ -1170,24 +1492,22 @@ async function handleStoryGenerate() {
 
 function buildStoryPayload() {
   syncRelationNames();
+  const characters = state.characters.map(serializeCharacter);
+  const relations = state.relations
+    .map(serializeRelation)
+    .filter(Boolean);
+
   return {
     genre: elements.customGenre.value.trim() || state.genre,
-    synopsis: document.querySelector("#synopsis").value.trim(),
+    synopsis: elements.synopsis.value.trim(),
     style: elements.customStyle.value.trim() || state.style,
-    worldview_time: document.querySelector("#worldview-time").value.trim(),
-    worldview_physical: document.querySelector("#worldview-physical").value.trim(),
-    worldview_social: document.querySelector("#worldview-social").value.trim(),
+    worldview_time: elements.worldviewTime.value.trim(),
+    worldview_physical: elements.worldviewPhysical.value.trim(),
+    worldview_social: elements.worldviewSocial.value.trim(),
     total_words: Number(elements.totalWords.value) || 0,
     chapter_words: Number(elements.chapterWords.value) || null,
-    characters: state.characters,
-    relations: state.relations.map((relation) => ({
-      id: relation.id,
-      source_id: relation.source_id,
-      target_id: relation.target_id,
-      label: relation.label,
-      source_name: relation.source_name || "",
-      target_name: relation.target_name || "",
-    })),
+    characters,
+    relations,
   };
 }
 

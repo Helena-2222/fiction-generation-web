@@ -7,8 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.llm import DeepSeekClient
-from app.models import OutlineGenerationRequest, StoryGenerationRequest
+from app.llm_runtime import DeepSeekClient
+from app.models import (
+    OutlineGenerationRequest,
+    RelationSupplementRequest,
+    StoryGenerationRequest,
+)
 from app.services.story_service import StoryService
 
 
@@ -43,6 +47,15 @@ async def generate_outline(request: OutlineGenerationRequest) -> dict:
     try:
         outline = await story_service.generate_outline(request)
         return outline.model_dump()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/relations/supplement")
+async def supplement_relations(request: RelationSupplementRequest) -> dict:
+    try:
+        response = await story_service.supplement_relations(request.story)
+        return response.model_dump()
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

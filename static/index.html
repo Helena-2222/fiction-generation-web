@@ -116,6 +116,15 @@
                 <div id="relation-labels" class="relation-labels"></div>
               </div>
             </div>
+            <div class="relation-toolbar">
+              <p id="relation-save-state" class="micro-tip relation-save-state">
+                编辑完故事梗概、角色卡和关系网后，请先点击“保存关系”，再使用 AI 补充关系。
+              </p>
+              <div class="action-row relation-action-group">
+                <button type="button" id="save-relations" class="ghost-button">保存关系</button>
+                <button type="button" id="supplement-relations" class="primary-button" disabled>AI补充关系</button>
+              </div>
+            </div>
 
             <div class="action-row">
               <button type="submit" id="generate-outline" class="primary-button">确认并生成大纲</button>
@@ -185,7 +194,7 @@
           <input id="reverse-relation-label-input" type="text" list="relation-presets" placeholder="例如：朋友、同事、子女、下属" />
         </div>
         <div class="action-row">
-          <button type="button" id="relation-save-button" class="primary-button">保存关系</button>
+          <button type="button" id="relation-save-button" class="primary-button">保存该条关系</button>
         </div>
       </div>
     </div>

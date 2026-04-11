@@ -1,0 +1,256 @@
+{
+  "trigger": "ai_supplement_relations",
+  "generated_at": "2026-04-11T18:20:49",
+  "counts": {
+    "all_relations": 12,
+    "user_relations": 12,
+    "ai_relations": 0,
+    "latest_ai_added_relations": 0
+  },
+  "user_relations": [
+    {
+      "id": "relation-e7f3eafd-bd9c-4cb3-80f7-8d108c6b2c1d",
+      "source_id": "character-21ec24b5-26f5-4710-93ab-63a4ab47aa8a",
+      "target_id": "character-fb487cb1-e481-4c7f-8b4c-fde799317c8e",
+      "label": "师生",
+      "source_name": "莫响",
+      "target_name": "秦晓岚",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-97fca8e1-6a2e-4f7f-87e5-26352e106486",
+      "source_id": "character-fb487cb1-e481-4c7f-8b4c-fde799317c8e",
+      "target_id": "character-21ec24b5-26f5-4710-93ab-63a4ab47aa8a",
+      "label": "爱慕者",
+      "source_name": "秦晓岚",
+      "target_name": "莫响",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-a498c5d7-8a89-493b-ac88-047ae3f976f2",
+      "source_id": "character-21ec24b5-26f5-4710-93ab-63a4ab47aa8a",
+      "target_id": "character-af8fb1d0-d06c-4e46-aedc-38034b285a08",
+      "label": "爱慕者",
+      "source_name": "莫响",
+      "target_name": "林晚",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-5070e7d3-75a2-4895-8445-ec0b74ff9f6e",
+      "source_id": "character-af8fb1d0-d06c-4e46-aedc-38034b285a08",
+      "target_id": "character-21ec24b5-26f5-4710-93ab-63a4ab47aa8a",
+      "label": "同事",
+      "source_name": "林晚",
+      "target_name": "莫响",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-7e0debc4-90da-4fb2-89b1-886a4024119d",
+      "source_id": "character-fb487cb1-e481-4c7f-8b4c-fde799317c8e",
+      "target_id": "character-af8fb1d0-d06c-4e46-aedc-38034b285a08",
+      "label": "师生",
+      "source_name": "秦晓岚",
+      "target_name": "林晚",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-2917ce9d-a494-4364-94f5-e69f8a1acea1",
+      "source_id": "character-af8fb1d0-d06c-4e46-aedc-38034b285a08",
+      "target_id": "character-fb487cb1-e481-4c7f-8b4c-fde799317c8e",
+      "label": "师生",
+      "source_name": "林晚",
+      "target_name": "秦晓岚",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-dc63f852-8d07-4e9f-988f-34212dfcab60",
+      "source_id": "character-9b431a69-6d43-481c-a54d-5e7383bf5107",
+      "target_id": "character-fb487cb1-e481-4c7f-8b4c-fde799317c8e",
+      "label": "同学",
+      "source_name": "角色4",
+      "target_name": "秦晓岚",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-47093d3e-992c-43bf-97c2-fb7d5add2e36",
+      "source_id": "character-fb487cb1-e481-4c7f-8b4c-fde799317c8e",
+      "target_id": "character-9b431a69-6d43-481c-a54d-5e7383bf5107",
+      "label": "t",
+      "source_name": "秦晓岚",
+      "target_name": "角色4",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-4b99ee6c-5800-47ca-b2ae-6063efd1bc78",
+      "source_id": "character-9b431a69-6d43-481c-a54d-5e7383bf5107",
+      "target_id": "character-21ec24b5-26f5-4710-93ab-63a4ab47aa8a",
+      "label": "师生",
+      "source_name": "角色4",
+      "target_name": "莫响",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-fab8943c-e1d8-4cfc-b648-3b86b6631bba",
+      "source_id": "character-21ec24b5-26f5-4710-93ab-63a4ab47aa8a",
+      "target_id": "character-9b431a69-6d43-481c-a54d-5e7383bf5107",
+      "label": "师生",
+      "source_name": "莫响",
+      "target_name": "角色4",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-18909048-9ee6-4656-9357-1185d56dc988",
+      "source_id": "character-9b431a69-6d43-481c-a54d-5e7383bf5107",
+      "target_id": "character-af8fb1d0-d06c-4e46-aedc-38034b285a08",
+      "label": "师生",
+      "source_name": "角色4",
+      "target_name": "林晚",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-a0372900-0d70-43fb-9517-6f32f8b17360",
+      "source_id": "character-af8fb1d0-d06c-4e46-aedc-38034b285a08",
+      "target_id": "character-9b431a69-6d43-481c-a54d-5e7383bf5107",
+      "label": "师生",
+      "source_name": "林晚",
+      "target_name": "角色4",
+      "bidirectional": true,
+      "relation_source": "user"
+    }
+  ],
+  "ai_relations": [],
+  "latest_ai_added_relations": [],
+  "all_relations": [
+    {
+      "id": "relation-e7f3eafd-bd9c-4cb3-80f7-8d108c6b2c1d",
+      "source_id": "character-21ec24b5-26f5-4710-93ab-63a4ab47aa8a",
+      "target_id": "character-fb487cb1-e481-4c7f-8b4c-fde799317c8e",
+      "label": "师生",
+      "source_name": "莫响",
+      "target_name": "秦晓岚",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-97fca8e1-6a2e-4f7f-87e5-26352e106486",
+      "source_id": "character-fb487cb1-e481-4c7f-8b4c-fde799317c8e",
+      "target_id": "character-21ec24b5-26f5-4710-93ab-63a4ab47aa8a",
+      "label": "爱慕者",
+      "source_name": "秦晓岚",
+      "target_name": "莫响",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-a498c5d7-8a89-493b-ac88-047ae3f976f2",
+      "source_id": "character-21ec24b5-26f5-4710-93ab-63a4ab47aa8a",
+      "target_id": "character-af8fb1d0-d06c-4e46-aedc-38034b285a08",
+      "label": "爱慕者",
+      "source_name": "莫响",
+      "target_name": "林晚",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-5070e7d3-75a2-4895-8445-ec0b74ff9f6e",
+      "source_id": "character-af8fb1d0-d06c-4e46-aedc-38034b285a08",
+      "target_id": "character-21ec24b5-26f5-4710-93ab-63a4ab47aa8a",
+      "label": "同事",
+      "source_name": "林晚",
+      "target_name": "莫响",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-7e0debc4-90da-4fb2-89b1-886a4024119d",
+      "source_id": "character-fb487cb1-e481-4c7f-8b4c-fde799317c8e",
+      "target_id": "character-af8fb1d0-d06c-4e46-aedc-38034b285a08",
+      "label": "师生",
+      "source_name": "秦晓岚",
+      "target_name": "林晚",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-2917ce9d-a494-4364-94f5-e69f8a1acea1",
+      "source_id": "character-af8fb1d0-d06c-4e46-aedc-38034b285a08",
+      "target_id": "character-fb487cb1-e481-4c7f-8b4c-fde799317c8e",
+      "label": "师生",
+      "source_name": "林晚",
+      "target_name": "秦晓岚",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-dc63f852-8d07-4e9f-988f-34212dfcab60",
+      "source_id": "character-9b431a69-6d43-481c-a54d-5e7383bf5107",
+      "target_id": "character-fb487cb1-e481-4c7f-8b4c-fde799317c8e",
+      "label": "同学",
+      "source_name": "角色4",
+      "target_name": "秦晓岚",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-47093d3e-992c-43bf-97c2-fb7d5add2e36",
+      "source_id": "character-fb487cb1-e481-4c7f-8b4c-fde799317c8e",
+      "target_id": "character-9b431a69-6d43-481c-a54d-5e7383bf5107",
+      "label": "t",
+      "source_name": "秦晓岚",
+      "target_name": "角色4",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-4b99ee6c-5800-47ca-b2ae-6063efd1bc78",
+      "source_id": "character-9b431a69-6d43-481c-a54d-5e7383bf5107",
+      "target_id": "character-21ec24b5-26f5-4710-93ab-63a4ab47aa8a",
+      "label": "师生",
+      "source_name": "角色4",
+      "target_name": "莫响",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-fab8943c-e1d8-4cfc-b648-3b86b6631bba",
+      "source_id": "character-21ec24b5-26f5-4710-93ab-63a4ab47aa8a",
+      "target_id": "character-9b431a69-6d43-481c-a54d-5e7383bf5107",
+      "label": "师生",
+      "source_name": "莫响",
+      "target_name": "角色4",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-18909048-9ee6-4656-9357-1185d56dc988",
+      "source_id": "character-9b431a69-6d43-481c-a54d-5e7383bf5107",
+      "target_id": "character-af8fb1d0-d06c-4e46-aedc-38034b285a08",
+      "label": "师生",
+      "source_name": "角色4",
+      "target_name": "林晚",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-a0372900-0d70-43fb-9517-6f32f8b17360",
+      "source_id": "character-af8fb1d0-d06c-4e46-aedc-38034b285a08",
+      "target_id": "character-9b431a69-6d43-481c-a54d-5e7383bf5107",
+      "label": "师生",
+      "source_name": "林晚",
+      "target_name": "角色4",
+      "bidirectional": true,
+      "relation_source": "user"
+    }
+  ]
+}
