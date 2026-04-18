@@ -20,6 +20,8 @@ from app.models import (
     OutlineGenerationResponse,
     RelationSupplementResponse,
     StoryDraftRequest,
+    StorySelectionRewriteRequest,
+    StorySelectionRewriteResponse,
     StoryGenerationRequest,
     StoryGenerationResponse,
 )
@@ -226,6 +228,56 @@ class StoryService:
             )
 
         return StoryGenerationResponse(title=outline.title, chapters=generated_chapters)
+
+    async def rewrite_story_selection(
+        self,
+        request: StorySelectionRewriteRequest,
+    ) -> StorySelectionRewriteResponse:
+        story = self._normalize_story(request.story)
+        outline = request.outline
+        outline.act_structure = self._normalize_act_structure(outline.act_structure, outline.chapter_count)
+
+        chapter_context = {
+            "chapter_number": request.chapter_number,
+            "chapter_title": request.chapter_title,
+            "chapter_summary": request.chapter_summary,
+        }
+        user_prompt = "\n\n".join(
+            [
+                "你需要局部重写一段小说正文，只返回重写后的文本本身，不要解释、不要加引号、不要加标题。",
+                f"故事风格指导：\n{self._build_story_style_guidance(story)}",
+                f"故事设定 JSON：\n{self._build_compact_story_prompt_json(story, self._chapter_targets(story.total_words, story.chapter_words or 2000), include_relation_ids=False)}",
+                f"大纲 JSON：\n{json.dumps(outline.model_dump(), ensure_ascii=False, indent=2)}",
+                f"当前章节信息：\n{json.dumps(chapter_context, ensure_ascii=False, indent=2)}",
+                f"选中的原文：\n{request.selected_text}",
+                f"选中片段前文（可为空）：\n{request.before_context or '无'}",
+                f"选中片段后文（可为空）：\n{request.after_context or '无'}",
+                f"额外要求：\n{request.instruction or '保持原章节语气、人物状态和叙事事实，只重写选中片段。'}",
+                "请确保：",
+                "1. 不要改动未选中的剧情事实。",
+                "2. 语气、视角、时态、人物称谓与上下文一致。",
+                "3. 输出长度与原文大致相当，可略微润色但不要无限扩写。",
+            ]
+        )
+
+        rewritten_text = await self.client.chat(
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You rewrite a selected span of a Chinese novel chapter. Return only the rewritten "
+                        "replacement text, with no markdown, no quotation marks, no preface, and no explanation."
+                    ),
+                },
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.75,
+        )
+        cleaned = rewritten_text.strip()
+        if not cleaned:
+            raise ValueError("模型没有返回可用的局部重写内容。")
+
+        return StorySelectionRewriteResponse(rewritten_text=cleaned)
 
     def _normalize_story(self, story: StoryDraftRequest) -> StoryDraftRequest:
         chapter_words = story.chapter_words or min(2000, story.total_words)

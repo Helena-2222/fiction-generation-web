@@ -1,19 +1,23 @@
 ﻿const GENRE_OPTIONS = ["爱情", "科幻", "悬疑", "奇幻", "历史", "现实主义", "成长"];
 const STYLE_OPTIONS = ["幽默", "张爱玲式", "雨果式", "电影感", "冷峻克制", "轻盈浪漫"];
-const CHARACTER_FIELDS = [
-  ["name", "姓名"],
-  ["gender", "性别"],
-  ["age", "年龄"],
-  ["occupation", "职业"],
-  ["nationality", "种族/国籍"],
-  ["personality", "性格"],
-  ["appearance", "外貌特征"],
-  ["values", "价值观"],
-  ["core_motivation", "核心目标/行为动机/欲望"],
+const CHARACTER_DOSSIER_FIELDS = [
+  { key: "name", label: "姓名", type: "text", span: "half" },
+  { key: "gender", label: "性别", type: "text", span: "half" },
+  { key: "age", label: "年龄", type: "text", span: "half" },
+  { key: "nationality", label: "国籍/种族", type: "text", span: "half" },
+  { key: "occupation", label: "身份/职业", type: "text", span: "full" },
+  { key: "personality", label: "性格", type: "textarea", span: "full" },
+  { key: "core_motivation", label: "核心动机", type: "textarea", span: "full" },
+  { key: "inner_conflict", label: "内在冲突", type: "textarea", span: "full" },
+  { key: "strengths", label: "强项", type: "textarea", span: "full" },
+  { key: "weaknesses", label: "弱点", type: "textarea", span: "full" },
+  { key: "character_arc", label: "人物弧光", hint: "人物成长变化", type: "textarea", span: "full" },
+  { key: "appearance", label: "外在特征", type: "textarea", span: "full" },
+  { key: "speaking_style", label: "说话风格", type: "textarea", span: "full" },
 ];
-const TEXTAREA_FIELDS = new Set(["personality", "appearance", "values", "core_motivation"]);
 const STAGE_ORDER = ["开端", "发展", "高潮", "结局"];
-const WORKSPACE_STORAGE_KEY = "story-generation-workspace-v1";
+const WORKSPACE_STORAGE_KEY = "story-generation-workspace-v3";
+const STORY_GUIDE_STORAGE_KEY = "story-generation-neuro-guides-v1";
 const LLM_TASK_POLL_INTERVAL_MS = 1400;
 const GRAPH = {
   nodeWidth: 154,
@@ -26,24 +30,29 @@ const GRAPH = {
   minGapX: 24,
   minHeight: 440,
   nodeColors: [
-    { fill: "#f7d9c9", stroke: "#9d3a2f", text: "#4d241f", shadow: "rgba(157, 58, 47, 0.2)" },
-    { fill: "#f4e4c8", stroke: "#8c6238", text: "#4f3520", shadow: "rgba(140, 98, 56, 0.18)" },
-    { fill: "#e8ead8", stroke: "#68713d", text: "#323a1f", shadow: "rgba(104, 113, 61, 0.18)" },
-    { fill: "#e1ede8", stroke: "#527766", text: "#213d34", shadow: "rgba(82, 119, 102, 0.18)" },
-    { fill: "#f2d7d2", stroke: "#ad5c54", text: "#5a2824", shadow: "rgba(173, 92, 84, 0.18)" },
-    { fill: "#eadbc7", stroke: "#785a3c", text: "#3e2c20", shadow: "rgba(120, 90, 60, 0.18)" },
+    { fill: "#ffe27d", stroke: "#f1c94c", text: "#614b12", shadow: "rgba(241, 201, 76, 0.24)" },
+    { fill: "#ff9aa1", stroke: "#ff7c85", text: "#662c33", shadow: "rgba(255, 124, 133, 0.24)" },
+    { fill: "#89c8f6", stroke: "#6cb6ef", text: "#244863", shadow: "rgba(108, 182, 239, 0.24)" },
+    { fill: "#c8f3b0", stroke: "#aee487", text: "#365024", shadow: "rgba(174, 228, 135, 0.24)" },
+    { fill: "#f6d7a8", stroke: "#e4bb79", text: "#6b4b1c", shadow: "rgba(228, 187, 121, 0.24)" },
+    { fill: "#d7c5ff", stroke: "#b9a1ef", text: "#49366d", shadow: "rgba(185, 161, 239, 0.24)" },
   ],
 };
 
 const state = {
   genre: "科幻",
   style: "电影感",
+  currentStage: "basic",
+  activeCharacterId: null,
+  outlineHistory: [],
+  activeChapterNumber: null,
   characters: [],
   relations: [],
   savedStoryDraft: null,
   isStorySaved: false,
   outline: null,
   generatedStory: null,
+  storySelection: null,
   pendingEdge: null,
   relationEditor: null,
   relationDeleteRequest: null,
@@ -66,6 +75,10 @@ const llmTaskController = {
 };
 
 const elements = {
+  stageSections: Array.from(document.querySelectorAll("[data-stage-screen]")),
+  stageNavButtons: Array.from(document.querySelectorAll(".stage-tab")),
+  railStageButtons: Array.from(document.querySelectorAll(".rail-node[data-stage-target]")),
+  goToCharacters: document.querySelector("#go-to-characters"),
   genreOptions: document.querySelector("#genre-options"),
   styleOptions: document.querySelector("#style-options"),
   customGenre: document.querySelector("#custom-genre"),
@@ -125,6 +138,18 @@ const elements = {
   llmTaskPauseMessage: document.querySelector("#llm-task-pause-message"),
   llmTaskPauseResume: document.querySelector("#llm-task-pause-resume"),
   llmTaskPauseDiscard: document.querySelector("#llm-task-pause-discard"),
+  outlineHistory: document.querySelector("#outline-history"),
+  outlineHistoryModal: document.querySelector("#outline-history-modal"),
+  outlineHistoryClose: document.querySelector("#outline-history-close"),
+  outlineHistoryList: document.querySelector("#outline-history-list"),
+  storySelectionToolbar: document.querySelector("#story-selection-toolbar"),
+  storySelectionEdit: document.querySelector("#story-selection-edit"),
+  storySelectionRegenerate: document.querySelector("#story-selection-regenerate"),
+  storyEditModal: document.querySelector("#story-edit-modal"),
+  storyEditClose: document.querySelector("#story-edit-close"),
+  storyEditCancel: document.querySelector("#story-edit-cancel"),
+  storyEditSave: document.querySelector("#story-edit-save"),
+  storyEditTextarea: document.querySelector("#story-edit-textarea"),
 };
 
 function generateId(prefix) {
@@ -148,8 +173,13 @@ function createCharacter(index) {
     occupation: "",
     nationality: "",
     personality: "",
+    inner_conflict: "",
+    strengths: "",
+    weaknesses: "",
+    character_arc: "",
     appearance: "",
     values: "",
+    speaking_style: "",
     core_motivation: "",
     graph_x: position.x,
     graph_y: position.y,
@@ -321,14 +351,21 @@ function init() {
   } else {
     state.characters = [createCharacter(0), createCharacter(1), createCharacter(2)];
     arrangeCharacterGraph();
+    state.activeCharacterId = state.characters[0]?.id || null;
   }
   renderChipGroup(elements.genreOptions, GENRE_OPTIONS, "genre");
   renderChipGroup(elements.styleOptions, STYLE_OPTIONS, "style");
   bindStoryDraftInputs();
+  bindStageNavigation();
   elements.totalWords.addEventListener("input", updateChapterEstimate);
   elements.chapterWords.addEventListener("input", updateChapterEstimate);
+  elements.goToCharacters.addEventListener("click", () => {
+    setCurrentStage("characters");
+    maybeShowCharacterGuide();
+  });
   elements.addCharacter.addEventListener("click", () => {
     state.characters.push(createCharacter(state.characters.length));
+    state.activeCharacterId = state.characters[state.characters.length - 1]?.id || state.activeCharacterId;
     arrangeCharacterGraph();
     renderCharacters();
     renderGraph();
@@ -342,6 +379,26 @@ function init() {
   elements.generateStory.addEventListener("click", handleStoryGenerate);
   elements.exportAllStory.addEventListener("click", handleExportAllStory);
   elements.storyResult.addEventListener("click", handleStoryResultClick);
+  elements.outlineHistory.addEventListener("click", openOutlineHistoryModal);
+  elements.outlineHistoryClose.addEventListener("click", closeOutlineHistoryModal);
+  elements.outlineHistoryModal.addEventListener("click", (event) => {
+    if (event.target === elements.outlineHistoryModal) {
+      closeOutlineHistoryModal();
+    }
+  });
+  elements.storySelectionEdit.addEventListener("click", openStoryEditModal);
+  elements.storySelectionRegenerate.addEventListener("click", handleStorySelectionRegenerate);
+  elements.storySelectionToolbar.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+  });
+  elements.storyEditClose.addEventListener("click", closeStoryEditModal);
+  elements.storyEditCancel.addEventListener("click", closeStoryEditModal);
+  elements.storyEditSave.addEventListener("click", saveStorySelectionEdit);
+  elements.storyEditModal.addEventListener("click", (event) => {
+    if (event.target === elements.storyEditModal) {
+      closeStoryEditModal();
+    }
+  });
   elements.relationModalClose.addEventListener("click", closeRelationModal);
   elements.relationSaveButton.addEventListener("click", saveRelationModal);
   elements.relationLabelInput.addEventListener("input", () => {
@@ -381,21 +438,167 @@ function init() {
     }
   });
   window.addEventListener("resize", renderGraph);
+  window.addEventListener("resize", () => {
+    positionStorySelectionToolbar();
+  });
+  document.addEventListener("selectionchange", handleDocumentSelectionChange);
+  document.addEventListener("mousedown", handleGlobalPointerDown);
+  document.addEventListener("keydown", handleGlobalKeyDown);
   setupGraphInteractions();
   updateChapterEstimate();
   renderCharacters();
   renderGraph();
   renderOutline();
   renderStory();
+  renderOutlineHistory();
   updateRelationActionState();
   updateOutputActionState();
   syncLlmActivityPanelState();
+  syncStageMarkers();
+  setCurrentStage(state.currentStage || "basic", { scroll: false, keepSelection: true });
   setStatus(
     restoredGeneratedContent
       ? "已恢复上次填写内容与已生成结果，可以继续编辑、导出或生成。"
       : "填写左侧信息后，先生成故事大纲；若不满意，可以补充反馈并重生成。",
     false,
   );
+  maybeShowInitialGuide();
+}
+
+function bindStageNavigation() {
+  [...elements.stageNavButtons, ...elements.railStageButtons].forEach((button) => {
+    button.addEventListener("click", () => {
+      const stage = button.dataset.stageTarget;
+      if (!stage) {
+        return;
+      }
+      setCurrentStage(stage);
+      if (stage === "basic") {
+        maybeShowInitialGuide();
+      }
+      if (stage === "characters") {
+        maybeShowCharacterGuide();
+      }
+    });
+  });
+
+  if ("IntersectionObserver" in window) {
+    const observer = new IntersectionObserver((entries) => {
+      const visibleEntry = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (!visibleEntry) {
+        return;
+      }
+      const stage = visibleEntry.target.dataset.stageScreen;
+      if (stage && stage !== state.currentStage) {
+        state.currentStage = stage;
+        syncStageMarkers();
+        saveWorkspaceSnapshot();
+      }
+    }, {
+      rootMargin: "-20% 0px -45% 0px",
+      threshold: [0.2, 0.45, 0.7],
+    });
+
+    elements.stageSections.forEach((section) => observer.observe(section));
+  }
+}
+
+function getStageSection(stage) {
+  return document.querySelector(`[data-stage-screen="${stage}"]`);
+}
+
+function setCurrentStage(stage, { scroll = true, keepSelection = false } = {}) {
+  if (!stage) {
+    return;
+  }
+
+  state.currentStage = stage;
+  syncStageMarkers();
+  saveWorkspaceSnapshot();
+
+  const section = getStageSection(stage);
+  if (scroll && section) {
+    section.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  if (!keepSelection) {
+    closeStorySelectionToolbar({ preserveSelection: false });
+  }
+}
+
+function syncStageMarkers() {
+  elements.stageSections.forEach((section) => {
+    section.classList.toggle("is-current", section.dataset.stageScreen === state.currentStage);
+  });
+
+  [...elements.stageNavButtons, ...elements.railStageButtons].forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.stageTarget === state.currentStage);
+  });
+}
+
+function maybeShowInitialGuide() {
+  const seenGuides = loadSeenGuides();
+  if (seenGuides.basic || state.currentStage !== "basic") {
+    return;
+  }
+
+  showNeuroGuidance(
+    "你好，创作者。我是 Neuro。我们的旅程将从基本信息开始；随后在角色关系中编织命运；在大纲生成中梳理脉络；最后，我们共同完成正文创作。每一个伟大的故事都始于清晰的故事类型和梗概，请先在左侧输入栏中告诉我这些吧。",
+    { title: "Neuro", statusLabel: "新手引导" },
+  );
+  seenGuides.basic = true;
+  saveSeenGuides(seenGuides);
+}
+
+function maybeShowCharacterGuide() {
+  const seenGuides = loadSeenGuides();
+  if (seenGuides.characters) {
+    return;
+  }
+
+  showNeuroGuidance(
+    "看，角色们正在这里相遇。你可以通过点击拉出箭头来定义他们的羁绊。感到不确定？试试 AI 补充，我会基于你的设定寻找隐藏的连接点——别担心，我绝不会修改你已经写下的宿命。",
+    { title: "Neuro", statusLabel: "角色引导" },
+  );
+  seenGuides.characters = true;
+  saveSeenGuides(seenGuides);
+}
+
+function showNeuroGuidance(message, { title = "Neuro", statusLabel = "待命" } = {}) {
+  stopLlmActivityWaitingLoop();
+  stopLlmActivityAutoClose();
+  llmActivity.active = false;
+  llmActivity.panelOpen = true;
+  elements.llmActivityTitle.textContent = title;
+  elements.llmActivitySummary.textContent = message;
+  elements.llmActivityLog.innerHTML = "";
+  setLlmActivityStatus(statusLabel, { busy: false });
+  syncLlmActivityPanelState();
+  appendLlmActivityStep("Neuro", message, "info");
+}
+
+function loadSeenGuides() {
+  try {
+    const raw = window.localStorage.getItem(STORY_GUIDE_STORAGE_KEY);
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    console.warn("读取 Neuro 引导标记失败：", error);
+    return {};
+  }
+}
+
+function saveSeenGuides(guides) {
+  try {
+    window.localStorage.setItem(STORY_GUIDE_STORAGE_KEY, JSON.stringify(guides || {}));
+  } catch (error) {
+    console.warn("保存 Neuro 引导标记失败：", error);
+  }
 }
 
 function loadWorkspaceSnapshot() {
@@ -426,9 +629,13 @@ function saveWorkspaceSnapshot() {
 function buildWorkspaceSnapshot() {
   syncRelationNames();
   return {
-    version: 2,
+    version: 3,
     genre: state.genre,
     style: state.style,
+    currentStage: state.currentStage,
+    activeCharacterId: state.activeCharacterId,
+    activeChapterNumber: state.activeChapterNumber,
+    outlineHistory: state.outlineHistory,
     characters: state.characters.map((character) => ({
       ...character,
       graph_color: character.graph_color || null,
@@ -459,6 +666,18 @@ function buildWorkspaceSnapshot() {
 function applyWorkspaceSnapshot(snapshot) {
   state.genre = typeof snapshot.genre === "string" && snapshot.genre.trim() ? snapshot.genre : state.genre;
   state.style = typeof snapshot.style === "string" && snapshot.style.trim() ? snapshot.style : state.style;
+  state.currentStage = typeof snapshot.currentStage === "string" && snapshot.currentStage.trim()
+    ? snapshot.currentStage
+    : state.currentStage;
+  state.activeCharacterId = typeof snapshot.activeCharacterId === "string" && snapshot.activeCharacterId.trim()
+    ? snapshot.activeCharacterId
+    : null;
+  state.activeChapterNumber = Number.isInteger(Number(snapshot.activeChapterNumber))
+    ? Number(snapshot.activeChapterNumber)
+    : null;
+  state.outlineHistory = Array.isArray(snapshot.outlineHistory)
+    ? snapshot.outlineHistory.map((entry) => normalizeOutlineHistoryEntry(entry)).filter(Boolean)
+    : [];
 
   const persistedCharacters = Array.isArray(snapshot.characters) ? snapshot.characters : [];
   state.characters = persistedCharacters.length
@@ -487,6 +706,12 @@ function applyWorkspaceSnapshot(snapshot) {
   state.generatedStory = snapshot.generatedStory && typeof snapshot.generatedStory === "object"
     ? normalizeGeneratedStory(snapshot.generatedStory, state.outline?.title || "")
     : null;
+  if (!getCharacterById(state.activeCharacterId)) {
+    state.activeCharacterId = state.characters[0]?.id || null;
+  }
+  if (!findGeneratedChapter(state.activeChapterNumber)) {
+    state.activeChapterNumber = state.generatedStory?.chapters?.[0]?.chapter_number || null;
+  }
 }
 
 function applyPersistedFormValues(form = {}) {
@@ -512,8 +737,13 @@ function normalizePersistedCharacter(character, index, total) {
     occupation: character?.occupation || "",
     nationality: character?.nationality || "",
     personality: character?.personality || "",
+    inner_conflict: character?.inner_conflict || character?.values || "",
+    strengths: character?.strengths || "",
+    weaknesses: character?.weaknesses || "",
+    character_arc: character?.character_arc || "",
     appearance: character?.appearance || "",
     values: character?.values || "",
+    speaking_style: character?.speaking_style || "",
     core_motivation: character?.core_motivation || "",
     graph_x: Number.isFinite(Number(character?.graph_x)) ? Number(character.graph_x) : fallbackPosition.x,
     graph_y: Number.isFinite(Number(character?.graph_y)) ? Number(character.graph_y) : fallbackPosition.y,
@@ -569,6 +799,9 @@ function updateOutputActionState() {
   elements.generateStory.disabled = outlineTaskRunning || !state.outline;
   elements.exportOutline.disabled = !state.outline;
   elements.exportAllStory.disabled = !state.generatedStory;
+  if (elements.outlineHistory) {
+    elements.outlineHistory.disabled = !state.outlineHistory.length;
+  }
 }
 
 function startLlmActivityRun({ title, summary, firstStepTitle, firstStepDetail = "", waitingMessages = [] }) {
@@ -708,13 +941,9 @@ function openLlmActivityPanel() {
 }
 
 function syncLlmActivityPanelState() {
-  const hasActivityHistory = elements.llmActivityLog.children.length > 0;
   elements.llmActivityPanel.classList.toggle("is-open", llmActivity.panelOpen);
-  elements.llmActivityToggle.classList.toggle(
-    "is-visible",
-    !llmActivity.panelOpen && (llmActivity.active || hasActivityHistory),
-  );
   elements.llmActivityToggle.classList.toggle("is-busy", llmActivity.active);
+  elements.llmActivityToggle.classList.toggle("hidden", llmActivity.panelOpen);
   elements.llmActivityToggle.setAttribute(
     "aria-label",
     llmActivity.active ? "展开 AI 运行面板（当前正在运行）" : "展开 AI 运行面板",
@@ -1091,65 +1320,113 @@ function updateChapterEstimate() {
 
 function renderCharacters() {
   elements.characterList.innerHTML = "";
+  if (!state.characters.length) {
+    return;
+  }
+
+  if (!getCharacterById(state.activeCharacterId)) {
+    state.activeCharacterId = state.characters[0]?.id || null;
+  }
+
+  const tabs = document.createElement("div");
+  tabs.className = "character-tabs";
+
   state.characters.forEach((character, index) => {
-    const card = document.createElement("section");
-    card.className = "character-card";
-
-    const header = document.createElement("div");
-    header.className = "character-card-header";
-
-    const headerMeta = document.createElement("div");
-    const kicker = document.createElement("p");
-    kicker.className = "section-kicker";
-    kicker.textContent = `Character ${index + 1}`;
-    const title = document.createElement("h3");
-    title.textContent = character.name || `角色 ${index + 1}`;
-    headerMeta.append(kicker, title);
-
-    const removeButton = document.createElement("button");
-    removeButton.type = "button";
-    removeButton.className = "tiny-button";
-    removeButton.textContent = "删除角色";
-    removeButton.disabled = state.characters.length <= 1;
-    removeButton.addEventListener("click", () => removeCharacter(character.id));
-
-    header.append(headerMeta, removeButton);
-
-    const grid = document.createElement("div");
-    grid.className = "character-card-grid";
-
-    CHARACTER_FIELDS.forEach(([field, label]) => {
-      const wrapper = document.createElement("div");
-      wrapper.className = "field-group";
-      const control = document.createElement(TEXTAREA_FIELDS.has(field) ? "textarea" : "input");
-      const labelNode = document.createElement("label");
-      labelNode.textContent = label;
-
-      control.value = character[field] || "";
-      control.placeholder = label;
-      if (TEXTAREA_FIELDS.has(field)) {
-        control.rows = 3;
-      } else {
-        control.type = "text";
-      }
-
-      control.addEventListener("input", (event) => {
-        character[field] = event.target.value;
-        if (field === "name") {
-          title.textContent = character.name || `角色 ${index + 1}`;
-        }
-        syncRelationNames();
-        renderGraph();
-        markStoryDraftDirty();
-      });
-
-      wrapper.append(labelNode, control);
-      grid.appendChild(wrapper);
+    const color = getCharacterGraphColor(character, index);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `character-tab ${state.activeCharacterId === character.id ? "is-active" : ""}`;
+    button.dataset.id = character.id;
+    button.style.background = color.fill;
+    button.style.zIndex = state.activeCharacterId === character.id ? "6" : String(index + 1);
+    button.innerHTML = `
+      <span>${escapeHtml(character.name || `角色${index + 1}`)}</span>
+      <span class="character-tab-remove" aria-hidden="true">&times;</span>
+    `;
+    button.addEventListener("click", () => {
+      state.activeCharacterId = character.id;
+      renderCharacters();
+      saveWorkspaceSnapshot();
     });
 
-    card.append(header, grid);
-    elements.characterList.appendChild(card);
+    const removeButton = button.querySelector(".character-tab-remove");
+    removeButton?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (state.characters.length <= 1) {
+        return;
+      }
+      removeCharacter(character.id);
+    });
+
+    tabs.appendChild(button);
   });
+
+  const addButton = document.createElement("button");
+  addButton.type = "button";
+  addButton.className = "character-tab character-tab-add";
+  addButton.textContent = "+";
+  addButton.style.background = "#e3f6d2";
+  addButton.style.zIndex = "1";
+  addButton.addEventListener("click", () => {
+    elements.addCharacter.click();
+  });
+  tabs.appendChild(addButton);
+
+  const activeCharacter = getCharacterById(state.activeCharacterId) || state.characters[0];
+  const activeIndex = state.characters.findIndex((character) => character.id === activeCharacter.id);
+  const activeColor = getCharacterGraphColor(activeCharacter, activeIndex);
+
+  const card = document.createElement("section");
+  card.className = "character-dossier-card";
+  card.style.borderColor = activeColor.stroke;
+
+  const scroll = document.createElement("div");
+  scroll.className = "character-dossier-scroll";
+
+  CHARACTER_DOSSIER_FIELDS.forEach((fieldConfig) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = `character-field ${fieldConfig.span === "full" ? "span-full" : ""}`;
+
+    const header = document.createElement("div");
+    header.className = "character-field-header";
+    const labelNode = document.createElement("label");
+    labelNode.textContent = fieldConfig.label;
+    header.appendChild(labelNode);
+    if (fieldConfig.hint) {
+      const hint = document.createElement("span");
+      hint.className = "character-field-hint";
+      hint.textContent = `（${fieldConfig.hint}）`;
+      header.appendChild(hint);
+    }
+
+    const control = document.createElement(fieldConfig.type === "textarea" ? "textarea" : "input");
+    control.value = activeCharacter[fieldConfig.key] || "";
+    control.placeholder = fieldConfig.label;
+    if (fieldConfig.type === "textarea") {
+      control.rows = fieldConfig.key === "appearance" ? 4 : 3;
+    } else {
+      control.type = "text";
+    }
+
+    control.addEventListener("input", (event) => {
+      activeCharacter[fieldConfig.key] = event.target.value;
+      syncRelationNames();
+      if (fieldConfig.key === "name") {
+        const activeTabLabel = elements.characterList.querySelector(`.character-tab[data-id="${activeCharacter.id}"] span`);
+        if (activeTabLabel) {
+          activeTabLabel.textContent = activeCharacter.name || `角色${activeIndex + 1}`;
+        }
+      }
+      renderGraph();
+      markStoryDraftDirty();
+    });
+
+    wrapper.append(header, control);
+    scroll.appendChild(wrapper);
+  });
+
+  card.appendChild(scroll);
+  elements.characterList.append(tabs, card);
 }
 
 function removeCharacter(characterId) {
@@ -1165,6 +1442,9 @@ function removeCharacter(characterId) {
     (state.relationEditor.sourceId === characterId || state.relationEditor.targetId === characterId)
   ) {
     closeRelationModal();
+  }
+  if (state.activeCharacterId === characterId) {
+    state.activeCharacterId = state.characters[0]?.id || null;
   }
   arrangeCharacterGraph();
   syncRelationNames();
@@ -1184,6 +1464,8 @@ function handleGraphPointerDown(event) {
   if (event.button !== 0) {
     return;
   }
+
+  maybeShowCharacterGuide();
 
   const point = getGraphPointFromClient(event.clientX, event.clientY);
   const source = findCharacterAtGraphPoint(point.x, point.y);
@@ -1413,12 +1695,12 @@ function renderCharacterNode(character, index) {
     .join(" ");
   node.style.left = `${character.graph_x}px`;
   node.style.top = `${character.graph_y}px`;
-  node.style.background = `radial-gradient(circle at 30% 30%, #fffdf9, ${color.fill} 82%)`;
+  node.style.background = "#fffefb";
   node.style.borderColor = color.stroke;
   node.style.color = color.text;
-  if (isSource || isTarget) {
-    node.style.boxShadow = `0 16px 30px ${color.shadow}`;
-  }
+  node.style.boxShadow = isSource || isTarget
+    ? `0 16px 30px ${color.shadow}`
+    : `0 10px 18px ${color.shadow}`;
   node.dataset.id = character.id;
 
   const name = document.createElement("div");
@@ -1857,6 +2139,11 @@ function applyServerStoryDraft(story) {
       return normalizePersistedCharacter(
         {
           ...character,
+          inner_conflict: previous?.inner_conflict,
+          strengths: previous?.strengths,
+          weaknesses: previous?.weaknesses,
+          character_arc: previous?.character_arc,
+          speaking_style: previous?.speaking_style,
           graph_color_index: previous?.graph_color_index,
           graph_color: previous?.graph_color,
         },
@@ -1877,6 +2164,9 @@ function applyServerStoryDraft(story) {
       .filter(Boolean);
   }
 
+  if (!getCharacterById(state.activeCharacterId)) {
+    state.activeCharacterId = state.characters[0]?.id || null;
+  }
   syncRelationNames();
   renderCharacters();
   renderGraph();
@@ -2057,12 +2347,48 @@ function serializeCharacter(character) {
     age: character.age || "",
     occupation: character.occupation || "",
     nationality: character.nationality || "",
-    personality: character.personality || "",
-    appearance: character.appearance || "",
-    values: character.values || "",
-    core_motivation: character.core_motivation || "",
+    personality: buildCharacterCompositeField([
+      ["性格", character.personality],
+      ["强项", character.strengths],
+      ["弱点", character.weaknesses],
+      ["说话风格", character.speaking_style],
+    ]),
+    appearance: buildCharacterCompositeField([
+      ["外在特征", character.appearance],
+    ]),
+    values: buildCharacterCompositeField([
+      ["内在冲突", character.inner_conflict],
+      ["人物弧光", character.character_arc],
+      ["价值观", character.values],
+    ]),
+    core_motivation: buildCharacterCompositeField([
+      ["核心动机", character.core_motivation],
+    ]),
     graph_x: Number(character.graph_x) || 120,
     graph_y: Number(character.graph_y) || 120,
+  };
+}
+
+function buildCharacterCompositeField(items) {
+  return items
+    .map(([label, value]) => {
+      const text = String(value || "").trim();
+      return text ? `${label}：${text}` : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function normalizeOutlineHistoryEntry(entry) {
+  if (!entry || typeof entry !== "object" || !entry.outline) {
+    return null;
+  }
+
+  return {
+    id: entry.id || generateId("outline-history"),
+    createdAt: entry.createdAt || new Date().toISOString(),
+    type: entry.type || "大纲版本",
+    outline: normalizeOutline(entry.outline),
   };
 }
 
@@ -2111,7 +2437,7 @@ async function handleOutlineSubmit(event) {
     "Neuro AI 正在规划故事结构与章节节奏。",
     buildOutlineWaitingMessages(false),
   );
-  setBusyState("正在让 DeepSeek 生成故事大纲...");
+  setBusyState("Neuro AI 正在生成故事大纲...");
   disableOutlineTaskActions();
 
   try {
@@ -2120,8 +2446,8 @@ async function handleOutlineSubmit(event) {
       feedback: "",
       previous_outline: null,
     }, {
-      busyMessage: "正在让 DeepSeek 生成故事大纲...",
-      runningSummary: "LLM 正在规划故事结构与章节节奏。",
+      busyMessage: "Neuro AI 正在生成故事大纲...",
+      runningSummary: "Neuro AI 正在规划故事结构与章节节奏。",
       waitingMessages: buildOutlineWaitingMessages(false),
       pausedSummary: "大纲生成已暂停。你可以先回去修改设定；若继续，将按暂停前的输入重新生成本次大纲。",
       discardSummary: "本次大纲生成已放弃，你可以修改后重新发起。",
@@ -2135,6 +2461,8 @@ async function handleOutlineSubmit(event) {
         }
         state.outline = normalizeOutline(outlinePayload);
         state.generatedStory = null;
+        state.activeChapterNumber = null;
+        pushOutlineHistoryEntry(state.outline, "首次生成");
         if (autoNamedCharacters.length) {
           appendLlmActivityStep("回写角色姓名", "已将 AI 生成的角色姓名同步到角色卡与关系网。");
         }
@@ -2144,6 +2472,7 @@ async function handleOutlineSubmit(event) {
         renderStory();
         appendLlmActivityStep("渲染页面结果", "正在把新大纲写入右侧结果区。");
         saveWorkspaceSnapshot();
+        setCurrentStage("outline");
         if (autoNamedCharacters.length) {
           const namedSummary = formatAutoNamedCharacters(autoNamedCharacters);
           setStatus(
@@ -2204,7 +2533,7 @@ async function handleOutlineRegenerate() {
       previous_outline: state.outline,
     }, {
       busyMessage: "正在根据反馈重生成大纲...",
-      runningSummary: "LLM 正在按反馈重组故事结构。",
+      runningSummary: "Neuro AI 正在按反馈重组故事结构。",
       waitingMessages: buildOutlineWaitingMessages(true),
       pausedSummary: "大纲重生成已暂停。你可以先回去修改设定或反馈；若继续，将按暂停前的输入重新生成本次大纲。",
       discardSummary: "本次大纲重生成已放弃，你可以修改后重新发起。",
@@ -2218,6 +2547,8 @@ async function handleOutlineRegenerate() {
         }
         state.outline = normalizeOutline(outlinePayload);
         state.generatedStory = null;
+        state.activeChapterNumber = null;
+        pushOutlineHistoryEntry(state.outline, "重生成");
         if (autoNamedCharacters.length) {
           appendLlmActivityStep("回写角色姓名", "已将 AI 生成的角色姓名同步到角色卡与关系网。");
         }
@@ -2227,6 +2558,7 @@ async function handleOutlineRegenerate() {
         appendLlmActivityStep("渲染新大纲", "正在将新的大纲内容写回页面。");
         renderOutline();
         saveWorkspaceSnapshot();
+        setCurrentStage("outline");
         if (autoNamedCharacters.length) {
           const namedSummary = formatAutoNamedCharacters(autoNamedCharacters);
           setStatus(
@@ -2286,10 +2618,12 @@ async function handleStoryGenerate() {
       outline: state.outline,
     });
     state.generatedStory = normalizeGeneratedStory(story, state.outline?.title || "");
+    state.activeChapterNumber = state.generatedStory?.chapters?.[0]?.chapter_number || null;
     appendLlmActivityStep("解析正文结果", "正在校验章节列表、摘要和正文内容。");
     appendLlmActivityStep("渲染章节内容", "正在把生成结果写入正文展示区。");
     renderStory();
     saveWorkspaceSnapshot();
+    setCurrentStage("story");
     setStatus("全文生成完成。你可以继续修改设定后重新走一次流程。", false);
     finishLlmActivityRun("正文已生成完成，现在可以导出单章或全部正文。");
   } catch (error) {
@@ -2359,6 +2693,7 @@ function normalizeGeneratedStory(story, fallbackTitle = "") {
         title: String(chapter?.title || `第${index + 1}章`),
         summary: String(chapter?.summary || ""),
         content: String(chapter?.content || ""),
+        rendered_html: String(chapter?.rendered_html || ""),
       }))
       .filter((chapter) => chapter.content || chapter.summary || chapter.title)
     : [];
@@ -2422,6 +2757,17 @@ async function handleExportAllStory() {
 }
 
 function handleStoryResultClick(event) {
+  const chapterTab = event.target.closest("[data-select-chapter]");
+  if (chapterTab) {
+    const chapterNumber = Number(chapterTab.dataset.selectChapter);
+    if (Number.isFinite(chapterNumber)) {
+      state.activeChapterNumber = chapterNumber;
+      renderStory();
+      saveWorkspaceSnapshot();
+    }
+    return;
+  }
+
   const exportButton = event.target.closest("[data-export-chapter]");
   if (!exportButton) {
     return;
@@ -2579,83 +2925,191 @@ function renderOutline() {
   if (!state.outline) {
     elements.outlineResult.className = "outline-result empty-state";
     elements.outlineResult.textContent = "还没有生成大纲。";
+    renderOutlineHistory();
     return;
   }
 
   const lastStageIndex = state.outline.act_structure.length - 1;
   const actStructureHtml = (state.outline.act_structure || [])
-    .map(
-      (section, index) => `
-        <li class="stage-editor-card">
-          <div><strong>${escapeHtml(section.stage)}</strong></div>
-          <div>内容简介：${escapeHtml(section.content)}</div>
-          <div class="stage-range-editor">
-            <label>
-              起始章
-              <input id="stage-start-${index}" type="number" min="1" max="${state.outline.chapter_count}" value="${section.start_chapter}" ${index === 0 ? "disabled" : ""} />
-            </label>
-            <label>
-              结束章
-              <input id="stage-end-${index}" type="number" min="1" max="${state.outline.chapter_count}" value="${section.end_chapter}" ${index === lastStageIndex ? "disabled" : ""} />
-            </label>
-          </div>
-          <div>当前范围：第${section.start_chapter}章-第${section.end_chapter}章</div>
-        </li>
-      `,
-    )
+    .map((section, index) => `
+      <article class="outline-stage-card">
+        <div class="outline-stage-card-header">
+          <strong>${escapeHtml(section.stage)}</strong>
+          <span class="outline-stage-range">${escapeHtml(section.chapter_range)}</span>
+        </div>
+        <div>${escapeHtml(section.content || "暂无内容概括。")}</div>
+        <div class="outline-stage-editor">
+          <label>
+            起始章
+            <input id="stage-start-${index}" type="number" min="1" max="${state.outline.chapter_count}" value="${section.start_chapter}" ${index === 0 ? "disabled" : ""} />
+          </label>
+          <label>
+            结束章
+            <input id="stage-end-${index}" type="number" min="1" max="${state.outline.chapter_count}" value="${section.end_chapter}" ${index === lastStageIndex ? "disabled" : ""} />
+          </label>
+        </div>
+      </article>
+    `)
+    .join("");
+
+  const timelineHtml = (state.outline.act_structure || [])
+    .map((section) => `
+      <div class="outline-timeline-item">
+        <div>${escapeHtml(section.stage)}</div>
+        <span class="outline-timeline-dot"></span>
+        <div>${escapeHtml(section.chapter_range)}</div>
+      </div>
+    `)
+    .join("");
+
+  const chapterCardsHtml = state.outline.chapters
+    .map((chapter) => `
+      <article class="chapter-plan-card">
+        <div><strong>第${chapter.chapter_number}章</strong></div>
+        <div>${escapeHtml(chapter.title)}</div>
+        <div>目标字数：${chapter.target_words}</div>
+        <div>概要：${escapeHtml(chapter.summary || "无")}</div>
+        <div>关键事件：${chapter.key_events?.length ? chapter.key_events.map(escapeHtml).join(" / ") : "无"}</div>
+        <div>章末收束：${escapeHtml(chapter.cliffhanger || "无")}</div>
+      </article>
+    `)
     .join("");
 
   elements.outlineResult.className = "outline-result";
   elements.outlineResult.innerHTML = `
-    <article class="outline-card">
-      <div class="outline-meta">
-        <div><strong>标题：</strong>${escapeHtml(state.outline.title)}</div>
-        <div><strong>一句话概述：</strong>${escapeHtml(state.outline.logline)}</div>
-        <div><strong>故事概述：</strong>${escapeHtml(state.outline.summary)}</div>
-        <div><strong>章节数：</strong>${state.outline.chapter_count}</div>
-      </div>
+    <div class="outline-board">
+      <article class="outline-summary-card">
+        <div class="outline-summary-meta">
+          <div><strong>标题：</strong>${escapeHtml(state.outline.title)}</div>
+          <div><strong>一句话概述：</strong>${escapeHtml(state.outline.logline)}</div>
+          <div><strong>故事梗概：</strong>${escapeHtml(state.outline.summary)}</div>
+          <div><strong>章节总数：</strong>${state.outline.chapter_count}</div>
+          <div>
+            <strong>LLM 补完信息：</strong>
+            <ul class="inferred-list">
+              ${
+                state.outline.inferred_details.length
+                  ? state.outline.inferred_details.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
+                  : "<li>本轮没有额外补完信息。</li>"
+              }
+            </ul>
+          </div>
+        </div>
+      </article>
+
       <div class="action-row">
         <strong>四段式结构</strong>
         <button type="button" id="save-stage-ranges" class="ghost-button">保存篇章范围</button>
       </div>
       <p class="micro-tip">第一段起始章固定为 1；结局段结束章固定为总篇章数；某一段的结束章不能超过下一段的起始章。</p>
-      <ol class="chapter-plan-list">
-        ${actStructureHtml || "<li>本轮大纲未返回四段式结构。</li>"}
-      </ol>
-      <div>
-        <strong>LLM 补完信息</strong>
-        <ul class="inferred-list">
-          ${
-            state.outline.inferred_details.length
-              ? state.outline.inferred_details.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
-              : "<li>本轮没有额外补完信息。</li>"
-          }
-        </ul>
-      </div>
+
+      <div class="outline-timeline">${timelineHtml}</div>
+      <div class="outline-stage-grid">${actStructureHtml || ""}</div>
+
       <div>
         <strong>章节规划</strong>
-        <ol class="chapter-plan-list">
-          ${state.outline.chapters
-            .map(
-              (chapter) => `
-                <li>
-                  <strong>第 ${chapter.chapter_number} 章｜${escapeHtml(chapter.title)}</strong>
-                  <div>目标字数：${chapter.target_words}</div>
-                  <div>概要：${escapeHtml(chapter.summary)}</div>
-                  <div>关键事件：${chapter.key_events.map(escapeHtml).join(" / ")}</div>
-                  <div>章末收束：${escapeHtml(chapter.cliffhanger || "无")}</div>
-                </li>`,
-            )
-            .join("")}
-        </ol>
+        <div class="outline-chapter-grid">${chapterCardsHtml}</div>
       </div>
-    </article>
+    </div>
   `;
 
   const saveButton = document.querySelector("#save-stage-ranges");
   if (saveButton) {
     saveButton.addEventListener("click", () => saveActStructureEdits(false));
   }
+  renderOutlineHistory();
+}
+
+function pushOutlineHistoryEntry(outline, type = "大纲版本") {
+  const normalized = normalizeOutline(outline);
+  state.outlineHistory = [
+    {
+      id: generateId("outline-history"),
+      createdAt: new Date().toISOString(),
+      type,
+      outline: normalized,
+    },
+    ...state.outlineHistory,
+  ].slice(0, 12);
+  renderOutlineHistory();
+}
+
+function renderOutlineHistory() {
+  if (!elements.outlineHistoryList) {
+    return;
+  }
+
+  if (!state.outlineHistory.length) {
+    elements.outlineHistoryList.innerHTML = `<div class="outline-history-entry"><p>还没有历史记录。每次生成或重生成大纲后，这里都会留下一个版本。</p></div>`;
+    updateOutputActionState();
+    return;
+  }
+
+  elements.outlineHistoryList.innerHTML = state.outlineHistory
+    .map((entry, index) => `
+      <article class="outline-history-entry">
+        <div class="outline-history-entry-header">
+          <strong>${escapeHtml(entry.type || `大纲版本 ${index + 1}`)}</strong>
+          <span>${escapeHtml(formatHistoryTime(entry.createdAt))}</span>
+        </div>
+        <p>${escapeHtml(entry.outline?.title || "未命名作品")}｜${escapeHtml(entry.outline?.logline || "无一句话概述")}</p>
+        <div class="action-row">
+          <button type="button" class="ghost-button" data-outline-history-restore="${entry.id}">恢复为当前版本</button>
+        </div>
+      </article>
+    `)
+    .join("");
+
+  elements.outlineHistoryList.querySelectorAll("[data-outline-history-restore]").forEach((button) => {
+    button.addEventListener("click", () => {
+      restoreOutlineHistoryEntry(button.dataset.outlineHistoryRestore);
+    });
+  });
+
+  updateOutputActionState();
+}
+
+function openOutlineHistoryModal() {
+  renderOutlineHistory();
+  elements.outlineHistoryModal.classList.remove("hidden");
+  elements.outlineHistoryModal.setAttribute("aria-hidden", "false");
+}
+
+function closeOutlineHistoryModal() {
+  elements.outlineHistoryModal.classList.add("hidden");
+  elements.outlineHistoryModal.setAttribute("aria-hidden", "true");
+}
+
+function restoreOutlineHistoryEntry(entryId) {
+  const entry = state.outlineHistory.find((item) => item.id === entryId);
+  if (!entry) {
+    return;
+  }
+
+  state.outline = normalizeOutline(entry.outline);
+  state.generatedStory = null;
+  state.activeChapterNumber = null;
+  renderOutline();
+  renderStory();
+  closeOutlineHistoryModal();
+  updateOutputActionState();
+  saveWorkspaceSnapshot();
+  setStatus("已恢复历史大纲版本。由于大纲发生变化，旧正文已清空。", false);
+  setCurrentStage("outline");
+}
+
+function formatHistoryTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "未知时间";
+  }
+  return date.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function saveActStructureEdits(silentSuccess = false) {
@@ -2720,24 +3174,321 @@ function renderStory() {
   if (!state.generatedStory) {
     elements.storyResult.className = "story-result empty-state";
     elements.storyResult.textContent = "大纲确认后，这里会依次展示每个篇章的正文。";
+    closeStorySelectionToolbar({ preserveSelection: false });
     return;
   }
 
+  if (!findGeneratedChapter(state.activeChapterNumber)) {
+    state.activeChapterNumber = state.generatedStory.chapters[0]?.chapter_number || null;
+  }
+
+  const activeChapter = findGeneratedChapter(state.activeChapterNumber) || state.generatedStory.chapters[0];
   elements.storyResult.className = "story-result";
-  elements.storyResult.innerHTML = state.generatedStory.chapters
-    .map(
-      (chapter, index) => `
-        <details class="chapter-card" ${index === 0 ? "open" : ""}>
-          <summary>第 ${chapter.chapter_number} 章｜${escapeHtml(chapter.title)}</summary>
-          <div class="chapter-card-toolbar">
-            <button type="button" class="ghost-button" data-export-chapter="${chapter.chapter_number}">导出本章</button>
+  elements.storyResult.innerHTML = `
+    <div class="story-reader-shell">
+      <div class="story-topbar">
+        <div class="story-title-badge">《${escapeHtml(state.generatedStory.title || "我的小说")}》</div>
+        <div class="story-chapter-tabs">
+          ${state.generatedStory.chapters
+            .map((chapter) => `
+              <button
+                type="button"
+                class="story-chapter-tab ${chapter.chapter_number === activeChapter.chapter_number ? "is-active" : ""}"
+                data-select-chapter="${chapter.chapter_number}"
+              >
+                第${chapter.chapter_number}章
+              </button>
+            `)
+            .join("")}
+        </div>
+      </div>
+
+      <article class="story-chapter-card">
+        <div class="story-chapter-header">
+          <div>
+            <h3>第${activeChapter.chapter_number}章</h3>
+            <div>${escapeHtml(activeChapter.title)}</div>
           </div>
-          <p><strong>章节摘要：</strong>${escapeHtml(chapter.summary)}</p>
-          <div class="chapter-content">${escapeHtml(chapter.content)}</div>
-        </details>
-      `,
-    )
+          <button type="button" class="ghost-button" data-export-chapter="${activeChapter.chapter_number}">导出本章</button>
+        </div>
+        <div class="story-summary"><strong>章节摘要：</strong>${escapeHtml(activeChapter.summary || "无")}</div>
+        <div
+          class="chapter-content"
+          data-chapter-editor="${activeChapter.chapter_number}"
+          data-chapter-number="${activeChapter.chapter_number}"
+        >
+          ${activeChapter.rendered_html || buildChapterContentHtml(activeChapter.content)}
+        </div>
+      </article>
+    </div>
+  `;
+  closeStorySelectionToolbar({ preserveSelection: false });
+}
+
+function buildChapterContentHtml(content) {
+  const normalized = String(content || "").trim();
+  if (!normalized) {
+    return "<p>暂无正文。</p>";
+  }
+
+  return normalized
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/<br \/>/g, "<br />")}</p>`)
     .join("");
+}
+
+function handleDocumentSelectionChange() {
+  if (elements.storyEditModal && !elements.storyEditModal.classList.contains("hidden")) {
+    return;
+  }
+
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    closeStorySelectionToolbar({ preserveSelection: false });
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+  const editor = getChapterEditorFromNode(range.commonAncestorContainer);
+  if (!editor || !editor.closest("#stage-story")) {
+    closeStorySelectionToolbar({ preserveSelection: false });
+    return;
+  }
+
+  const text = selection.toString().trim();
+  if (!text) {
+    closeStorySelectionToolbar({ preserveSelection: false });
+    return;
+  }
+
+  const offsets = getTextOffsetsWithin(editor, range);
+  const rect = range.getBoundingClientRect();
+  state.storySelection = {
+    chapterNumber: Number(editor.dataset.chapterNumber),
+    text,
+    range: range.cloneRange(),
+    startOffset: offsets.start,
+    endOffset: offsets.end,
+    rect: rect ? { top: rect.top, left: rect.left, width: rect.width, height: rect.height } : null,
+  };
+  positionStorySelectionToolbar();
+}
+
+function getChapterEditorFromNode(node) {
+  if (!node) {
+    return null;
+  }
+  const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+  return element?.closest?.("[data-chapter-editor]") || null;
+}
+
+function getTextOffsetsWithin(root, range) {
+  const startRange = document.createRange();
+  startRange.selectNodeContents(root);
+  startRange.setEnd(range.startContainer, range.startOffset);
+
+  const endRange = document.createRange();
+  endRange.selectNodeContents(root);
+  endRange.setEnd(range.endContainer, range.endOffset);
+
+  return {
+    start: startRange.toString().length,
+    end: endRange.toString().length,
+  };
+}
+
+function positionStorySelectionToolbar() {
+  if (!state.storySelection || !elements.storySelectionToolbar) {
+    closeStorySelectionToolbar({ preserveSelection: false });
+    return;
+  }
+
+  const liveRect = state.storySelection.range?.getBoundingClientRect?.();
+  const rect = liveRect && liveRect.width ? liveRect : state.storySelection.rect;
+  if (!rect) {
+    closeStorySelectionToolbar({ preserveSelection: false });
+    return;
+  }
+
+  const top = Math.max(12, rect.top - 54);
+  const left = clamp(
+    rect.left + rect.width / 2 - 92,
+    12,
+    window.innerWidth - 196,
+  );
+
+  elements.storySelectionToolbar.style.top = `${top}px`;
+  elements.storySelectionToolbar.style.left = `${left}px`;
+  elements.storySelectionToolbar.classList.remove("hidden");
+  elements.storySelectionToolbar.setAttribute("aria-hidden", "false");
+}
+
+function closeStorySelectionToolbar({ preserveSelection = true } = {}) {
+  if (!elements.storySelectionToolbar) {
+    return;
+  }
+  elements.storySelectionToolbar.classList.add("hidden");
+  elements.storySelectionToolbar.setAttribute("aria-hidden", "true");
+  if (!preserveSelection) {
+    state.storySelection = null;
+  }
+}
+
+function handleGlobalPointerDown(event) {
+  if (elements.storySelectionToolbar?.contains(event.target)) {
+    return;
+  }
+  if (event.target.closest?.("#story-edit-modal")) {
+    return;
+  }
+  if (!event.target.closest?.("[data-chapter-editor]")) {
+    closeStorySelectionToolbar({ preserveSelection: false });
+  }
+}
+
+function handleGlobalKeyDown(event) {
+  if (event.key !== "Escape") {
+    return;
+  }
+
+  closeStorySelectionToolbar({ preserveSelection: false });
+  closeStoryEditModal();
+  closeOutlineHistoryModal();
+}
+
+function openStoryEditModal() {
+  if (!state.storySelection?.text) {
+    return;
+  }
+
+  elements.storyEditTextarea.value = state.storySelection.text;
+  elements.storyEditModal.classList.remove("hidden");
+  elements.storyEditModal.setAttribute("aria-hidden", "false");
+  closeStorySelectionToolbar({ preserveSelection: true });
+  elements.storyEditTextarea.focus();
+}
+
+function closeStoryEditModal() {
+  if (!elements.storyEditModal) {
+    return;
+  }
+  elements.storyEditModal.classList.add("hidden");
+  elements.storyEditModal.setAttribute("aria-hidden", "true");
+  if (state.storySelection) {
+    positionStorySelectionToolbar();
+  }
+}
+
+function saveStorySelectionEdit() {
+  const replacement = elements.storyEditTextarea.value.trim();
+  if (!replacement || !state.storySelection) {
+    return;
+  }
+
+  applyStorySelectionReplacement(replacement, "story-fragment-user");
+  closeStoryEditModal();
+  setStatus("已保存这段人工修改，颜色已与 AI 生成内容区分开。", false);
+}
+
+async function handleStorySelectionRegenerate() {
+  if (!state.storySelection || !state.outline || !state.generatedStory) {
+    return;
+  }
+  if (!ensureNoBlockingLlmTask()) {
+    return;
+  }
+
+  const chapter = findGeneratedChapter(state.storySelection.chapterNumber);
+  if (!chapter) {
+    return;
+  }
+
+  syncChapterContentFromDom(chapter.chapter_number);
+  const fullText = chapter.content || "";
+  const beforeContext = fullText.slice(Math.max(0, state.storySelection.startOffset - 260), state.storySelection.startOffset);
+  const afterContext = fullText.slice(state.storySelection.endOffset, state.storySelection.endOffset + 260);
+
+  startLlmActivityRun({
+    title: "Neuro 局部重写",
+    summary: "正在读取你选中的正文片段与上下文。",
+    firstStepTitle: "接收片段重写请求",
+    firstStepDetail: "将保持当前章节语气、节奏和人物状态，只重写你选中的部分。",
+  });
+  appendLlmActivityStep("定位选中片段", "正在提取选中内容、前后文和对应章节摘要。");
+  appendLlmActivityStep("整理章节上下文", "正在锁定当前章节标题、摘要与整部作品风格。");
+  appendLlmActivityStep("发送给模型", "已将局部重写请求提交给 Neuro AI。");
+  setBusyState("Neuro 正在局部重写你选中的正文片段...");
+
+  try {
+    const response = await postJson("/api/story/rewrite-selection", {
+      story: buildStoryPayload(),
+      outline: state.outline,
+      chapter_number: chapter.chapter_number,
+      chapter_title: chapter.title,
+      chapter_summary: chapter.summary,
+      selected_text: state.storySelection.text,
+      before_context: beforeContext,
+      after_context: afterContext,
+      instruction: "请保持行文风格统一，适度增强表达张力，但不要改动未选中的剧情事实。",
+    });
+    applyStorySelectionReplacement(response.rewritten_text || state.storySelection.text, "story-fragment-ai");
+    appendLlmActivityStep("回写局部结果", "新片段已替换到正文中，并保留视觉区分。");
+    finishLlmActivityRun("选中的片段已经重写完成。");
+    setStatus("局部重写完成，新的片段已写回当前章节。", false);
+  } catch (error) {
+    setStatus(error.message || "局部重写失败。", false, true);
+    finishLlmActivityRun(error.message || "局部重写失败。", "error");
+  }
+}
+
+function applyStorySelectionReplacement(text, fragmentClass) {
+  if (!state.storySelection?.range) {
+    return;
+  }
+
+  const range = state.storySelection.range.cloneRange();
+  range.deleteContents();
+
+  const fragment = document.createElement("span");
+  fragment.className = `${fragmentClass} story-fragment-highlight`;
+  String(text || "")
+    .split("\n")
+    .forEach((line, index, lines) => {
+      fragment.appendChild(document.createTextNode(line));
+      if (index < lines.length - 1) {
+        fragment.appendChild(document.createElement("br"));
+      }
+    });
+
+  range.insertNode(fragment);
+  const chapterNumber = state.storySelection.chapterNumber;
+  state.storySelection = null;
+  syncChapterContentFromDom(chapterNumber);
+  closeStorySelectionToolbar({ preserveSelection: false });
+  saveWorkspaceSnapshot();
+
+  window.setTimeout(() => {
+    fragment.classList.remove("story-fragment-highlight");
+  }, 1500);
+}
+
+function syncChapterContentFromDom(chapterNumber) {
+  const chapter = findGeneratedChapter(chapterNumber);
+  const editor = elements.storyResult.querySelector(`[data-chapter-editor="${chapterNumber}"]`);
+  if (!chapter || !editor) {
+    return;
+  }
+
+  chapter.rendered_html = editor.innerHTML;
+  chapter.content = normalizeEditorText(editor.innerText);
+}
+
+function normalizeEditorText(value) {
+  return String(value || "")
+    .replace(/\r/g, "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function setBusyState(message) {

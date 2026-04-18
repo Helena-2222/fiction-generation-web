@@ -113,6 +113,22 @@ class StoryGenerationResponse(BaseModel):
     chapters: List[GeneratedChapter]
 
 
+class StorySelectionRewriteRequest(BaseModel):
+    story: StoryDraftRequest
+    outline: GeneratedOutline
+    chapter_number: int = Field(..., ge=1)
+    chapter_title: str = ""
+    chapter_summary: str = ""
+    selected_text: str = Field(..., min_length=1)
+    before_context: str = ""
+    after_context: str = ""
+    instruction: str = ""
+
+
+class StorySelectionRewriteResponse(BaseModel):
+    rewritten_text: str
+
+
 class DocxExportRequest(BaseModel):
     filename: str
     title: str = ""

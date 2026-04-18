@@ -17,6 +17,8 @@ from app.models import (
     OutlineGenerationRequest,
     OutlineGenerationResponse,
     RelationSupplementRequest,
+    StorySelectionRewriteRequest,
+    StorySelectionRewriteResponse,
     StoryGenerationRequest,
 )
 from app.services.story_service import StoryService
@@ -72,6 +74,15 @@ async def generate_story(request: StoryGenerationRequest) -> dict:
     try:
         story = await story_service.generate_story(request)
         return story.model_dump()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/story/rewrite-selection")
+async def rewrite_story_selection(request: StorySelectionRewriteRequest) -> dict:
+    try:
+        response: StorySelectionRewriteResponse = await story_service.rewrite_story_selection(request)
+        return response.model_dump()
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
