@@ -16,6 +16,12 @@ const CHARACTER_DOSSIER_FIELDS = [
   { key: "speaking_style", label: "说话风格", type: "textarea", span: "full" },
 ];
 const STAGE_ORDER = ["开端", "发展", "高潮", "结局"];
+const STAGE_META = {
+  basic: { index: 0, label: "基本信息" },
+  characters: { index: 1, label: "角色关系" },
+  outline: { index: 2, label: "大纲生成" },
+  story: { index: 3, label: "正文生成" },
+};
 const WORKSPACE_STORAGE_KEY = "story-generation-workspace-v3";
 const STORY_GUIDE_STORAGE_KEY = "story-generation-neuro-guides-v1";
 const LLM_TASK_POLL_INTERVAL_MS = 1400;
@@ -123,6 +129,8 @@ const elements = {
   relationDeleteConfirm: document.querySelector("#relation-delete-confirm"),
   relationDeleteCancel: document.querySelector("#relation-delete-cancel"),
   llmActivityPanel: document.querySelector("#llm-activity-panel"),
+  neuroStageLabel: document.querySelector("#neuro-stage-label"),
+  neuroDragHandle: document.querySelector("#neuro-drag-handle"),
   llmActivityTitle: document.querySelector("#llm-activity-title"),
   llmActivityClose: document.querySelector("#llm-activity-close"),
   llmActivityToggle: document.querySelector("#llm-activity-toggle"),
@@ -438,12 +446,14 @@ function init() {
     }
   });
   window.addEventListener("resize", renderGraph);
+  window.addEventListener("resize", syncResponsiveLayout);
   window.addEventListener("resize", () => {
     positionStorySelectionToolbar();
   });
   document.addEventListener("selectionchange", handleDocumentSelectionChange);
   document.addEventListener("mousedown", handleGlobalPointerDown);
   document.addEventListener("keydown", handleGlobalKeyDown);
+  setupPanelInteractions();
   setupGraphInteractions();
   updateChapterEstimate();
   renderCharacters();
@@ -455,6 +465,7 @@ function init() {
   updateOutputActionState();
   syncLlmActivityPanelState();
   syncStageMarkers();
+  syncResponsiveLayout();
   setCurrentStage(state.currentStage || "basic", { scroll: false, keepSelection: true });
   setStatus(
     restoredGeneratedContent
@@ -481,35 +492,13 @@ function bindStageNavigation() {
       }
     });
   });
-
-  if ("IntersectionObserver" in window) {
-    const observer = new IntersectionObserver((entries) => {
-      const visibleEntry = entries
-        .filter((entry) => entry.isIntersecting)
-        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-      if (!visibleEntry) {
-        return;
-      }
-      const stage = visibleEntry.target.dataset.stageScreen;
-      if (stage && stage !== state.currentStage) {
-        state.currentStage = stage;
-        syncStageMarkers();
-        saveWorkspaceSnapshot();
-      }
-    }, {
-      rootMargin: "-20% 0px -45% 0px",
-      threshold: [0.2, 0.45, 0.7],
-    });
-
-    elements.stageSections.forEach((section) => observer.observe(section));
-  }
 }
 
 function getStageSection(stage) {
   return document.querySelector(`[data-stage-screen="${stage}"]`);
 }
 
-function setCurrentStage(stage, { scroll = true, keepSelection = false } = {}) {
+function setCurrentStage(stage, { scroll = false, keepSelection = false } = {}) {
   if (!stage) {
     return;
   }
@@ -520,7 +509,7 @@ function setCurrentStage(stage, { scroll = true, keepSelection = false } = {}) {
 
   const section = getStageSection(stage);
   if (scroll && section) {
-    section.scrollIntoView({ behavior: "smooth", block: "start" });
+    section.scrollTop = 0;
   }
 
   if (!keepSelection) {
@@ -536,6 +525,178 @@ function syncStageMarkers() {
   [...elements.stageNavButtons, ...elements.railStageButtons].forEach((button) => {
     button.classList.toggle("is-active", button.dataset.stageTarget === state.currentStage);
   });
+
+  const stageMeta = STAGE_META[state.currentStage];
+  if (elements.neuroStageLabel && stageMeta) {
+    elements.neuroStageLabel.textContent = stageMeta.label;
+  }
+
+  syncResponsiveLayout();
+}
+
+function setupPanelInteractions() {
+  setupNeuroPanelResize();
+  setupRelationshipPanelResize();
+}
+
+function setupNeuroPanelResize() {
+  if (!elements.neuroDragHandle || !elements.llmActivityPanel) {
+    return;
+  }
+
+  let dragging = false;
+  let startX = 0;
+  let startWidth = 0;
+  const minWidth = 220;
+  const maxWidth = 420;
+  const closeThreshold = 96;
+
+  elements.neuroDragHandle.addEventListener("mousedown", (event) => {
+    if (window.innerWidth <= 960 || !llmActivity.panelOpen) {
+      return;
+    }
+
+    dragging = true;
+    startX = event.clientX;
+    startWidth = elements.llmActivityPanel.offsetWidth;
+    document.body.style.cursor = "ew-resize";
+    document.body.style.userSelect = "none";
+    elements.llmActivityPanel.style.transition = "none";
+    event.preventDefault();
+  });
+
+  document.addEventListener("mousemove", (event) => {
+    if (!dragging) {
+      return;
+    }
+
+    const delta = startX - event.clientX;
+    const newWidth = Math.max(0, Math.min(startWidth + delta, maxWidth));
+
+    if (newWidth < closeThreshold) {
+      closeLlmActivityPanel();
+      dragging = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      return;
+    }
+
+    llmActivity.panelOpen = true;
+    elements.llmActivityPanel.classList.add("is-open");
+    elements.llmActivityPanel.style.width = `${Math.max(minWidth, newWidth)}px`;
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!dragging) {
+      return;
+    }
+
+    dragging = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    elements.llmActivityPanel.style.transition = "";
+
+    if (llmActivity.panelOpen && elements.llmActivityPanel.offsetWidth < minWidth) {
+      elements.llmActivityPanel.style.width = `${minWidth}px`;
+    }
+  });
+}
+
+function setupRelationshipPanelResize() {
+  const handle = document.querySelector("#rel-resize-handle");
+  const relationArea = document.querySelector("#rel-area");
+  if (!handle || !relationArea) {
+    return;
+  }
+
+  let dragging = false;
+  let startX = 0;
+  let startWidth = 0;
+  const minWidth = 220;
+
+  handle.addEventListener("mousedown", (event) => {
+    if (window.innerWidth <= 960 || state.currentStage !== "characters") {
+      return;
+    }
+
+    dragging = true;
+    startX = event.clientX;
+    startWidth = relationArea.offsetWidth;
+    document.body.style.cursor = "ew-resize";
+    document.body.style.userSelect = "none";
+    event.preventDefault();
+  });
+
+  document.addEventListener("mousemove", (event) => {
+    if (!dragging) {
+      return;
+    }
+
+    const characterStage = getStageSection("characters");
+    const charEditor = document.querySelector("#scroll-1");
+    const totalWidth = characterStage?.offsetWidth || 800;
+    const maxWidth = Math.floor(totalWidth * 0.5);
+    const delta = startX - event.clientX;
+    const nextWidth = Math.max(minWidth, Math.min(startWidth + delta, maxWidth));
+
+    relationArea.style.width = `${nextWidth}px`;
+    relationArea.style.flex = "none";
+
+    if (charEditor) {
+      charEditor.classList.toggle("char-compact", nextWidth >= maxWidth - 4);
+    }
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!dragging) {
+      return;
+    }
+
+    dragging = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  });
+}
+
+function syncResponsiveLayout() {
+  const isMobile = window.innerWidth <= 960;
+
+  if (elements.llmActivityPanel) {
+    if (isMobile) {
+      elements.llmActivityPanel.style.width = "";
+      elements.llmActivityPanel.style.transition = "";
+    } else if (llmActivity.panelOpen && elements.llmActivityPanel.style.width) {
+      const width = Number.parseFloat(elements.llmActivityPanel.style.width);
+      if (Number.isFinite(width)) {
+        elements.llmActivityPanel.style.width = `${clamp(width, 220, 420)}px`;
+      }
+    }
+  }
+
+  const relationArea = document.querySelector("#rel-area");
+  const charEditor = document.querySelector("#scroll-1");
+  const characterStage = getStageSection("characters");
+  if (!relationArea || !charEditor || !characterStage) {
+    return;
+  }
+
+  if (isMobile) {
+    relationArea.style.width = "";
+    relationArea.style.flex = "";
+    charEditor.classList.remove("char-compact");
+    return;
+  }
+
+  if (relationArea.style.width) {
+    const totalWidth = characterStage.offsetWidth || 800;
+    const maxWidth = Math.floor(totalWidth * 0.5);
+    const width = clamp(Number.parseFloat(relationArea.style.width) || relationArea.offsetWidth, 220, maxWidth);
+    relationArea.style.width = `${width}px`;
+    relationArea.style.flex = "none";
+    charEditor.classList.toggle("char-compact", width >= maxWidth - 4);
+  } else {
+    charEditor.classList.remove("char-compact");
+  }
 }
 
 function maybeShowInitialGuide() {
@@ -572,7 +733,7 @@ function showNeuroGuidance(message, { title = "Neuro", statusLabel = "待命" } 
   llmActivity.active = false;
   llmActivity.panelOpen = true;
   elements.llmActivityTitle.textContent = title;
-  elements.llmActivitySummary.textContent = message;
+  setAssistantSummary(message);
   elements.llmActivityLog.innerHTML = "";
   setLlmActivityStatus(statusLabel, { busy: false });
   syncLlmActivityPanelState();
@@ -814,7 +975,7 @@ function startLlmActivityRun({ title, summary, firstStepTitle, firstStepDetail =
   llmActivity.waitingMessages = waitingMessages;
 
   elements.llmActivityTitle.textContent = title;
-  elements.llmActivitySummary.textContent = summary;
+  setAssistantSummary(summary);
   setLlmActivityStatus("运行中", { busy: true });
   elements.llmActivityLog.innerHTML = "";
   syncLlmActivityPanelState();
@@ -861,7 +1022,7 @@ function appendLlmActivityStep(title, detail = "", kind = "info") {
 
 function startLlmActivityWaitingLoop(summary, waitingMessages = []) {
   if (summary) {
-    elements.llmActivitySummary.textContent = summary;
+    setAssistantSummary(summary);
   }
   llmActivity.waitingMessages = waitingMessages;
   llmActivity.waitIndex = 0;
@@ -915,7 +1076,7 @@ function finishLlmActivityRun(message, kind = "success") {
     kind === "error" ? "出错了" : kind === "stopped" ? "已停止" : "已完成",
     { busy: false },
   );
-  elements.llmActivitySummary.textContent = message;
+  setAssistantSummary(message);
   syncLlmActivityPanelState();
   appendLlmActivityStep(
     kind === "error" ? "本次运行中断" : kind === "stopped" ? "本次运行已放弃" : "本次运行完成",
@@ -931,6 +1092,10 @@ function finishLlmActivityRun(message, kind = "success") {
 
 function closeLlmActivityPanel() {
   llmActivity.panelOpen = false;
+  if (elements.llmActivityPanel) {
+    elements.llmActivityPanel.style.width = "";
+    elements.llmActivityPanel.style.transition = "";
+  }
   syncLlmActivityPanelState();
 }
 
@@ -952,9 +1117,25 @@ function syncLlmActivityPanelState() {
 }
 
 function setLlmActivityStatus(label, { busy = false, paused = false } = {}) {
-  elements.llmActivityStatus.textContent = label;
-  elements.llmActivityStatus.classList.toggle("busy", busy);
-  elements.llmActivityStatus.classList.toggle("paused", paused);
+  if (elements.llmActivityStatus) {
+    elements.llmActivityStatus.textContent = label;
+    elements.llmActivityStatus.classList.toggle("busy", busy);
+    elements.llmActivityStatus.classList.toggle("paused", paused);
+  }
+  if (elements.statusPill) {
+    elements.statusPill.textContent = label;
+    elements.statusPill.classList.toggle("busy", busy);
+    elements.statusPill.classList.toggle("paused", paused);
+  }
+}
+
+function setAssistantSummary(message) {
+  if (elements.llmActivitySummary) {
+    elements.llmActivitySummary.textContent = message;
+  }
+  if (elements.statusBox) {
+    elements.statusBox.textContent = message;
+  }
 }
 
 function updateLlmTaskActionState() {
@@ -2929,86 +3110,105 @@ function renderOutline() {
     return;
   }
 
-  const lastStageIndex = state.outline.act_structure.length - 1;
-  const actStructureHtml = (state.outline.act_structure || [])
-    .map((section, index) => `
-      <article class="outline-stage-card">
-        <div class="outline-stage-card-header">
-          <strong>${escapeHtml(section.stage)}</strong>
-          <span class="outline-stage-range">${escapeHtml(section.chapter_range)}</span>
-        </div>
-        <div>${escapeHtml(section.content || "暂无内容概括。")}</div>
-        <div class="outline-stage-editor">
-          <label>
-            起始章
-            <input id="stage-start-${index}" type="number" min="1" max="${state.outline.chapter_count}" value="${section.start_chapter}" ${index === 0 ? "disabled" : ""} />
-          </label>
-          <label>
-            结束章
-            <input id="stage-end-${index}" type="number" min="1" max="${state.outline.chapter_count}" value="${section.end_chapter}" ${index === lastStageIndex ? "disabled" : ""} />
-          </label>
-        </div>
-      </article>
-    `)
-    .join("");
+  const actStructure = Array.isArray(state.outline.act_structure) ? state.outline.act_structure : [];
+  const chapters = Array.isArray(state.outline.chapters) ? state.outline.chapters : [];
+  const inferredDetails = Array.isArray(state.outline.inferred_details) ? state.outline.inferred_details : [];
+  const lastStageIndex = actStructure.length - 1;
+  const synopsisText = state.outline.summary || state.outline.logline || "暂无故事梗概。";
 
-  const timelineHtml = (state.outline.act_structure || [])
-    .map((section) => `
-      <div class="outline-timeline-item">
-        <div>${escapeHtml(section.stage)}</div>
-        <span class="outline-timeline-dot"></span>
-        <div>${escapeHtml(section.chapter_range)}</div>
+  const actStructureHtml = actStructure
+    .map((section, index) => `
+      <div class="arc-col">
+        <div class="arc-title">${escapeHtml(section.stage)}</div>
+        <div class="arc-range">
+          <div class="arc-range-chip">第${section.start_chapter}章</div>
+          <span>—</span>
+          <div class="arc-range-chip">第${section.end_chapter}章</div>
+        </div>
+        <div class="arc-card" id="arc-${index}">
+          <div>${escapeHtml(section.content || "暂无内容概括。")}</div>
+          <div class="outline-stage-editor">
+            <label>
+              起始章
+              <input
+                id="stage-start-${index}"
+                type="number"
+                min="1"
+                max="${state.outline.chapter_count}"
+                value="${section.start_chapter}"
+                ${index === 0 ? "disabled" : ""}
+              />
+            </label>
+            <label>
+              结束章
+              <input
+                id="stage-end-${index}"
+                type="number"
+                min="1"
+                max="${state.outline.chapter_count}"
+                value="${section.end_chapter}"
+                ${index === lastStageIndex ? "disabled" : ""}
+              />
+            </label>
+          </div>
+        </div>
       </div>
     `)
     .join("");
 
-  const chapterCardsHtml = state.outline.chapters
-    .map((chapter) => `
-      <article class="chapter-plan-card">
-        <div><strong>第${chapter.chapter_number}章</strong></div>
-        <div>${escapeHtml(chapter.title)}</div>
-        <div>目标字数：${chapter.target_words}</div>
-        <div>概要：${escapeHtml(chapter.summary || "无")}</div>
-        <div>关键事件：${chapter.key_events?.length ? chapter.key_events.map(escapeHtml).join(" / ") : "无"}</div>
-        <div>章末收束：${escapeHtml(chapter.cliffhanger || "无")}</div>
-      </article>
-    `)
+  const chapterCardsHtml = chapters
+    .map((chapter) => {
+      const keyEvents = Array.isArray(chapter.key_events) && chapter.key_events.length
+        ? chapter.key_events.map((item) => escapeHtml(item)).join(" / ")
+        : "无";
+      return `
+        <div class="chapter-item">
+          <b>第${chapter.chapter_number}章 《${escapeHtml(chapter.title)}》</b>
+          — ${escapeHtml(chapter.summary || "暂无章节概要。")}
+          <br />
+          <span>目标字数：${chapter.target_words || "未设置"} · 关键事件：${keyEvents} · 章末收束：${escapeHtml(chapter.cliffhanger || "无")}</span>
+        </div>
+      `;
+    })
     .join("");
 
   elements.outlineResult.className = "outline-result";
   elements.outlineResult.innerHTML = `
     <div class="outline-board">
-      <article class="outline-summary-card">
-        <div class="outline-summary-meta">
-          <div><strong>标题：</strong>${escapeHtml(state.outline.title)}</div>
-          <div><strong>一句话概述：</strong>${escapeHtml(state.outline.logline)}</div>
-          <div><strong>故事梗概：</strong>${escapeHtml(state.outline.summary)}</div>
-          <div><strong>章节总数：</strong>${state.outline.chapter_count}</div>
-          <div>
-            <strong>LLM 补完信息：</strong>
-            <ul class="inferred-list">
-              ${
-                state.outline.inferred_details.length
-                  ? state.outline.inferred_details.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
-                  : "<li>本轮没有额外补完信息。</li>"
-              }
-            </ul>
+      <div class="outline-hero-card">
+        <div class="synopsis-display">${escapeHtml(synopsisText)}</div>
+        <div class="outline-meta-grid">
+          <div class="outline-meta-card">
+            <strong>标题</strong>
+            <span>${escapeHtml(state.outline.title || "未命名作品")}</span>
+          </div>
+          <div class="outline-meta-card">
+            <strong>一句话概述</strong>
+            <span>${escapeHtml(state.outline.logline || "暂无")}</span>
+          </div>
+          <div class="outline-meta-card">
+            <strong>章节总数</strong>
+            <span>${state.outline.chapter_count} 章</span>
+          </div>
+          <div class="outline-meta-card">
+            <strong>AI 补完信息</strong>
+            <span>${inferredDetails.length ? inferredDetails.map((item) => escapeHtml(item)).join("；") : "本轮没有额外补完信息。"}</span>
           </div>
         </div>
-      </article>
-
-      <div class="action-row">
-        <strong>四段式结构</strong>
-        <button type="button" id="save-stage-ranges" class="ghost-button">保存篇章范围</button>
       </div>
-      <p class="micro-tip">第一段起始章固定为 1；结局段结束章固定为总篇章数；某一段的结束章不能超过下一段的起始章。</p>
 
-      <div class="outline-timeline">${timelineHtml}</div>
-      <div class="outline-stage-grid">${actStructureHtml || ""}</div>
+      <div class="arc-section">
+        <div class="arc-header">
+          <div class="chapter-label">四段结构</div>
+          <button type="button" id="save-stage-ranges" class="ghost-button">保存篇章范围</button>
+        </div>
+        <p class="micro-tip">第一段起始章固定为 1；结局段结束章固定为总篇章数；某一段的结束章不能超过下一段的起始章。</p>
+        <div class="arc-tracks">${actStructureHtml}</div>
+      </div>
 
-      <div>
-        <strong>章节规划</strong>
-        <div class="outline-chapter-grid">${chapterCardsHtml}</div>
+      <div class="chapter-section">
+        <div class="chapter-label">章节规划</div>
+        ${chapterCardsHtml}
       </div>
     </div>
   `;
@@ -3171,9 +3371,18 @@ function saveActStructureEdits(silentSuccess = false) {
 }
 
 function renderStory() {
+  const staticStoryTitle = document.querySelector(".prose-title-bar-static .prose-title");
+  const staticStorySubtitle = document.querySelector(".prose-title-bar-static .prose-chapter-sub");
+
   if (!state.generatedStory) {
     elements.storyResult.className = "story-result empty-state";
     elements.storyResult.textContent = "大纲确认后，这里会依次展示每个篇章的正文。";
+    if (staticStoryTitle) {
+      staticStoryTitle.textContent = "正文生成";
+    }
+    if (staticStorySubtitle) {
+      staticStorySubtitle.textContent = "大纲确认后，可继续润色、局部重写与导出。";
+    }
     closeStorySelectionToolbar({ preserveSelection: false });
     return;
   }
@@ -3183,11 +3392,18 @@ function renderStory() {
   }
 
   const activeChapter = findGeneratedChapter(state.activeChapterNumber) || state.generatedStory.chapters[0];
+  if (staticStoryTitle) {
+    staticStoryTitle.textContent = `《${state.generatedStory.title || state.outline?.title || "未命名作品"}》`;
+  }
+  if (staticStorySubtitle) {
+    staticStorySubtitle.textContent = `第${activeChapter.chapter_number}章 · ${activeChapter.title}`;
+  }
+
   elements.storyResult.className = "story-result";
   elements.storyResult.innerHTML = `
     <div class="story-reader-shell">
       <div class="story-topbar">
-        <div class="story-title-badge">《${escapeHtml(state.generatedStory.title || "我的小说")}》</div>
+        <div class="story-title-badge">章节导航</div>
         <div class="story-chapter-tabs">
           ${state.generatedStory.chapters
             .map((chapter) => `
@@ -3203,23 +3419,25 @@ function renderStory() {
         </div>
       </div>
 
-      <article class="story-chapter-card">
-        <div class="story-chapter-header">
-          <div>
-            <h3>第${activeChapter.chapter_number}章</h3>
-            <div>${escapeHtml(activeChapter.title)}</div>
+      <div class="prose-scroll-area">
+        <article class="chapter-block story-chapter-card">
+          <div class="chapter-block-header story-chapter-header">
+            <div>
+              <div class="chapter-label-en">Chapter ${activeChapter.chapter_number}</div>
+              <div class="chapter-block-title">第${activeChapter.chapter_number}章 · ${escapeHtml(activeChapter.title)}</div>
+            </div>
+            <button type="button" class="btn-export" data-export-chapter="${activeChapter.chapter_number}">导出本章</button>
           </div>
-          <button type="button" class="ghost-button" data-export-chapter="${activeChapter.chapter_number}">导出本章</button>
-        </div>
-        <div class="story-summary"><strong>章节摘要：</strong>${escapeHtml(activeChapter.summary || "无")}</div>
-        <div
-          class="chapter-content"
-          data-chapter-editor="${activeChapter.chapter_number}"
-          data-chapter-number="${activeChapter.chapter_number}"
-        >
-          ${activeChapter.rendered_html || buildChapterContentHtml(activeChapter.content)}
-        </div>
-      </article>
+          <div class="story-summary"><strong>章节摘要：</strong>${escapeHtml(activeChapter.summary || "无")}</div>
+          <div
+            class="chapter-content prose-content"
+            data-chapter-editor="${activeChapter.chapter_number}"
+            data-chapter-number="${activeChapter.chapter_number}"
+          >
+            ${activeChapter.rendered_html || buildChapterContentHtml(activeChapter.content)}
+          </div>
+        </article>
+      </div>
     </div>
   `;
   closeStorySelectionToolbar({ preserveSelection: false });
@@ -3492,24 +3710,30 @@ function normalizeEditorText(value) {
 }
 
 function setBusyState(message) {
-  elements.statusPill.textContent = "处理中";
-  elements.statusPill.classList.add("busy");
-  elements.statusPill.classList.remove("paused");
-  elements.statusBox.textContent = message;
+  setLlmActivityStatus("处理中", { busy: true });
+  setAssistantSummary(message);
+  if (!llmActivity.panelOpen) {
+    llmActivity.panelOpen = true;
+    syncLlmActivityPanelState();
+  }
 }
 
 function setPausedState(message) {
-  elements.statusPill.textContent = "已暂停";
-  elements.statusPill.classList.remove("busy");
-  elements.statusPill.classList.add("paused");
-  elements.statusBox.textContent = message;
+  setLlmActivityStatus("已暂停", { paused: true });
+  setAssistantSummary(message);
+  if (!llmActivity.panelOpen) {
+    llmActivity.panelOpen = true;
+    syncLlmActivityPanelState();
+  }
 }
 
 function setStatus(message, keepBusy = false, isError = false) {
-  elements.statusPill.textContent = isError ? "出错了" : keepBusy ? "处理中" : "就绪";
-  elements.statusPill.classList.toggle("busy", keepBusy);
-  elements.statusPill.classList.remove("paused");
-  elements.statusBox.textContent = message;
+  setLlmActivityStatus(isError ? "出错了" : keepBusy ? "处理中" : "就绪", { busy: keepBusy, paused: false });
+  setAssistantSummary(message);
+  if ((isError || keepBusy) && !llmActivity.panelOpen) {
+    llmActivity.panelOpen = true;
+    syncLlmActivityPanelState();
+  }
 }
 
 async function postJson(url, payload) {

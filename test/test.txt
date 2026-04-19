@@ -1,236 +1,256 @@
 {
   "trigger": "ai_supplement_relations",
-  "generated_at": "2026-04-12T00:48:44",
+  "generated_at": "2026-04-19T14:50:38",
   "counts": {
-    "all_relations": 9,
-    "user_relations": 2,
-    "ai_relations": 7,
-    "latest_ai_added_relations": 4
+    "all_relations": 11,
+    "user_relations": 9,
+    "ai_relations": 2,
+    "latest_ai_added_relations": 2
   },
   "user_relations": [
     {
-      "id": "relation-d9838991-fd07-41d4-902d-adb3072b8c0f",
-      "source_id": "character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "target_id": "character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
-      "label": "盟友",
-      "source_name": "海螺",
-      "target_name": "海葵",
+      "id": "relation-141f639d-c47a-4356-b51f-e97ef57f5ff5",
+      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "label": "暗中提防",
+      "source_name": "奥利弗.费恩",
+      "target_name": "西尔维斯特",
+      "bidirectional": false,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-7d462d99-31b4-4743-b348-ee92eb663b45",
+      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "target_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "label": "朋友",
+      "source_name": "塞巴斯蒂安.霍普",
+      "target_name": "奥利弗.费恩",
       "bidirectional": true,
       "relation_source": "user"
     },
     {
-      "id": "relation-2e11a9f1-e0d2-4acc-9cc2-0b7ea6d89632",
-      "source_id": "character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
-      "target_id": "character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
+      "id": "relation-d19a23fb-01af-4a3c-a84c-4e27aff02169",
+      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "label": "朋友",
+      "source_name": "奥利弗.费恩",
+      "target_name": "塞巴斯蒂安.霍普",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-fd2b1a38-b2ed-405a-81de-b6090c7392d7",
+      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
       "label": "师徒",
-      "source_name": "海葵",
-      "target_name": "海螺",
+      "source_name": "奥利弗.费恩",
+      "target_name": "弗林特.瓦伦丁",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-726982d7-7d28-4441-ba7a-ceeee169b8c9",
+      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "target_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "label": "师徒",
+      "source_name": "弗林特.瓦伦丁",
+      "target_name": "奥利弗.费恩",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-85f18053-df82-4188-b175-314041cee0a3",
+      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "label": "旧友",
+      "source_name": "弗林特.瓦伦丁",
+      "target_name": "塞巴斯蒂安.霍普",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-a217afb8-7c62-47ff-993d-58aa38690b52",
+      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "label": "旧友",
+      "source_name": "塞巴斯蒂安.霍普",
+      "target_name": "弗林特.瓦伦丁",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-ff7d8cd4-2be6-4488-86f4-9b47bd280689",
+      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "label": "暗中提防",
+      "source_name": "弗林特.瓦伦丁",
+      "target_name": "西尔维斯特",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-7d7a6655-8b53-4165-9a56-9bb1fef8809f",
+      "source_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "label": "表面合作",
+      "source_name": "西尔维斯特",
+      "target_name": "弗林特.瓦伦丁",
       "bidirectional": true,
       "relation_source": "user"
     }
   ],
   "ai_relations": [
     {
-      "id": "relation-ai-character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c-character-9bd22080-5692-4d64-ac76-8c6872509895",
-      "source_id": "character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "target_id": "character-9bd22080-5692-4d64-ac76-8c6872509895",
-      "label": "竞争对手",
-      "source_name": "海螺",
-      "target_name": "海蛎",
-      "bidirectional": true,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-9bd22080-5692-4d64-ac76-8c6872509895-character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "source_id": "character-9bd22080-5692-4d64-ac76-8c6872509895",
-      "target_id": "character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "label": "竞争对手",
-      "source_name": "海蛎",
-      "target_name": "海螺",
-      "bidirectional": true,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-9bd22080-5692-4d64-ac76-8c6872509895-character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
-      "source_id": "character-9bd22080-5692-4d64-ac76-8c6872509895",
-      "target_id": "character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
-      "label": "表面合作",
-      "source_name": "海蛎",
-      "target_name": "海葵",
-      "bidirectional": false,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-f3ccabcc-0002-41c8-b9c6-34259260f8ae-character-9bd22080-5692-4d64-ac76-8c6872509895",
-      "source_id": "character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
-      "target_id": "character-9bd22080-5692-4d64-ac76-8c6872509895",
-      "label": "暗中提防",
-      "source_name": "海葵",
-      "target_name": "海蛎",
-      "bidirectional": false,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-274ae85b-0350-4b10-8a2b-c10cd0152560-character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "source_id": "character-274ae85b-0350-4b10-8a2b-c10cd0152560",
-      "target_id": "character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "label": "旧友",
-      "source_name": "角色4",
-      "target_name": "海螺",
-      "bidirectional": true,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c-character-274ae85b-0350-4b10-8a2b-c10cd0152560",
-      "source_id": "character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "target_id": "character-274ae85b-0350-4b10-8a2b-c10cd0152560",
-      "label": "旧友",
-      "source_name": "海螺",
-      "target_name": "角色4",
-      "bidirectional": true,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-274ae85b-0350-4b10-8a2b-c10cd0152560-character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
-      "source_id": "character-274ae85b-0350-4b10-8a2b-c10cd0152560",
-      "target_id": "character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
+      "id": "relation-ai-character-d53a1633-aeac-47f6-ab1d-9914a1917d2a-character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
       "label": "利益同盟",
-      "source_name": "角色4",
-      "target_name": "海葵",
+      "source_name": "塞巴斯蒂安.霍普",
+      "target_name": "西尔维斯特",
+      "bidirectional": false,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-12f1610f-f1f2-4012-a127-520da47f508d-character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "source_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "label": "暗中利用",
+      "source_name": "西尔维斯特",
+      "target_name": "塞巴斯蒂安.霍普",
       "bidirectional": false,
       "relation_source": "ai"
     }
   ],
   "latest_ai_added_relations": [
     {
-      "id": "relation-ai-character-f3ccabcc-0002-41c8-b9c6-34259260f8ae-character-9bd22080-5692-4d64-ac76-8c6872509895",
-      "source_id": "character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
-      "target_id": "character-9bd22080-5692-4d64-ac76-8c6872509895",
-      "label": "暗中提防",
-      "source_name": "海葵",
-      "target_name": "海蛎",
+      "id": "relation-ai-character-d53a1633-aeac-47f6-ab1d-9914a1917d2a-character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "label": "利益同盟",
+      "source_name": "塞巴斯蒂安.霍普",
+      "target_name": "西尔维斯特",
       "bidirectional": false,
       "relation_source": "ai"
     },
     {
-      "id": "relation-ai-character-274ae85b-0350-4b10-8a2b-c10cd0152560-character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "source_id": "character-274ae85b-0350-4b10-8a2b-c10cd0152560",
-      "target_id": "character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "label": "旧友",
-      "source_name": "角色4",
-      "target_name": "海螺",
-      "bidirectional": true,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c-character-274ae85b-0350-4b10-8a2b-c10cd0152560",
-      "source_id": "character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "target_id": "character-274ae85b-0350-4b10-8a2b-c10cd0152560",
-      "label": "旧友",
-      "source_name": "海螺",
-      "target_name": "角色4",
-      "bidirectional": true,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-274ae85b-0350-4b10-8a2b-c10cd0152560-character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
-      "source_id": "character-274ae85b-0350-4b10-8a2b-c10cd0152560",
-      "target_id": "character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
-      "label": "利益同盟",
-      "source_name": "角色4",
-      "target_name": "海葵",
+      "id": "relation-ai-character-12f1610f-f1f2-4012-a127-520da47f508d-character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "source_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "label": "暗中利用",
+      "source_name": "西尔维斯特",
+      "target_name": "塞巴斯蒂安.霍普",
       "bidirectional": false,
       "relation_source": "ai"
     }
   ],
   "all_relations": [
     {
-      "id": "relation-ai-character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c-character-9bd22080-5692-4d64-ac76-8c6872509895",
-      "source_id": "character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "target_id": "character-9bd22080-5692-4d64-ac76-8c6872509895",
-      "label": "竞争对手",
-      "source_name": "海螺",
-      "target_name": "海蛎",
-      "bidirectional": true,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-9bd22080-5692-4d64-ac76-8c6872509895-character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "source_id": "character-9bd22080-5692-4d64-ac76-8c6872509895",
-      "target_id": "character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "label": "竞争对手",
-      "source_name": "海蛎",
-      "target_name": "海螺",
-      "bidirectional": true,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-9bd22080-5692-4d64-ac76-8c6872509895-character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
-      "source_id": "character-9bd22080-5692-4d64-ac76-8c6872509895",
-      "target_id": "character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
-      "label": "表面合作",
-      "source_name": "海蛎",
-      "target_name": "海葵",
-      "bidirectional": false,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-d9838991-fd07-41d4-902d-adb3072b8c0f",
-      "source_id": "character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "target_id": "character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
-      "label": "盟友",
-      "source_name": "海螺",
-      "target_name": "海葵",
-      "bidirectional": true,
-      "relation_source": "user"
-    },
-    {
-      "id": "relation-2e11a9f1-e0d2-4acc-9cc2-0b7ea6d89632",
-      "source_id": "character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
-      "target_id": "character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "label": "师徒",
-      "source_name": "海葵",
-      "target_name": "海螺",
-      "bidirectional": true,
-      "relation_source": "user"
-    },
-    {
-      "id": "relation-ai-character-f3ccabcc-0002-41c8-b9c6-34259260f8ae-character-9bd22080-5692-4d64-ac76-8c6872509895",
-      "source_id": "character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
-      "target_id": "character-9bd22080-5692-4d64-ac76-8c6872509895",
+      "id": "relation-141f639d-c47a-4356-b51f-e97ef57f5ff5",
+      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
       "label": "暗中提防",
-      "source_name": "海葵",
-      "target_name": "海蛎",
+      "source_name": "奥利弗.费恩",
+      "target_name": "西尔维斯特",
+      "bidirectional": false,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-7d462d99-31b4-4743-b348-ee92eb663b45",
+      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "target_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "label": "朋友",
+      "source_name": "塞巴斯蒂安.霍普",
+      "target_name": "奥利弗.费恩",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-d19a23fb-01af-4a3c-a84c-4e27aff02169",
+      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "label": "朋友",
+      "source_name": "奥利弗.费恩",
+      "target_name": "塞巴斯蒂安.霍普",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-fd2b1a38-b2ed-405a-81de-b6090c7392d7",
+      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "label": "师徒",
+      "source_name": "奥利弗.费恩",
+      "target_name": "弗林特.瓦伦丁",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-726982d7-7d28-4441-ba7a-ceeee169b8c9",
+      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "target_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "label": "师徒",
+      "source_name": "弗林特.瓦伦丁",
+      "target_name": "奥利弗.费恩",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-85f18053-df82-4188-b175-314041cee0a3",
+      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "label": "旧友",
+      "source_name": "弗林特.瓦伦丁",
+      "target_name": "塞巴斯蒂安.霍普",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-a217afb8-7c62-47ff-993d-58aa38690b52",
+      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "label": "旧友",
+      "source_name": "塞巴斯蒂安.霍普",
+      "target_name": "弗林特.瓦伦丁",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-ff7d8cd4-2be6-4488-86f4-9b47bd280689",
+      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "label": "暗中提防",
+      "source_name": "弗林特.瓦伦丁",
+      "target_name": "西尔维斯特",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-7d7a6655-8b53-4165-9a56-9bb1fef8809f",
+      "source_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "label": "表面合作",
+      "source_name": "西尔维斯特",
+      "target_name": "弗林特.瓦伦丁",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-ai-character-d53a1633-aeac-47f6-ab1d-9914a1917d2a-character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "label": "利益同盟",
+      "source_name": "塞巴斯蒂安.霍普",
+      "target_name": "西尔维斯特",
       "bidirectional": false,
       "relation_source": "ai"
     },
     {
-      "id": "relation-ai-character-274ae85b-0350-4b10-8a2b-c10cd0152560-character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "source_id": "character-274ae85b-0350-4b10-8a2b-c10cd0152560",
-      "target_id": "character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "label": "旧友",
-      "source_name": "角色4",
-      "target_name": "海螺",
-      "bidirectional": true,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c-character-274ae85b-0350-4b10-8a2b-c10cd0152560",
-      "source_id": "character-e5f8d477-91ec-4b19-9f7d-0ce92c69cf3c",
-      "target_id": "character-274ae85b-0350-4b10-8a2b-c10cd0152560",
-      "label": "旧友",
-      "source_name": "海螺",
-      "target_name": "角色4",
-      "bidirectional": true,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-274ae85b-0350-4b10-8a2b-c10cd0152560-character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
-      "source_id": "character-274ae85b-0350-4b10-8a2b-c10cd0152560",
-      "target_id": "character-f3ccabcc-0002-41c8-b9c6-34259260f8ae",
-      "label": "利益同盟",
-      "source_name": "角色4",
-      "target_name": "海葵",
+      "id": "relation-ai-character-12f1610f-f1f2-4012-a127-520da47f508d-character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "source_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "label": "暗中利用",
+      "source_name": "西尔维斯特",
+      "target_name": "塞巴斯蒂安.霍普",
       "bidirectional": false,
       "relation_source": "ai"
     }
