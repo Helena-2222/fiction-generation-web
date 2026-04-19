@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -14,64 +14,18 @@
   </head>
   <body>
     <div class="app">
-      <aside class="sidebar rail-shell" aria-label="流程导航">
-        <button type="button" class="sidebar-avatar" aria-label="用户">
+      <aside id="sidebar-rail" class="sidebar rail-shell" aria-label="流程导航">
+        <button
+          type="button"
+          id="sidebar-avatar-toggle"
+          class="sidebar-avatar"
+          aria-label="用户"
+          aria-expanded="false"
+          aria-controls="sidebar-detail-panel"
+        >
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <circle cx="10" cy="7.5" r="3"></circle>
             <path d="M4 17c0-3 2.7-5 6-5s6 2 6 5"></path>
-          </svg>
-        </button>
-
-        <button
-          type="button"
-          class="sidebar-icon rail-node is-active"
-          data-stage-target="basic"
-          aria-label="基本信息"
-          title="基本信息"
-        >
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M4 4h12v12H4z"></path>
-            <path d="M7 8h6M7 11h4"></path>
-          </svg>
-        </button>
-        <button
-          type="button"
-          class="sidebar-icon rail-node"
-          data-stage-target="characters"
-          aria-label="角色关系"
-          title="角色关系"
-        >
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <circle cx="10" cy="5.5" r="2.5"></circle>
-            <circle cx="5.5" cy="14.5" r="2"></circle>
-            <circle cx="14.5" cy="14.5" r="2"></circle>
-            <path d="M8.2 7.3 6.5 12"></path>
-            <path d="M11.8 7.3 13.5 12"></path>
-            <path d="M7.4 14.5h5.2"></path>
-          </svg>
-        </button>
-        <button
-          type="button"
-          class="sidebar-icon rail-node"
-          data-stage-target="outline"
-          aria-label="大纲生成"
-          title="大纲生成"
-        >
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M5 4.5h10v11H5z"></path>
-            <path d="M7.5 8h5M7.5 11h5M7.5 14h3.5"></path>
-          </svg>
-        </button>
-        <button
-          type="button"
-          class="sidebar-icon rail-node"
-          data-stage-target="story"
-          aria-label="正文生成"
-          title="正文生成"
-        >
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M5 4.5h10v11H5z"></path>
-            <path d="M7.5 8h5M7.5 11h5M7.5 14h5"></path>
           </svg>
         </button>
 
@@ -83,6 +37,32 @@
             <path d="M10 3v2M10 15v2M3 10h2M15 10h2M5.05 5.05l1.41 1.41M13.54 13.54l1.41 1.41M5.05 14.95l1.41-1.41M13.54 6.46l1.41-1.41"></path>
           </svg>
         </button>
+
+        <div id="sidebar-detail-panel" class="sidebar-detail-panel" aria-hidden="true">
+          <div class="sidebar-detail-scroll">
+            <div class="sidebar-profile-card">
+              <div class="sidebar-profile-avatar" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="10" cy="7.5" r="3"></circle>
+                  <path d="M4 17c0-3 2.7-5 6-5s6 2 6 5"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="sidebar-profile-name">创作者</div>
+                <p class="sidebar-profile-note">喜欢的句子会保存在这里，方便之后回看。</p>
+              </div>
+            </div>
+
+            <section class="sidebar-module">
+              <div class="sidebar-module-header">
+                <h3>我的收藏</h3>
+                <span id="favorite-count-badge" class="sidebar-count-badge">0</span>
+              </div>
+              <p class="sidebar-module-tip">在正文里选中句子后，点击爱心即可加入收藏。</p>
+              <div id="favorite-list" class="favorite-list"></div>
+            </section>
+          </div>
+        </div>
       </aside>
 
       <div class="main-col">
@@ -167,15 +147,14 @@
                 <div class="form-section">
                   <div class="form-label">篇幅设定</div>
                   <div class="metrics-stack">
-                    <div class="char-input-group">
-                      <label class="char-input-label" for="total-words">整体篇幅 <span class="inline-required">*</span></label>
-                      <div class="metric-input-shell metric-input-shell-wide">
-                        <input id="total-words" class="input-field" type="number" min="1000" step="100" value="12000" required />
-                        <span class="input-unit">字</span>
+                    <div class="metrics-row">
+                      <div class="char-input-group">
+                        <label class="char-input-label" for="total-words">整体篇幅 <span class="inline-required">*</span></label>
+                        <div class="metric-input-shell">
+                          <input id="total-words" class="input-field" type="number" min="1000" step="100" value="12000" required />
+                          <span class="input-unit">字</span>
+                        </div>
                       </div>
-                    </div>
-
-                    <div class="metrics-grid">
                       <div class="char-input-group">
                         <label class="char-input-label" for="chapter-words">每章目标字数</label>
                         <div class="metric-input-shell">
@@ -216,7 +195,7 @@
 
                 <div class="relationship-area relation-panel" id="rel-area">
                   <div class="rel-resize-handle" id="rel-resize-handle" title="拖拽调整面板宽度"></div>
-                  <div class="rel-label">角色关系图 · 点击节点拖拽连线</div>
+                  <div class="rel-label">角色关系地图 · 可连线 · 可缩放</div>
 
                   <div class="graph-wrap">
                     <div id="graph-canvas" class="graph-canvas rel-canvas">
@@ -253,7 +232,6 @@
                               <path d="M7 4v3l2 2"></path>
                             </svg>
                           </span>
-                          <span class="icon-btn-label">历史记录</span>
                         </button>
 
                         <button type="button" id="regenerate-outline" class="icon-btn-wrap icon-button" title="重新生成" aria-label="重新生成" disabled>
@@ -263,7 +241,6 @@
                               <path d="M10 4 8 7l2 3"></path>
                             </svg>
                           </span>
-                          <span class="icon-btn-label">重新生成</span>
                         </button>
 
                         <button type="button" id="export-outline" class="icon-btn-wrap icon-button" title="导出大纲" aria-label="导出大纲" disabled>
@@ -272,7 +249,6 @@
                               <path d="M2 10v2h10v-2M7 2v7M4 6l3 3 3-3"></path>
                             </svg>
                           </span>
-                          <span class="icon-btn-label">导出大纲</span>
                         </button>
                       </div>
 
@@ -282,16 +258,6 @@
                 </div>
 
                 <div id="outline-result" class="outline-result empty-state">还没有生成大纲。</div>
-
-                <div class="outline-feedback-shell">
-                  <label for="outline-feedback">重生成反馈</label>
-                  <textarea
-                    id="outline-feedback"
-                    class="textarea-field textarea-compact"
-                    rows="3"
-                    placeholder="如果想调整大纲，可以补充方向，例如：加强情感张力、减少支线、增加悬疑误导。"
-                  ></textarea>
-                </div>
               </div>
             </section>
 
@@ -300,7 +266,6 @@
                 <div class="prose-title-bar prose-title-bar-static">
                   <div class="prose-title-info">
                     <span class="prose-title">正文生成</span>
-                    <span class="prose-chapter-sub">大纲确认后，可继续润色、局部重写与导出。</span>
                   </div>
                   <div class="prose-actions">
                     <button type="button" id="export-all-story" class="btn-export-main" disabled>导出全书</button>
@@ -336,9 +301,17 @@
 
             <ol id="llm-activity-log" class="neuro-body llm-activity-log"></ol>
 
-            <div class="neuro-input-row">
-              <div class="neuro-input-shell" aria-hidden="true">
-                <div class="neuro-input-placeholder">故事正在这里留下轨迹……</div>
+            <div id="neuro-input-row" class="neuro-input-row">
+              <div class="neuro-input-shell">
+                <label id="neuro-input-label" class="neuro-input-label hidden" for="outline-feedback">改进意见</label>
+                <p id="neuro-input-hint" class="neuro-input-hint hidden">首版大纲生成后，你可以在这里填写改进意见。</p>
+                <textarea
+                  id="outline-feedback"
+                  class="textarea-field textarea-compact neuro-feedback-input hidden"
+                  rows="4"
+                  placeholder="如果想调整大纲，可以在这里补充方向，例如：加强情感张力、减少支线、增加悬疑误导。"
+                ></textarea>
+                <div id="neuro-input-placeholder" class="neuro-input-placeholder">故事正在这里留下轨迹……</div>
               </div>
             </div>
           </aside>
@@ -349,7 +322,14 @@
     <div id="story-selection-toolbar" class="story-selection-toolbar hidden" aria-hidden="true">
       <button type="button" id="story-selection-edit" class="sel-btn">手动编辑</button>
       <button type="button" id="story-selection-regenerate" class="sel-btn">AI局部重写</button>
+      <button type="button" id="story-selection-favorite" class="sel-btn sel-btn-icon" aria-label="喜欢" title="喜欢">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+          <path d="M10 16.2 4.7 11.5a3.5 3.5 0 0 1 5-4.9L10 7l.3-.4a3.5 3.5 0 0 1 5 4.9L10 16.2Z"></path>
+        </svg>
+      </button>
     </div>
+
+    <div id="favorite-toast" class="favorite-toast hidden" aria-live="polite" aria-hidden="true"></div>
 
     <div id="story-edit-modal" class="modal-overlay hidden" aria-hidden="true">
       <div class="modal-card">

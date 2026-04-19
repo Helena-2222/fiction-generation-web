@@ -6,14 +6,14 @@ const CHARACTER_DOSSIER_FIELDS = [
   { key: "age", label: "年龄", type: "text", span: "half" },
   { key: "nationality", label: "国籍/种族", type: "text", span: "half" },
   { key: "occupation", label: "身份/职业", type: "text", span: "full" },
-  { key: "personality", label: "性格", type: "textarea", span: "full" },
-  { key: "core_motivation", label: "核心动机", type: "textarea", span: "full" },
-  { key: "inner_conflict", label: "内在冲突", type: "textarea", span: "full" },
-  { key: "strengths", label: "强项", type: "textarea", span: "full" },
-  { key: "weaknesses", label: "弱点", type: "textarea", span: "full" },
-  { key: "character_arc", label: "人物弧光", hint: "人物成长变化", type: "textarea", span: "full" },
-  { key: "appearance", label: "外在特征", type: "textarea", span: "full" },
-  { key: "speaking_style", label: "说话风格", type: "textarea", span: "full" },
+  { key: "personality", label: "性格", type: "textarea", span: "half" },
+  { key: "core_motivation", label: "核心动机", type: "textarea", span: "half" },
+  { key: "inner_conflict", label: "内在冲突", type: "textarea", span: "half" },
+  { key: "strengths", label: "强项", type: "textarea", span: "half" },
+  { key: "weaknesses", label: "弱点", type: "textarea", span: "half" },
+  { key: "character_arc", label: "人物弧光", hint: "人物成长变化", type: "textarea", span: "half" },
+  { key: "appearance", label: "外在特征", type: "textarea", span: "half" },
+  { key: "speaking_style", label: "说话风格", type: "textarea", span: "half" },
 ];
 const STAGE_ORDER = ["开端", "发展", "高潮", "结局"];
 const STAGE_META = {
@@ -26,15 +26,20 @@ const WORKSPACE_STORAGE_KEY = "story-generation-workspace-v3";
 const STORY_GUIDE_STORAGE_KEY = "story-generation-neuro-guides-v1";
 const LLM_TASK_POLL_INTERVAL_MS = 1400;
 const GRAPH = {
-  nodeWidth: 154,
-  nodeHeight: 76,
+  nodeWidth: 116,
+  nodeHeight: 62,
   curveOffset: 54,
-  gapX: 60,
-  gapY: 54,
+  gapX: 96,
+  gapY: 72,
   paddingX: 32,
   paddingY: 40,
-  minGapX: 24,
+  minGapX: 40,
   minHeight: 440,
+  minScale: 0.75,
+  maxScale: 2.4,
+  wheelZoomStrength: 0.0015,
+  labelOffset: 30,
+  panPadding: 72,
   nodeColors: [
     { fill: "#ffe27d", stroke: "#f1c94c", text: "#614b12", shadow: "rgba(241, 201, 76, 0.24)" },
     { fill: "#ff9aa1", stroke: "#ff7c85", text: "#662c33", shadow: "rgba(255, 124, 133, 0.24)" },
@@ -59,12 +64,37 @@ const state = {
   outline: null,
   generatedStory: null,
   storySelection: null,
+  favoriteQuotes: [],
+  sidebarProfileOpen: false,
+  graphView: {
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+  },
+  graphPan: null,
   pendingEdge: null,
   relationEditor: null,
   relationDeleteRequest: null,
+  characterCreationHistory: [],
 };
 
 let nextCharacterColorIndex = 0;
+let graphResizeObserver = null;
+let graphRenderFrame = 0;
+let favoriteToastTimer = null;
+const FAVORITE_BUTTON_ICONS = {
+  favorite: `
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+      <path d="M10 16.2 4.7 11.5a3.5 3.5 0 0 1 5-4.9L10 7l.3-.4a3.5 3.5 0 0 1 5 4.9L10 16.2Z"></path>
+    </svg>
+  `,
+  unfavorite: `
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+      <path d="M10 15.4 5.4 11.2a3.1 3.1 0 0 1 4.4-4.4L10 7l.2-.2a3.1 3.1 0 0 1 4.4 4.4L10 15.4Z"></path>
+      <path d="M5 5 15 15"></path>
+    </svg>
+  `,
+};
 const llmActivity = {
   active: false,
   runId: 0,
@@ -81,6 +111,11 @@ const llmTaskController = {
 };
 
 const elements = {
+  sidebar: document.querySelector("#sidebar-rail"),
+  sidebarAvatarToggle: document.querySelector("#sidebar-avatar-toggle"),
+  sidebarDetailPanel: document.querySelector("#sidebar-detail-panel"),
+  favoriteList: document.querySelector("#favorite-list"),
+  favoriteCountBadge: document.querySelector("#favorite-count-badge"),
   stageSections: Array.from(document.querySelectorAll("[data-stage-screen]")),
   stageNavButtons: Array.from(document.querySelectorAll(".stage-tab")),
   railStageButtons: Array.from(document.querySelectorAll(".rail-node[data-stage-target]")),
@@ -97,6 +132,7 @@ const elements = {
   worldviewPhysical: document.querySelector("#worldview-physical"),
   worldviewSocial: document.querySelector("#worldview-social"),
   characterList: document.querySelector("#character-list"),
+  graphWrap: document.querySelector(".graph-wrap"),
   graphCanvas: document.querySelector("#graph-canvas"),
   graphSvg: document.querySelector("#graph-svg"),
   graphNodes: document.querySelector("#graph-nodes"),
@@ -131,6 +167,10 @@ const elements = {
   llmActivityPanel: document.querySelector("#llm-activity-panel"),
   neuroStageLabel: document.querySelector("#neuro-stage-label"),
   neuroDragHandle: document.querySelector("#neuro-drag-handle"),
+  neuroInputRow: document.querySelector("#neuro-input-row"),
+  neuroInputLabel: document.querySelector("#neuro-input-label"),
+  neuroInputHint: document.querySelector("#neuro-input-hint"),
+  neuroInputPlaceholder: document.querySelector("#neuro-input-placeholder"),
   llmActivityTitle: document.querySelector("#llm-activity-title"),
   llmActivityClose: document.querySelector("#llm-activity-close"),
   llmActivityToggle: document.querySelector("#llm-activity-toggle"),
@@ -151,8 +191,10 @@ const elements = {
   outlineHistoryClose: document.querySelector("#outline-history-close"),
   outlineHistoryList: document.querySelector("#outline-history-list"),
   storySelectionToolbar: document.querySelector("#story-selection-toolbar"),
+  storySelectionFavorite: document.querySelector("#story-selection-favorite"),
   storySelectionEdit: document.querySelector("#story-selection-edit"),
   storySelectionRegenerate: document.querySelector("#story-selection-regenerate"),
+  favoriteToast: document.querySelector("#favorite-toast"),
   storyEditModal: document.querySelector("#story-edit-modal"),
   storyEditClose: document.querySelector("#story-edit-close"),
   storyEditCancel: document.querySelector("#story-edit-cancel"),
@@ -165,6 +207,23 @@ function generateId(prefix) {
     return `${prefix}-${window.crypto.randomUUID()}`;
   }
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function normalizeFavoriteQuote(item) {
+  const text = String(item?.text || "").trim();
+  if (!text) {
+    return null;
+  }
+
+  return {
+    id: item?.id || generateId("favorite"),
+    storyTitle: String(item?.storyTitle || "").trim(),
+    chapterNumber: Number(item?.chapterNumber) || null,
+    startOffset: Number(item?.startOffset) || 0,
+    endOffset: Number(item?.endOffset) || 0,
+    text,
+    createdAt: item?.createdAt || new Date().toISOString(),
+  };
 }
 
 function createCharacter(index) {
@@ -337,7 +396,8 @@ function orderCharacterGraphSlotsFromCenter(slots) {
 function arrangeCharacterGraph() {
   const layout = calculateCharacterGraphLayout(state.characters.length);
   if (elements.graphCanvas) {
-    elements.graphCanvas.style.height = `${layout.height}px`;
+    const viewportHeight = elements.graphWrap?.clientHeight || 0;
+    elements.graphCanvas.style.height = `${Math.max(layout.height, viewportHeight)}px`;
   }
 
   state.characters.forEach((character, index) => {
@@ -349,6 +409,190 @@ function arrangeCharacterGraph() {
     character.graph_y = position.y;
     getCharacterGraphColor(character, index);
   });
+}
+
+function queueGraphRender() {
+  if (graphRenderFrame) {
+    return;
+  }
+
+  graphRenderFrame = window.requestAnimationFrame(() => {
+    graphRenderFrame = 0;
+    renderGraph();
+  });
+}
+
+function setupGraphResizeObserver() {
+  if (!elements.graphWrap || typeof ResizeObserver !== "function" || graphResizeObserver) {
+    return;
+  }
+
+  let lastWidth = 0;
+  let lastHeight = 0;
+  graphResizeObserver = new ResizeObserver((entries) => {
+    const entry = entries[0];
+    if (!entry) {
+      return;
+    }
+
+    const width = Math.round(entry.contentRect.width);
+    const height = Math.round(entry.contentRect.height);
+    if (!width || !height || (width === lastWidth && height === lastHeight)) {
+      return;
+    }
+
+    lastWidth = width;
+    lastHeight = height;
+    queueGraphRender();
+  });
+  graphResizeObserver.observe(elements.graphWrap);
+}
+
+function clampGraphViewport() {
+  const width = elements.graphCanvas?.clientWidth || 0;
+  const height = elements.graphCanvas?.clientHeight || 0;
+  const scale = clamp(state.graphView.scale || 1, GRAPH.minScale, GRAPH.maxScale);
+  state.graphView.scale = scale;
+
+  if (!width || !height) {
+    state.graphView.scale = 1;
+    state.graphView.offsetX = 0;
+    state.graphView.offsetY = 0;
+    return;
+  }
+
+  const bounds = getGraphContentBounds();
+  const minOffsetX = width + GRAPH.panPadding - bounds.maxX * scale;
+  const maxOffsetX = GRAPH.panPadding - bounds.minX * scale;
+  const minOffsetY = height + GRAPH.panPadding - bounds.maxY * scale;
+  const maxOffsetY = GRAPH.panPadding - bounds.minY * scale;
+
+  state.graphView.offsetX = clamp(
+    state.graphView.offsetX,
+    Math.min(minOffsetX, maxOffsetX),
+    Math.max(minOffsetX, maxOffsetX),
+  );
+  state.graphView.offsetY = clamp(
+    state.graphView.offsetY,
+    Math.min(minOffsetY, maxOffsetY),
+    Math.max(minOffsetY, maxOffsetY),
+  );
+}
+
+function getGraphContentBounds() {
+  if (!state.characters.length) {
+    const width = elements.graphCanvas?.clientWidth || 0;
+    const height = elements.graphCanvas?.clientHeight || 0;
+    return {
+      minX: 0,
+      maxX: width,
+      minY: 0,
+      maxY: height,
+    };
+  }
+
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  state.characters.forEach((character) => {
+    minX = Math.min(minX, character.graph_x);
+    minY = Math.min(minY, character.graph_y);
+    maxX = Math.max(maxX, character.graph_x + GRAPH.nodeWidth);
+    maxY = Math.max(maxY, character.graph_y + GRAPH.nodeHeight);
+  });
+
+  return {
+    minX: minX - GRAPH.panPadding,
+    maxX: maxX + GRAPH.panPadding,
+    minY: minY - GRAPH.panPadding,
+    maxY: maxY + GRAPH.panPadding,
+  };
+}
+
+function applyGraphViewport() {
+  clampGraphViewport();
+  const { scale, offsetX, offsetY } = state.graphView;
+  const transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+
+  [elements.graphSvg, elements.graphNodes, elements.relationLabels].forEach((layer) => {
+    if (!layer) {
+      return;
+    }
+    layer.style.transform = transform;
+  });
+}
+
+function getGraphLocalPointFromClient(clientX, clientY) {
+  const interactionSurface = elements.graphWrap || elements.graphCanvas;
+  const rect = interactionSurface.getBoundingClientRect();
+  const width = elements.graphCanvas.clientWidth || rect.width || 0;
+  const height = elements.graphCanvas.clientHeight || rect.height || 0;
+  return {
+    x: clamp(clientX - rect.left, 0, width),
+    y: clamp(clientY - rect.top, 0, height),
+  };
+}
+
+function handleGraphWheel(event) {
+  if (!elements.graphWrap || !elements.graphCanvas) {
+    return;
+  }
+
+  event.preventDefault();
+  const point = getGraphLocalPointFromClient(event.clientX, event.clientY);
+  const previousScale = state.graphView.scale || 1;
+  const nextScale = clamp(
+    previousScale * Math.exp(-event.deltaY * GRAPH.wheelZoomStrength),
+    GRAPH.minScale,
+    GRAPH.maxScale,
+  );
+
+  if (Math.abs(nextScale - previousScale) < 0.001) {
+    return;
+  }
+
+  const graphX = (point.x - state.graphView.offsetX) / previousScale;
+  const graphY = (point.y - state.graphView.offsetY) / previousScale;
+  state.graphView.scale = nextScale;
+  state.graphView.offsetX = point.x - graphX * nextScale;
+  state.graphView.offsetY = point.y - graphY * nextScale;
+  applyGraphViewport();
+}
+
+function syncNeuroInputState() {
+  if (
+    !elements.outlineFeedback ||
+    !elements.neuroInputRow ||
+    !elements.neuroInputLabel ||
+    !elements.neuroInputHint ||
+    !elements.neuroInputPlaceholder
+  ) {
+    return;
+  }
+
+  const isOutlineStage = state.currentStage === "outline";
+  const hasOutline = Boolean(state.outline);
+
+  elements.neuroInputRow.classList.toggle("is-feedback-mode", isOutlineStage);
+  elements.neuroInputLabel.classList.toggle("hidden", !isOutlineStage);
+  elements.neuroInputHint.classList.toggle("hidden", !isOutlineStage);
+  elements.outlineFeedback.classList.toggle("hidden", !isOutlineStage);
+  elements.neuroInputPlaceholder.classList.toggle("hidden", isOutlineStage);
+
+  if (!isOutlineStage) {
+    elements.outlineFeedback.disabled = false;
+    return;
+  }
+
+  elements.neuroInputHint.textContent = hasOutline
+    ? "在这里补充修改方向，然后点击“重新生成”。"
+    : "首版大纲生成后，你可以在这里填写改进意见。";
+  elements.outlineFeedback.placeholder = hasOutline
+    ? "如果想调整大纲，可以在这里补充方向，例如：加强情感张力、减少支线、增加悬疑误导。"
+    : "生成首版大纲后，可在这里填写改进意见。";
+  elements.outlineFeedback.disabled = !hasOutline;
 }
 
 function init() {
@@ -367,18 +611,13 @@ function init() {
   bindStageNavigation();
   elements.totalWords.addEventListener("input", updateChapterEstimate);
   elements.chapterWords.addEventListener("input", updateChapterEstimate);
+  elements.sidebarAvatarToggle?.addEventListener("click", toggleSidebarProfile);
+  elements.favoriteList?.addEventListener("click", handleFavoriteListClick);
   elements.goToCharacters.addEventListener("click", () => {
     setCurrentStage("characters");
     maybeShowCharacterGuide();
   });
-  elements.addCharacter.addEventListener("click", () => {
-    state.characters.push(createCharacter(state.characters.length));
-    state.activeCharacterId = state.characters[state.characters.length - 1]?.id || state.activeCharacterId;
-    arrangeCharacterGraph();
-    renderCharacters();
-    renderGraph();
-    markStoryDraftDirty();
-  });
+  elements.addCharacter.addEventListener("click", addCharacter);
   elements.storyForm.addEventListener("submit", handleOutlineSubmit);
   elements.saveRelations.addEventListener("click", handleSaveRelations);
   elements.supplementRelations.addEventListener("click", handleAiRelationSupplement);
@@ -394,6 +633,7 @@ function init() {
       closeOutlineHistoryModal();
     }
   });
+  elements.storySelectionFavorite.addEventListener("click", handleStorySelectionFavorite);
   elements.storySelectionEdit.addEventListener("click", openStoryEditModal);
   elements.storySelectionRegenerate.addEventListener("click", handleStorySelectionRegenerate);
   elements.storySelectionToolbar.addEventListener("mousedown", (event) => {
@@ -445,7 +685,7 @@ function init() {
       closeLlmTaskPauseModal();
     }
   });
-  window.addEventListener("resize", renderGraph);
+  window.addEventListener("resize", queueGraphRender);
   window.addEventListener("resize", syncResponsiveLayout);
   window.addEventListener("resize", () => {
     positionStorySelectionToolbar();
@@ -455,15 +695,18 @@ function init() {
   document.addEventListener("keydown", handleGlobalKeyDown);
   setupPanelInteractions();
   setupGraphInteractions();
+  setupGraphResizeObserver();
   updateChapterEstimate();
   renderCharacters();
   renderGraph();
   renderOutline();
   renderStory();
   renderOutlineHistory();
+  renderFavorites();
   updateRelationActionState();
   updateOutputActionState();
   syncLlmActivityPanelState();
+  syncSidebarProfileState();
   syncStageMarkers();
   syncResponsiveLayout();
   setCurrentStage(state.currentStage || "basic", { scroll: false, keepSelection: true });
@@ -531,7 +774,160 @@ function syncStageMarkers() {
     elements.neuroStageLabel.textContent = stageMeta.label;
   }
 
+  syncNeuroInputState();
   syncResponsiveLayout();
+}
+
+function toggleSidebarProfile() {
+  state.sidebarProfileOpen = !state.sidebarProfileOpen;
+  syncSidebarProfileState();
+  saveWorkspaceSnapshot();
+}
+
+function syncSidebarProfileState() {
+  if (!elements.sidebar || !elements.sidebarAvatarToggle || !elements.sidebarDetailPanel) {
+    return;
+  }
+
+  elements.sidebar.classList.toggle("is-panel-open", state.sidebarProfileOpen);
+  elements.sidebarAvatarToggle.classList.toggle("is-active", state.sidebarProfileOpen);
+  elements.sidebarAvatarToggle.setAttribute("aria-expanded", state.sidebarProfileOpen ? "true" : "false");
+  elements.sidebarDetailPanel.setAttribute("aria-hidden", state.sidebarProfileOpen ? "false" : "true");
+}
+
+function renderFavorites() {
+  if (!elements.favoriteList || !elements.favoriteCountBadge) {
+    return;
+  }
+
+  elements.favoriteCountBadge.textContent = String(state.favoriteQuotes.length);
+  if (!state.favoriteQuotes.length) {
+    elements.favoriteList.innerHTML = `<div class="favorite-empty">还没有收藏句子。去正文里选中喜欢的句子试试看。</div>`;
+    return;
+  }
+
+  const storyGroups = groupFavoritesByStoryAndChapter(state.favoriteQuotes);
+  elements.favoriteList.innerHTML = storyGroups
+    .map((storyGroup) => `
+      <section class="favorite-story-group">
+        <div class="favorite-story-title">${escapeHtml(storyGroup.storyTitle)}</div>
+        <div class="favorite-chapter-list">
+          ${storyGroup.chapters
+            .map((chapterGroup) => `
+              <section class="favorite-chapter-group">
+                <div class="favorite-chapter-header">
+                  <span class="favorite-item-tag">${escapeHtml(chapterGroup.chapterLabel)}</span>
+                </div>
+                <div class="favorite-quote-list">
+                  ${chapterGroup.items
+                    .map((item) => `
+                      <article class="favorite-item">
+                        <div class="favorite-item-meta">
+                          <div class="favorite-item-meta-main">
+                            <time>${escapeHtml(formatFavoriteTime(item.createdAt))}</time>
+                          </div>
+                          <button
+                            type="button"
+                            class="favorite-remove-button"
+                            data-remove-favorite="${escapeHtml(item.id)}"
+                            aria-label="删除收藏"
+                            title="删除收藏"
+                          >
+                            删除
+                          </button>
+                        </div>
+                        <p class="favorite-item-text">“${escapeHtml(item.text)}”</p>
+                      </article>
+                    `)
+                    .join("")}
+                </div>
+              </section>
+            `)
+            .join("")}
+        </div>
+      </section>
+    `)
+    .join("");
+}
+
+function groupFavoritesByStoryAndChapter(favorites) {
+  const defaultStoryTitle = state.generatedStory?.title || state.outline?.title || "未命名作品";
+  const storyMap = new Map();
+
+  favorites.forEach((item) => {
+    const storyTitle = String(item.storyTitle || defaultStoryTitle).trim() || defaultStoryTitle;
+    const chapterKey = Number.isFinite(Number(item.chapterNumber))
+      ? `chapter-${Number(item.chapterNumber)}`
+      : "chapter-body";
+    const chapterLabel = Number.isFinite(Number(item.chapterNumber))
+      ? `第${Number(item.chapterNumber)}章`
+      : "正文";
+
+    if (!storyMap.has(storyTitle)) {
+      storyMap.set(storyTitle, {
+        storyTitle,
+        chapters: new Map(),
+      });
+    }
+
+    const storyGroup = storyMap.get(storyTitle);
+    if (!storyGroup.chapters.has(chapterKey)) {
+      storyGroup.chapters.set(chapterKey, {
+        chapterLabel,
+        chapterOrder: Number.isFinite(Number(item.chapterNumber)) ? Number(item.chapterNumber) : Number.MAX_SAFE_INTEGER,
+        items: [],
+      });
+    }
+
+    storyGroup.chapters.get(chapterKey).items.push(item);
+  });
+
+  return Array.from(storyMap.values()).map((storyGroup) => ({
+    storyTitle: storyGroup.storyTitle,
+    chapters: Array.from(storyGroup.chapters.values()).sort((left, right) => left.chapterOrder - right.chapterOrder),
+  }));
+}
+
+function handleFavoriteListClick(event) {
+  const removeButton = event.target.closest?.("[data-remove-favorite]");
+  if (!removeButton) {
+    return;
+  }
+
+  const favoriteId = removeButton.dataset.removeFavorite;
+  if (!favoriteId) {
+    return;
+  }
+
+  removeFavoriteById(favoriteId);
+}
+
+function removeFavoriteById(favoriteId, { showToast = true, toastMessage = "已删除收藏" } = {}) {
+  const favoriteQuote = state.favoriteQuotes.find((item) => item.id === favoriteId);
+  if (!favoriteQuote) {
+    return false;
+  }
+
+  state.favoriteQuotes = state.favoriteQuotes.filter((item) => item.id !== favoriteId);
+  renderFavorites();
+  removeFavoriteMarkup(favoriteQuote);
+  syncStorySelectionFavoriteButtonState();
+  saveWorkspaceSnapshot();
+  if (showToast) {
+    showFavoriteToast(toastMessage);
+  }
+  return true;
+}
+
+function formatFavoriteTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "刚刚";
+  }
+  return date.toLocaleDateString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+  });
 }
 
 function setupPanelInteractions() {
@@ -641,6 +1037,7 @@ function setupRelationshipPanelResize() {
 
     relationArea.style.width = `${nextWidth}px`;
     relationArea.style.flex = "none";
+    queueGraphRender();
 
     if (charEditor) {
       charEditor.classList.toggle("char-compact", nextWidth >= maxWidth - 4);
@@ -684,6 +1081,7 @@ function syncResponsiveLayout() {
     relationArea.style.width = "";
     relationArea.style.flex = "";
     charEditor.classList.remove("char-compact");
+    queueGraphRender();
     return;
   }
 
@@ -694,8 +1092,10 @@ function syncResponsiveLayout() {
     relationArea.style.width = `${width}px`;
     relationArea.style.flex = "none";
     charEditor.classList.toggle("char-compact", width >= maxWidth - 4);
+    queueGraphRender();
   } else {
     charEditor.classList.remove("char-compact");
+    queueGraphRender();
   }
 }
 
@@ -796,6 +1196,12 @@ function buildWorkspaceSnapshot() {
     currentStage: state.currentStage,
     activeCharacterId: state.activeCharacterId,
     activeChapterNumber: state.activeChapterNumber,
+    sidebarProfileOpen: state.sidebarProfileOpen,
+    graphView: {
+      scale: state.graphView.scale,
+      offsetX: state.graphView.offsetX,
+      offsetY: state.graphView.offsetY,
+    },
     outlineHistory: state.outlineHistory,
     characters: state.characters.map((character) => ({
       ...character,
@@ -810,6 +1216,7 @@ function buildWorkspaceSnapshot() {
     isStorySaved: state.isStorySaved,
     outline: state.outline,
     generatedStory: state.generatedStory,
+    favoriteQuotes: state.favoriteQuotes.map((item) => ({ ...item })),
     form: {
       customGenre: elements.customGenre.value,
       customStyle: elements.customStyle.value,
@@ -836,6 +1243,13 @@ function applyWorkspaceSnapshot(snapshot) {
   state.activeChapterNumber = Number.isInteger(Number(snapshot.activeChapterNumber))
     ? Number(snapshot.activeChapterNumber)
     : null;
+  state.sidebarProfileOpen = Boolean(snapshot.sidebarProfileOpen);
+  state.graphView = {
+    scale: clamp(Number(snapshot.graphView?.scale) || 1, GRAPH.minScale, GRAPH.maxScale),
+    offsetX: Number(snapshot.graphView?.offsetX) || 0,
+    offsetY: Number(snapshot.graphView?.offsetY) || 0,
+  };
+  state.characterCreationHistory = [];
   state.outlineHistory = Array.isArray(snapshot.outlineHistory)
     ? snapshot.outlineHistory.map((entry) => normalizeOutlineHistoryEntry(entry)).filter(Boolean)
     : [];
@@ -867,6 +1281,9 @@ function applyWorkspaceSnapshot(snapshot) {
   state.generatedStory = snapshot.generatedStory && typeof snapshot.generatedStory === "object"
     ? normalizeGeneratedStory(snapshot.generatedStory, state.outline?.title || "")
     : null;
+  state.favoriteQuotes = Array.isArray(snapshot.favoriteQuotes)
+    ? snapshot.favoriteQuotes.map((item) => normalizeFavoriteQuote(item)).filter(Boolean)
+    : [];
   if (!getCharacterById(state.activeCharacterId)) {
     state.activeCharacterId = state.characters[0]?.id || null;
   }
@@ -1071,7 +1488,9 @@ function scheduleLlmActivityAutoClose(delayMs = 2000) {
 
 function finishLlmActivityRun(message, kind = "success") {
   stopLlmActivityWaitingLoop();
+  stopLlmActivityAutoClose();
   llmActivity.active = false;
+  llmActivity.panelOpen = true;
   setLlmActivityStatus(
     kind === "error" ? "出错了" : kind === "stopped" ? "已停止" : "已完成",
     { busy: false },
@@ -1083,11 +1502,6 @@ function finishLlmActivityRun(message, kind = "success") {
     message,
     kind === "stopped" ? "stopped" : kind,
   );
-  if (kind === "success") {
-    scheduleLlmActivityAutoClose();
-  } else {
-    stopLlmActivityAutoClose();
-  }
 }
 
 function closeLlmActivityPanel() {
@@ -1511,35 +1925,25 @@ function renderCharacters() {
 
   const tabs = document.createElement("div");
   tabs.className = "character-tabs";
+  const mainRow = document.createElement("div");
+  mainRow.className = "character-tab-row character-tab-row-main";
+  const overflowRows = new Map();
 
   state.characters.forEach((character, index) => {
     const color = getCharacterGraphColor(character, index);
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `character-tab ${state.activeCharacterId === character.id ? "is-active" : ""}`;
-    button.dataset.id = character.id;
-    button.style.background = color.fill;
-    button.style.zIndex = state.activeCharacterId === character.id ? "6" : String(index + 1);
-    button.innerHTML = `
-      <span>${escapeHtml(character.name || `角色${index + 1}`)}</span>
-      <span class="character-tab-remove" aria-hidden="true">&times;</span>
-    `;
-    button.addEventListener("click", () => {
-      state.activeCharacterId = character.id;
-      renderCharacters();
-      saveWorkspaceSnapshot();
-    });
+    const button = createCharacterTabButton(character, index, color);
+    const rowIndex = Math.floor(index / 10);
+    if (rowIndex === 0) {
+      mainRow.appendChild(button);
+      return;
+    }
 
-    const removeButton = button.querySelector(".character-tab-remove");
-    removeButton?.addEventListener("click", (event) => {
-      event.stopPropagation();
-      if (state.characters.length <= 1) {
-        return;
-      }
-      removeCharacter(character.id);
-    });
-
-    tabs.appendChild(button);
+    if (!overflowRows.has(rowIndex)) {
+      const overflowRow = document.createElement("div");
+      overflowRow.className = "character-tab-row character-tab-row-overflow";
+      overflowRows.set(rowIndex, overflowRow);
+    }
+    overflowRows.get(rowIndex).appendChild(button);
   });
 
   const addButton = document.createElement("button");
@@ -1551,7 +1955,17 @@ function renderCharacters() {
   addButton.addEventListener("click", () => {
     elements.addCharacter.click();
   });
-  tabs.appendChild(addButton);
+  mainRow.appendChild(addButton);
+
+  const orderedOverflowRows = Array.from(overflowRows.entries())
+    .sort((a, b) => b[0] - a[0])
+    .map(([, row]) => row);
+  if (orderedOverflowRows.length) {
+    tabs.classList.add("has-overflow-row");
+    tabs.append(...orderedOverflowRows, mainRow);
+  } else {
+    tabs.appendChild(mainRow);
+  }
 
   const activeCharacter = getCharacterById(state.activeCharacterId) || state.characters[0];
   const activeIndex = state.characters.findIndex((character) => character.id === activeCharacter.id);
@@ -1610,8 +2024,49 @@ function renderCharacters() {
   elements.characterList.append(tabs, card);
 }
 
+function createCharacterTabButton(character, index, color) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `character-tab ${state.activeCharacterId === character.id ? "is-active" : ""}`;
+  button.dataset.id = character.id;
+  button.style.background = color.fill;
+  button.style.zIndex = state.activeCharacterId === character.id ? "6" : String(index + 1);
+  button.innerHTML = `
+    <span>${escapeHtml(character.name || `角色${index + 1}`)}</span>
+    <span class="character-tab-remove" aria-hidden="true">&times;</span>
+  `;
+  button.addEventListener("click", () => {
+    state.activeCharacterId = character.id;
+    renderCharacters();
+    saveWorkspaceSnapshot();
+  });
+
+  const removeButton = button.querySelector(".character-tab-remove");
+  removeButton?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (state.characters.length <= 1) {
+      return;
+    }
+    removeCharacter(character.id);
+  });
+
+  return button;
+}
+
+function addCharacter() {
+  const character = createCharacter(state.characters.length);
+  state.characters.push(character);
+  state.activeCharacterId = character.id;
+  state.characterCreationHistory.push(character.id);
+  arrangeCharacterGraph();
+  renderCharacters();
+  renderGraph();
+  markStoryDraftDirty();
+}
+
 function removeCharacter(characterId) {
   state.characters = state.characters.filter((character) => character.id !== characterId);
+  state.characterCreationHistory = state.characterCreationHistory.filter((id) => id !== characterId);
   state.relations = state.relations.filter(
     (relation) => relation.source_id !== characterId && relation.target_id !== characterId,
   );
@@ -1635,13 +2090,26 @@ function removeCharacter(characterId) {
 }
 
 function setupGraphInteractions() {
+  elements.graphCanvas.addEventListener("mousedown", preventGraphMiddleMouseScroll);
   elements.graphCanvas.addEventListener("pointerdown", handleGraphPointerDown);
   elements.graphCanvas.addEventListener("pointermove", handleGraphPointerMove);
+  elements.graphWrap.addEventListener("wheel", handleGraphWheel, { passive: false });
   window.addEventListener("pointerup", handleGlobalPointerUp);
   window.addEventListener("pointercancel", handlePendingEdgeCancel);
 }
 
+function preventGraphMiddleMouseScroll(event) {
+  if (event.button === 1) {
+    event.preventDefault();
+  }
+}
+
 function handleGraphPointerDown(event) {
+  if (event.button === 1) {
+    startGraphPan(event);
+    return;
+  }
+
   if (event.button !== 0) {
     return;
   }
@@ -1669,6 +2137,13 @@ function handleGraphPointerDown(event) {
 }
 
 function handleGraphPointerMove(event) {
+  if (state.graphPan?.pointerId === event.pointerId) {
+    state.graphView.offsetX = state.graphPan.startOffsetX + (event.clientX - state.graphPan.startClientX);
+    state.graphView.offsetY = state.graphPan.startOffsetY + (event.clientY - state.graphPan.startClientY);
+    applyGraphViewport();
+    return;
+  }
+
   if (!state.pendingEdge || state.pendingEdge.pointerId !== event.pointerId) {
     return;
   }
@@ -1682,6 +2157,12 @@ function handleGraphPointerMove(event) {
 }
 
 function handleGlobalPointerUp(event) {
+  if (state.graphPan?.pointerId === event.pointerId) {
+    finishGraphPan(event.pointerId);
+    saveWorkspaceSnapshot();
+    return;
+  }
+
   if (!state.pendingEdge || state.pendingEdge.pointerId !== event.pointerId) {
     return;
   }
@@ -1699,6 +2180,11 @@ function handleGlobalPointerUp(event) {
 }
 
 function handlePendingEdgeCancel(event) {
+  if (state.graphPan?.pointerId === event.pointerId) {
+    finishGraphPan(event.pointerId);
+    return;
+  }
+
   if (!state.pendingEdge || state.pendingEdge.pointerId !== event.pointerId) {
     return;
   }
@@ -1706,6 +2192,34 @@ function handlePendingEdgeCancel(event) {
   releaseGraphPointerCapture(event.pointerId);
   state.pendingEdge = null;
   renderGraph();
+}
+
+function startGraphPan(event) {
+  if (!elements.graphCanvas) {
+    return;
+  }
+
+  event.preventDefault();
+  if (typeof elements.graphCanvas.setPointerCapture === "function") {
+    elements.graphCanvas.setPointerCapture(event.pointerId);
+  }
+
+  state.graphPan = {
+    pointerId: event.pointerId,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    startOffsetX: state.graphView.offsetX || 0,
+    startOffsetY: state.graphView.offsetY || 0,
+  };
+  document.body.style.userSelect = "none";
+  elements.graphWrap?.classList.add("is-panning");
+}
+
+function finishGraphPan(pointerId) {
+  releaseGraphPointerCapture(pointerId);
+  state.graphPan = null;
+  document.body.style.userSelect = "";
+  elements.graphWrap?.classList.remove("is-panning");
 }
 
 function releaseGraphPointerCapture(pointerId) {
@@ -1720,12 +2234,13 @@ function releaseGraphPointerCapture(pointerId) {
 }
 
 function getGraphPointFromClient(clientX, clientY) {
-  const rect = elements.graphCanvas.getBoundingClientRect();
-  const width = elements.graphCanvas.clientWidth || rect.width || 0;
-  const height = elements.graphCanvas.clientHeight || rect.height || 0;
+  const localPoint = getGraphLocalPointFromClient(clientX, clientY);
+  const width = elements.graphCanvas.clientWidth || 0;
+  const height = elements.graphCanvas.clientHeight || 0;
+  const scale = state.graphView.scale || 1;
   return {
-    x: clamp(clientX - rect.left, 0, width),
-    y: clamp(clientY - rect.top, 0, height),
+    x: clamp((localPoint.x - state.graphView.offsetX) / scale, 0, width),
+    y: clamp((localPoint.y - state.graphView.offsetY) / scale, 0, height),
   };
 }
 
@@ -1838,6 +2353,7 @@ function renderGraph() {
   const width = elements.graphCanvas.clientWidth || 700;
   const height = elements.graphCanvas.clientHeight || 440;
   elements.graphSvg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  elements.graphSvg.setAttribute("preserveAspectRatio", "none");
   elements.graphSvg.innerHTML = buildSvgDefs();
   elements.graphNodes.innerHTML = "";
   elements.relationLabels.innerHTML = "";
@@ -1847,6 +2363,7 @@ function renderGraph() {
     renderPendingEdge();
   }
   state.characters.forEach((character, index) => renderCharacterNode(character, index));
+  applyGraphViewport();
 }
 
 function buildSvgDefs() {
@@ -1943,10 +2460,15 @@ function buildCurveGeometryFromPoints(start, end, control) {
   const t = 0.5;
   const labelX = (1 - t) * (1 - t) * start.x + 2 * (1 - t) * t * control.x + t * t * end.x;
   const labelY = (1 - t) * (1 - t) * start.y + 2 * (1 - t) * t * control.y + t * t * end.y;
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy) || 1;
   return {
     pathD: `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`,
     labelX,
     labelY,
+    normalX: -dy / length,
+    normalY: dx / length,
   };
 }
 
@@ -1997,6 +2519,7 @@ function createDirectionalRelationRenderItem(relation, offset) {
     markerStart: false,
     markerEnd: true,
     label: getDirectionalRelationDisplayText(relation),
+    labelSide: offset >= 0 ? 1 : -1,
     deleteRequest: {
       mode: "direction",
       sourceId: relation.source_id,
@@ -2017,6 +2540,7 @@ function createMergedRelationRenderItem(group) {
     markerStart: true,
     markerEnd: true,
     label: mergedLabel,
+    labelSide: curveSign(group.key),
     deleteRequest: {
       mode: "pair",
       pairKey: group.key,
@@ -2056,8 +2580,9 @@ function renderRelationItem(item) {
   const badge = document.createElement("button");
   badge.type = "button";
   badge.className = "relation-badge relation-badge-button";
-  badge.style.left = `${geometry.labelX}px`;
-  badge.style.top = `${geometry.labelY}px`;
+  const labelSide = item.labelSide || 1;
+  badge.style.left = `${geometry.labelX + geometry.normalX * GRAPH.labelOffset * labelSide}px`;
+  badge.style.top = `${geometry.labelY + geometry.normalY * GRAPH.labelOffset * labelSide}px`;
   badge.innerHTML = `<span>${escapeHtml(item.label)}</span>`;
   bindRelationItemEvents(badge, item);
   elements.relationLabels.appendChild(badge);
@@ -2337,6 +2862,7 @@ function applyServerStoryDraft(story) {
       const candidate = Number.isInteger(character.graph_color_index) ? character.graph_color_index + 1 : index + 1;
       return Math.max(maxIndex, candidate);
     }, 0);
+    state.characterCreationHistory = [];
   }
 
   if (Array.isArray(story.relations)) {
@@ -2938,6 +3464,17 @@ async function handleExportAllStory() {
 }
 
 function handleStoryResultClick(event) {
+  const nextChapterButton = event.target.closest("[data-next-chapter]");
+  if (nextChapterButton) {
+    const chapterNumber = Number(nextChapterButton.dataset.nextChapter);
+    if (Number.isFinite(chapterNumber)) {
+      state.activeChapterNumber = chapterNumber;
+      renderStory();
+      saveWorkspaceSnapshot();
+    }
+    return;
+  }
+
   const chapterTab = event.target.closest("[data-select-chapter]");
   if (chapterTab) {
     const chapterNumber = Number(chapterTab.dataset.selectChapter);
@@ -3014,10 +3551,10 @@ function buildOutlineExportText() {
       ? outline.chapters.map(
         (chapter) => [
           `第 ${chapter.chapter_number} 章｜${chapter.title}`,
-          `目标字数：${chapter.target_words}`,
-          `概要：${chapter.summary || "无"}`,
+          `章节梗概：${chapter.summary || "无"}`,
           `关键事件：${chapter.key_events?.length ? chapter.key_events.join(" / ") : "无"}`,
           `章末收束：${chapter.cliffhanger || "无"}`,
+          `目标字数：${chapter.target_words}`,
         ].join("\n"),
       )
       : ["本轮没有章节规划。"]),
@@ -3120,37 +3657,33 @@ function renderOutline() {
     .map((section, index) => `
       <div class="arc-col">
         <div class="arc-title">${escapeHtml(section.stage)}</div>
-        <div class="arc-range">
-          <div class="arc-range-chip">第${section.start_chapter}章</div>
-          <span>—</span>
-          <div class="arc-range-chip">第${section.end_chapter}章</div>
+        <div class="arc-range-editor">
+          <span class="arc-range-prefix">第</span>
+          <input
+            id="stage-start-${index}"
+            class="arc-range-input"
+            type="number"
+            min="1"
+            max="${state.outline.chapter_count}"
+            value="${section.start_chapter}"
+            ${index === 0 ? "disabled" : ""}
+          />
+          <span class="arc-range-suffix">章</span>
+          <span class="arc-range-divider">-</span>
+          <span class="arc-range-prefix">第</span>
+          <input
+            id="stage-end-${index}"
+            class="arc-range-input"
+            type="number"
+            min="1"
+            max="${state.outline.chapter_count}"
+            value="${section.end_chapter}"
+            ${index === lastStageIndex ? "disabled" : ""}
+          />
+          <span class="arc-range-suffix">章</span>
         </div>
         <div class="arc-card" id="arc-${index}">
-          <div>${escapeHtml(section.content || "暂无内容概括。")}</div>
-          <div class="outline-stage-editor">
-            <label>
-              起始章
-              <input
-                id="stage-start-${index}"
-                type="number"
-                min="1"
-                max="${state.outline.chapter_count}"
-                value="${section.start_chapter}"
-                ${index === 0 ? "disabled" : ""}
-              />
-            </label>
-            <label>
-              结束章
-              <input
-                id="stage-end-${index}"
-                type="number"
-                min="1"
-                max="${state.outline.chapter_count}"
-                value="${section.end_chapter}"
-                ${index === lastStageIndex ? "disabled" : ""}
-              />
-            </label>
-          </div>
+          <div class="arc-card-copy">${escapeHtml(section.content || "暂无内容概括。")}</div>
         </div>
       </div>
     `)
@@ -3163,10 +3696,11 @@ function renderOutline() {
         : "无";
       return `
         <div class="chapter-item">
-          <b>第${chapter.chapter_number}章 《${escapeHtml(chapter.title)}》</b>
-          — ${escapeHtml(chapter.summary || "暂无章节概要。")}
-          <br />
-          <span>目标字数：${chapter.target_words || "未设置"} · 关键事件：${keyEvents} · 章末收束：${escapeHtml(chapter.cliffhanger || "无")}</span>
+          <b class="chapter-item-title">第${chapter.chapter_number}章 《${escapeHtml(chapter.title)}》</b>
+          <div class="chapter-item-line">章节梗概：${escapeHtml(chapter.summary || "暂无章节概要。")}</div>
+          <div class="chapter-item-line">关键事件：${keyEvents}</div>
+          <div class="chapter-item-line">章末收束：${escapeHtml(chapter.cliffhanger || "无")}</div>
+          <div class="chapter-item-line">目标字数：${chapter.target_words || "未设置"}</div>
         </div>
       `;
     })
@@ -3176,33 +3710,27 @@ function renderOutline() {
   elements.outlineResult.innerHTML = `
     <div class="outline-board">
       <div class="outline-hero-card">
-        <div class="synopsis-display">${escapeHtml(synopsisText)}</div>
-        <div class="outline-meta-grid">
-          <div class="outline-meta-card">
+        <div class="outline-title-row">
+          <div class="outline-title-card">
             <strong>标题</strong>
             <span>${escapeHtml(state.outline.title || "未命名作品")}</span>
           </div>
-          <div class="outline-meta-card">
-            <strong>一句话概述</strong>
-            <span>${escapeHtml(state.outline.logline || "暂无")}</span>
-          </div>
-          <div class="outline-meta-card">
+          <div class="outline-title-card outline-count-card">
             <strong>章节总数</strong>
             <span>${state.outline.chapter_count} 章</span>
           </div>
-          <div class="outline-meta-card">
-            <strong>AI 补完信息</strong>
-            <span>${inferredDetails.length ? inferredDetails.map((item) => escapeHtml(item)).join("；") : "本轮没有额外补完信息。"}</span>
-          </div>
+        </div>
+        <div class="synopsis-display">${escapeHtml(synopsisText)}</div>
+        <div class="outline-ai-card">
+          <strong>AI 补完信息</strong>
+          <span>${inferredDetails.length ? inferredDetails.map((item) => escapeHtml(item)).join("；") : "本轮没有额外补完信息。"}</span>
         </div>
       </div>
 
       <div class="arc-section">
         <div class="arc-header">
-          <div class="chapter-label">四段结构</div>
           <button type="button" id="save-stage-ranges" class="ghost-button">保存篇章范围</button>
         </div>
-        <p class="micro-tip">第一段起始章固定为 1；结局段结束章固定为总篇章数；某一段的结束章不能超过下一段的起始章。</p>
         <div class="arc-tracks">${actStructureHtml}</div>
       </div>
 
@@ -3217,6 +3745,7 @@ function renderOutline() {
   if (saveButton) {
     saveButton.addEventListener("click", () => saveActStructureEdits(false));
   }
+  syncNeuroInputState();
   renderOutlineHistory();
 }
 
@@ -3392,6 +3921,10 @@ function renderStory() {
   }
 
   const activeChapter = findGeneratedChapter(state.activeChapterNumber) || state.generatedStory.chapters[0];
+  const activeChapterIndex = state.generatedStory.chapters.findIndex(
+    (chapter) => Number(chapter.chapter_number) === Number(activeChapter.chapter_number),
+  );
+  const nextChapter = state.generatedStory.chapters[activeChapterIndex + 1] || null;
   if (staticStoryTitle) {
     staticStoryTitle.textContent = `《${state.generatedStory.title || state.outline?.title || "未命名作品"}》`;
   }
@@ -3403,7 +3936,6 @@ function renderStory() {
   elements.storyResult.innerHTML = `
     <div class="story-reader-shell">
       <div class="story-topbar">
-        <div class="story-title-badge">章节导航</div>
         <div class="story-chapter-tabs">
           ${state.generatedStory.chapters
             .map((chapter) => `
@@ -3428,7 +3960,6 @@ function renderStory() {
             </div>
             <button type="button" class="btn-export" data-export-chapter="${activeChapter.chapter_number}">导出本章</button>
           </div>
-          <div class="story-summary"><strong>章节摘要：</strong>${escapeHtml(activeChapter.summary || "无")}</div>
           <div
             class="chapter-content prose-content"
             data-chapter-editor="${activeChapter.chapter_number}"
@@ -3437,6 +3968,11 @@ function renderStory() {
             ${activeChapter.rendered_html || buildChapterContentHtml(activeChapter.content)}
           </div>
         </article>
+        ${nextChapter ? `
+          <button type="button" class="btn-primary chapter-next-floating" data-next-chapter="${nextChapter.chapter_number}">
+            下一章
+          </button>
+        ` : ""}
       </div>
     </div>
   `;
@@ -3473,7 +4009,8 @@ function handleDocumentSelectionChange() {
     return;
   }
 
-  const text = selection.toString().trim();
+  const rawText = selection.toString();
+  const text = rawText.trim();
   if (!text) {
     closeStorySelectionToolbar({ preserveSelection: false });
     return;
@@ -3483,6 +4020,7 @@ function handleDocumentSelectionChange() {
   const rect = range.getBoundingClientRect();
   state.storySelection = {
     chapterNumber: Number(editor.dataset.chapterNumber),
+    rawText,
     text,
     range: range.cloneRange(),
     startOffset: offsets.start,
@@ -3521,24 +4059,164 @@ function positionStorySelectionToolbar() {
     return;
   }
 
-  const liveRect = state.storySelection.range?.getBoundingClientRect?.();
-  const rect = liveRect && liveRect.width ? liveRect : state.storySelection.rect;
-  if (!rect) {
+  const liveRects = Array.from(state.storySelection.range?.getClientRects?.() || []).filter(
+    (rect) => rect && (rect.width || rect.height),
+  );
+  const anchorRect = liveRects[liveRects.length - 1] || state.storySelection.rect;
+  if (!anchorRect) {
     closeStorySelectionToolbar({ preserveSelection: false });
     return;
   }
 
-  const top = Math.max(12, rect.top - 54);
-  const left = clamp(
-    rect.left + rect.width / 2 - 92,
+  syncStorySelectionFavoriteButtonState();
+  elements.storySelectionToolbar.classList.remove("hidden");
+  elements.storySelectionToolbar.setAttribute("aria-hidden", "false");
+  const toolbarWidth = elements.storySelectionToolbar.offsetWidth || 196;
+  const toolbarHeight = elements.storySelectionToolbar.offsetHeight || 38;
+  const top = clamp(
+    anchorRect.bottom + 10,
     12,
-    window.innerWidth - 196,
+    window.innerHeight - toolbarHeight - 12,
+  );
+  const left = clamp(
+    anchorRect.right - toolbarWidth,
+    12,
+    window.innerWidth - toolbarWidth - 12,
   );
 
   elements.storySelectionToolbar.style.top = `${top}px`;
   elements.storySelectionToolbar.style.left = `${left}px`;
-  elements.storySelectionToolbar.classList.remove("hidden");
-  elements.storySelectionToolbar.setAttribute("aria-hidden", "false");
+}
+
+function handleStorySelectionFavorite() {
+  if (!state.storySelection?.range) {
+    return;
+  }
+
+  const favoriteQuote = createFavoriteQuoteFromSelection(state.storySelection);
+  const existingFavorite = state.favoriteQuotes.find((item) => isSameFavoriteQuote(item, favoriteQuote));
+  if (!existingFavorite) {
+    state.favoriteQuotes.unshift(favoriteQuote);
+    renderFavorites();
+    applyStorySelectionReplacement(
+      state.storySelection.rawText || state.storySelection.text,
+      "story-fragment-favorite",
+      { favoriteId: favoriteQuote.id },
+    );
+    showFavoriteToast("已收藏句子，可在左侧‘我的收藏’中查看");
+  } else {
+    removeFavoriteById(existingFavorite.id, { showToast: false });
+    closeStorySelectionToolbar({ preserveSelection: false });
+    showFavoriteToast("已取消收藏");
+  }
+}
+
+function createFavoriteQuoteFromSelection(selection) {
+  return {
+    id: generateId("favorite"),
+    storyTitle: state.generatedStory?.title || state.outline?.title || "未命名作品",
+    chapterNumber: Number(selection.chapterNumber) || null,
+    startOffset: Number(selection.startOffset) || 0,
+    endOffset: Number(selection.endOffset) || 0,
+    text: String(selection.text || "").trim(),
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function isSameFavoriteQuote(left, right) {
+  return Number(left?.chapterNumber) === Number(right?.chapterNumber)
+    && Number(left?.startOffset) === Number(right?.startOffset)
+    && Number(left?.endOffset) === Number(right?.endOffset)
+    && String(left?.text || "") === String(right?.text || "");
+}
+
+function findFavoriteForSelection(selection = state.storySelection) {
+  if (!selection) {
+    return null;
+  }
+  const candidate = createFavoriteQuoteFromSelection(selection);
+  return state.favoriteQuotes.find((item) => isSameFavoriteQuote(item, candidate)) || null;
+}
+
+function syncStorySelectionFavoriteButtonState() {
+  if (!elements.storySelectionFavorite) {
+    return;
+  }
+
+  const existingFavorite = findFavoriteForSelection();
+  const isFavorited = Boolean(existingFavorite);
+  elements.storySelectionFavorite.classList.toggle("is-favorited", isFavorited);
+  elements.storySelectionFavorite.setAttribute("aria-label", isFavorited ? "取消收藏" : "喜欢");
+  elements.storySelectionFavorite.setAttribute("title", isFavorited ? "取消收藏" : "喜欢");
+  elements.storySelectionFavorite.innerHTML = isFavorited
+    ? FAVORITE_BUTTON_ICONS.unfavorite
+    : FAVORITE_BUTTON_ICONS.favorite;
+}
+
+function showFavoriteToast(message) {
+  if (!elements.favoriteToast) {
+    return;
+  }
+
+  window.clearTimeout(favoriteToastTimer);
+  elements.favoriteToast.textContent = message;
+  elements.favoriteToast.classList.remove("hidden");
+  elements.favoriteToast.classList.add("is-visible");
+  elements.favoriteToast.setAttribute("aria-hidden", "false");
+  favoriteToastTimer = window.setTimeout(() => {
+    elements.favoriteToast.classList.remove("is-visible");
+    elements.favoriteToast.classList.add("hidden");
+    elements.favoriteToast.setAttribute("aria-hidden", "true");
+  }, 2200);
+}
+
+function removeFavoriteMarkup(favoriteQuote) {
+  const chapterNumber = Number(favoriteQuote?.chapterNumber);
+  if (!Number.isFinite(chapterNumber)) {
+    return false;
+  }
+
+  const chapter = findGeneratedChapter(chapterNumber);
+  if (!chapter) {
+    return false;
+  }
+
+  const editor = elements.storyResult?.querySelector?.(`[data-chapter-editor="${chapterNumber}"]`);
+  if (editor && unwrapFavoriteNodes(editor, favoriteQuote.id)) {
+    syncChapterContentFromDom(chapterNumber);
+    return true;
+  }
+
+  const scratch = document.createElement("div");
+  scratch.innerHTML = chapter.rendered_html || buildChapterContentHtml(chapter.content);
+  if (!unwrapFavoriteNodes(scratch, favoriteQuote.id)) {
+    return false;
+  }
+
+  chapter.rendered_html = scratch.innerHTML;
+  chapter.content = normalizeEditorText(scratch.innerText);
+  return true;
+}
+
+function unwrapFavoriteNodes(root, favoriteId) {
+  if (!root || !favoriteId) {
+    return false;
+  }
+
+  const favoriteNodes = Array.from(root.querySelectorAll(`[data-favorite-id="${favoriteId}"]`));
+  if (!favoriteNodes.length) {
+    return false;
+  }
+
+  favoriteNodes.forEach((favoriteNode) => {
+    const fragment = document.createDocumentFragment();
+    while (favoriteNode.firstChild) {
+      fragment.appendChild(favoriteNode.firstChild);
+    }
+    favoriteNode.replaceWith(fragment);
+  });
+
+  return true;
 }
 
 function closeStorySelectionToolbar({ preserveSelection = true } = {}) {
@@ -3565,6 +4243,19 @@ function handleGlobalPointerDown(event) {
 }
 
 function handleGlobalKeyDown(event) {
+  if (
+    (event.ctrlKey || event.metaKey) &&
+    !event.altKey &&
+    String(event.key || "").toLowerCase() === "z" &&
+    state.currentStage === "characters" &&
+    !isEditableTarget(event.target)
+  ) {
+    if (undoLastCreatedCharacter()) {
+      event.preventDefault();
+    }
+    return;
+  }
+
   if (event.key !== "Escape") {
     return;
   }
@@ -3572,6 +4263,26 @@ function handleGlobalKeyDown(event) {
   closeStorySelectionToolbar({ preserveSelection: false });
   closeStoryEditModal();
   closeOutlineHistoryModal();
+}
+
+function isEditableTarget(target) {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  return Boolean(target.closest("input, textarea, [contenteditable='true'], [contenteditable='']"));
+}
+
+function undoLastCreatedCharacter() {
+  while (state.characterCreationHistory.length) {
+    const characterId = state.characterCreationHistory.pop();
+    if (!getCharacterById(characterId)) {
+      continue;
+    }
+    removeCharacter(characterId);
+    setStatus("已撤销刚刚新建的角色。", false);
+    return true;
+  }
+  return false;
 }
 
 function openStoryEditModal() {
@@ -3659,7 +4370,7 @@ async function handleStorySelectionRegenerate() {
   }
 }
 
-function applyStorySelectionReplacement(text, fragmentClass) {
+function applyStorySelectionReplacement(text, fragmentClass, { favoriteId = "" } = {}) {
   if (!state.storySelection?.range) {
     return;
   }
@@ -3669,6 +4380,9 @@ function applyStorySelectionReplacement(text, fragmentClass) {
 
   const fragment = document.createElement("span");
   fragment.className = `${fragmentClass} story-fragment-highlight`;
+  if (favoriteId) {
+    fragment.dataset.favoriteId = favoriteId;
+  }
   String(text || "")
     .split("\n")
     .forEach((line, index, lines) => {
