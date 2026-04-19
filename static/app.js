@@ -23,8 +23,91 @@ const STAGE_META = {
   story: { index: 3, label: "正文生成" },
 };
 const WORKSPACE_STORAGE_KEY = "story-generation-workspace-v3";
-const STORY_GUIDE_STORAGE_KEY = "story-generation-neuro-guides-v1";
+const STORY_GUIDE_STORAGE_KEY = "story-generation-neuro-guides-v3";
 const LLM_TASK_POLL_INTERVAL_MS = 1400;
+const GUIDE_TYPING_SPEED_MS = 18;
+const GUIDE_VIEWPORT_MARGIN = 18;
+const GUIDE_OUTLINE_AUTO_CLOSE_MS = 15000;
+const GUIDE_PANEL_PRIMARY_MESSAGE = "你好！我是 Neuro，你的 AI 创作伙伴。我会在每个环节为你提供引导和建议 ✨";
+const GUIDE_PANEL_PROMPT_MESSAGE = "点击页面上任何区域，让我们开始熟悉创作流程吧！";
+const GUIDE_NOTES = {
+  basic_flow: {
+    id: "basic-flow",
+    target: "#top-stage-tabs",
+    placement: "bottom-right",
+    size: "lg",
+    rotation: -3,
+    text:
+      "创作流程分四个步骤：\n① 基本信息 — 确立故事骨架\n② 角色关系 — 塑造人物\n③ 大纲生成 — AI 构建结构\n④ 正文生成 — 完成小说",
+  },
+  basic_required: {
+    id: "basic-required",
+    target: "#field-synopsis",
+    placement: "right",
+    size: "md",
+    rotation: 2,
+    text:
+      "现在先填写“基本信息”。故事类型和故事梗概是必填项，它们将直接影响 AI 生成的风格和内容质量。",
+  },
+  basic_worldview: {
+    id: "basic-worldview",
+    target: "#field-worldview",
+    placement: "right",
+    size: "sm",
+    rotation: -2,
+    text: "世界观和语言风格选填，但填得越详细，生成结果越贴合你的设想！",
+  },
+  characters_intro: {
+    id: "characters-dossier",
+    target: "#scroll-1",
+    placement: "top-right",
+    size: "md",
+    rotation: -2,
+    text: "进入角色档案环节 👤 你可以为每个角色填写详细设定，点击标签切换编辑不同角色。",
+  },
+  characters_graph: {
+    id: "characters-graph",
+    target: "#character-graph-stage",
+    placement: "top-left",
+    size: "md",
+    rotation: 2,
+    text: "编辑完档案后，可以在右侧的角色关系图中，点击角色节点并拖拽来建立角色之间的关系连线。",
+  },
+  characters_ai: {
+    id: "characters-ai",
+    target: "#supplement-relations",
+    placement: "top-right",
+    size: "md",
+    rotation: -3,
+    text:
+      "填完之后，推荐试试「AI 补充」功能。AI 只会在你留白的关系位上添加建议，不会修改你已有的任何编辑 🛡️",
+  },
+  outline_structure: {
+    id: "outline-structure",
+    target: "#outline-result",
+    placement: "top-right",
+    size: "md",
+    rotation: -2,
+    text: "按照经典叙事弧线，大纲分为开端 → 发展 → 高潮 → 结局四个阶段，每个阶段都会规划对应章节。",
+  },
+  outline_tools: {
+    id: "outline-tools",
+    target: "#outline-tools-anchor",
+    placement: "bottom-left",
+    size: "sm",
+    rotation: 2,
+    text: "生成完成后，你可以点击右上角图标查看历史版本或导出大纲文件。",
+  },
+  story_editor: {
+    id: "story-editor",
+    target: "#story-result",
+    placement: "top-right",
+    size: "lg",
+    rotation: -2,
+    text:
+      "正文已生成完毕！✍️ 你可以选中任意文字来进行手动编辑或让 AI 局部重写。\n蓝色文字是你手动编辑过的内容，黑色文字是 AI 生成的原文，两者一目了然。",
+  },
+};
 const GRAPH = {
   nodeWidth: 116,
   nodeHeight: 62,
@@ -82,6 +165,17 @@ let nextCharacterColorIndex = 0;
 let graphResizeObserver = null;
 let graphRenderFrame = 0;
 let favoriteToastTimer = null;
+const guideOverlayState = {
+  activeStage: null,
+  activeNoteKey: null,
+  panelMode: null,
+  introPromptReady: false,
+  token: 0,
+  timers: [],
+  notes: [],
+  positionFrame: 0,
+  autoHideTimer: null,
+};
 const FAVORITE_BUTTON_ICONS = {
   favorite: `
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
@@ -152,6 +246,7 @@ const elements = {
   generateStory: document.querySelector("#generate-story"),
   exportAllStory: document.querySelector("#export-all-story"),
   outlineFeedback: document.querySelector("#outline-feedback"),
+  guideOverlay: document.querySelector("#neuro-guide-overlay"),
   relationModal: document.querySelector("#relation-modal"),
   relationModalClose: document.querySelector("#relation-modal-close"),
   relationDirection: document.querySelector("#relation-direction"),
@@ -615,7 +710,6 @@ function init() {
   elements.favoriteList?.addEventListener("click", handleFavoriteListClick);
   elements.goToCharacters.addEventListener("click", () => {
     setCurrentStage("characters");
-    maybeShowCharacterGuide();
   });
   elements.addCharacter.addEventListener("click", addCharacter);
   elements.storyForm.addEventListener("submit", handleOutlineSubmit);
@@ -691,6 +785,7 @@ function init() {
     positionStorySelectionToolbar();
   });
   document.addEventListener("selectionchange", handleDocumentSelectionChange);
+  document.addEventListener("scroll", scheduleGuideOverlayPosition, true);
   document.addEventListener("mousedown", handleGlobalPointerDown);
   document.addEventListener("keydown", handleGlobalKeyDown);
   setupPanelInteractions();
@@ -709,14 +804,13 @@ function init() {
   syncSidebarProfileState();
   syncStageMarkers();
   syncResponsiveLayout();
-  setCurrentStage(state.currentStage || "basic", { scroll: false, keepSelection: true });
   setStatus(
     restoredGeneratedContent
       ? "已恢复上次填写内容与已生成结果，可以继续编辑、导出或生成。"
       : "填写左侧信息后，先生成故事大纲；若不满意，可以补充反馈并重生成。",
     false,
   );
-  maybeShowInitialGuide();
+  setCurrentStage(state.currentStage || "basic", { scroll: false, keepSelection: true });
 }
 
 function bindStageNavigation() {
@@ -727,12 +821,6 @@ function bindStageNavigation() {
         return;
       }
       setCurrentStage(stage);
-      if (stage === "basic") {
-        maybeShowInitialGuide();
-      }
-      if (stage === "characters") {
-        maybeShowCharacterGuide();
-      }
     });
   });
 }
@@ -741,14 +829,23 @@ function getStageSection(stage) {
   return document.querySelector(`[data-stage-screen="${stage}"]`);
 }
 
-function setCurrentStage(stage, { scroll = false, keepSelection = false } = {}) {
+function setCurrentStage(stage, { scroll = false, keepSelection = false, showGuide = true } = {}) {
   if (!stage) {
     return;
   }
 
+  const previousStage = state.currentStage;
   state.currentStage = stage;
   syncStageMarkers();
   saveWorkspaceSnapshot();
+  syncGuideProgressForStage(previousStage, stage);
+  if (showGuide) {
+    syncTutorialGuidance();
+  } else {
+    clearGuidePanelMode();
+    stopGuideTyping();
+    clearGuideOverlay();
+  }
 
   const section = getStageSection(stage);
   if (scroll && section) {
@@ -793,6 +890,7 @@ function syncSidebarProfileState() {
   elements.sidebarAvatarToggle.classList.toggle("is-active", state.sidebarProfileOpen);
   elements.sidebarAvatarToggle.setAttribute("aria-expanded", state.sidebarProfileOpen ? "true" : "false");
   elements.sidebarDetailPanel.setAttribute("aria-hidden", state.sidebarProfileOpen ? "false" : "true");
+  queueGuideOverlayRefresh();
 }
 
 function renderFavorites() {
@@ -1082,6 +1180,7 @@ function syncResponsiveLayout() {
     relationArea.style.flex = "";
     charEditor.classList.remove("char-compact");
     queueGraphRender();
+    scheduleGuideOverlayPosition();
     return;
   }
 
@@ -1097,66 +1196,727 @@ function syncResponsiveLayout() {
     charEditor.classList.remove("char-compact");
     queueGraphRender();
   }
+
+  scheduleGuideOverlayPosition();
 }
 
 function maybeShowInitialGuide() {
-  const seenGuides = loadSeenGuides();
-  if (seenGuides.basic || state.currentStage !== "basic") {
-    return;
-  }
-
-  showNeuroGuidance(
-    "你好，创作者。我是 Neuro。我们的旅程将从基本信息开始；随后在角色关系中编织命运；在大纲生成中梳理脉络；最后，我们共同完成正文创作。每一个伟大的故事都始于清晰的故事类型和梗概，请先在左侧输入栏中告诉我这些吧。",
-    { title: "Neuro", statusLabel: "新手引导" },
-  );
-  seenGuides.basic = true;
-  saveSeenGuides(seenGuides);
+  syncTutorialGuidance();
 }
 
 function maybeShowCharacterGuide() {
-  const seenGuides = loadSeenGuides();
-  if (seenGuides.characters) {
+  syncTutorialGuidance();
+}
+
+function maybeShowStageGuide(stage = state.currentStage, previousStage = null) {
+  syncGuideProgressForStage(previousStage, stage);
+  syncTutorialGuidance();
+}
+
+function getDefaultGuideProgress() {
+  return {
+    intro_completed: false,
+    basic_flow_completed: false,
+    basic_info_completed: false,
+    basic_worldview_completed: false,
+    characters_intro_completed: false,
+    characters_graph_unlocked: false,
+    characters_graph_completed: false,
+    characters_ai_unlocked: false,
+    characters_ai_completed: false,
+    outline_intro_unlocked: false,
+    outline_intro_completed: false,
+    outline_tools_unlocked: false,
+    outline_tools_completed: false,
+    story_unlocked: false,
+    story_completed: false,
+  };
+}
+
+function syncGuideProgressForStage(previousStage, nextStage) {
+  const progress = loadSeenGuides();
+  let changed = false;
+
+  if (
+    previousStage === "basic" &&
+    nextStage !== "basic" &&
+    progress.basic_info_completed &&
+    !progress.basic_worldview_completed
+  ) {
+    progress.basic_worldview_completed = true;
+    changed = true;
+  }
+
+  if (previousStage === "characters" && nextStage !== "characters") {
+    if (!progress.characters_intro_completed) {
+      progress.characters_intro_completed = true;
+      changed = true;
+    }
+    if (progress.characters_graph_unlocked && !progress.characters_graph_completed) {
+      progress.characters_graph_completed = true;
+      changed = true;
+    }
+    if (progress.characters_ai_unlocked && !progress.characters_ai_completed) {
+      progress.characters_ai_completed = true;
+      changed = true;
+    }
+  }
+
+  if (nextStage === "outline" && !progress.outline_intro_unlocked) {
+    progress.outline_intro_unlocked = true;
+    changed = true;
+  }
+
+  if (previousStage === "outline" && nextStage !== "outline") {
+    if (progress.outline_tools_unlocked && !progress.outline_tools_completed) {
+      progress.outline_tools_completed = true;
+      changed = true;
+    }
+  }
+
+  if (previousStage === "story" && nextStage !== "story" && progress.story_unlocked && !progress.story_completed) {
+    progress.story_completed = true;
+    changed = true;
+  }
+
+  if (changed) {
+    saveSeenGuides(progress);
+  }
+}
+
+function syncTutorialGuidance(force = false) {
+  const progress = loadSeenGuides();
+  const activeGuide = getActiveGuideState(progress);
+
+  if (activeGuide.panel === "intro") {
+    renderGuideIntroPanel(force);
+  } else {
+    clearGuidePanelMode();
+  }
+
+  if (activeGuide.noteKey) {
+    showGuideNote(activeGuide.noteKey, { force });
     return;
   }
 
-  showNeuroGuidance(
-    "看，角色们正在这里相遇。你可以通过点击拉出箭头来定义他们的羁绊。感到不确定？试试 AI 补充，我会基于你的设定寻找隐藏的连接点——别担心，我绝不会修改你已经写下的宿命。",
-    { title: "Neuro", statusLabel: "角色引导" },
-  );
-  seenGuides.characters = true;
-  saveSeenGuides(seenGuides);
+  clearGuideOverlay();
 }
 
-function showNeuroGuidance(message, { title = "Neuro", statusLabel = "待命" } = {}) {
+function getActiveGuideState(progress) {
+  if (!progress.intro_completed) {
+    return { panel: "intro", noteKey: null };
+  }
+
+  if (state.currentStage === "basic") {
+    if (!progress.basic_flow_completed) {
+      return { panel: null, noteKey: "basic_flow" };
+    }
+    if (!progress.basic_info_completed) {
+      return { panel: null, noteKey: "basic_required" };
+    }
+    if (!progress.basic_worldview_completed) {
+      return { panel: null, noteKey: "basic_worldview" };
+    }
+    return { panel: null, noteKey: null };
+  }
+
+  if (state.currentStage === "characters") {
+    if (progress.characters_ai_unlocked && !progress.characters_ai_completed) {
+      return { panel: null, noteKey: "characters_ai" };
+    }
+    if (progress.characters_graph_unlocked && !progress.characters_graph_completed) {
+      return { panel: null, noteKey: "characters_graph" };
+    }
+    if (!progress.characters_intro_completed) {
+      return { panel: null, noteKey: "characters_intro" };
+    }
+    return { panel: null, noteKey: null };
+  }
+
+  if (state.currentStage === "outline") {
+    if (progress.outline_intro_unlocked && !progress.outline_intro_completed) {
+      return { panel: null, noteKey: "outline_structure" };
+    }
+    if (progress.outline_tools_unlocked && !progress.outline_tools_completed) {
+      return { panel: null, noteKey: "outline_tools" };
+    }
+    return { panel: null, noteKey: null };
+  }
+
+  if (state.currentStage === "story" && progress.story_unlocked && !progress.story_completed) {
+    return { panel: null, noteKey: "story_editor" };
+  }
+
+  return { panel: null, noteKey: null };
+}
+
+function renderGuideIntroPanel(force = false) {
+  if (guideOverlayState.panelMode === "intro" && !force) {
+    return;
+  }
+
   stopLlmActivityWaitingLoop();
   stopLlmActivityAutoClose();
+  stopGuideTyping();
   llmActivity.active = false;
   llmActivity.panelOpen = true;
-  elements.llmActivityTitle.textContent = title;
-  setAssistantSummary(message);
+  guideOverlayState.panelMode = "intro";
+  guideOverlayState.introPromptReady = false;
+
+  elements.llmActivityTitle.textContent = "Neuro";
   elements.llmActivityLog.innerHTML = "";
-  setLlmActivityStatus(statusLabel, { busy: false });
+  setLlmActivityStatus("新手引导", { busy: false });
+
+  if (elements.llmActivitySummary) {
+    elements.llmActivitySummary.textContent = `${GUIDE_PANEL_PRIMARY_MESSAGE}\n${GUIDE_PANEL_PROMPT_MESSAGE}`;
+  }
+
+  if (elements.statusBox) {
+    elements.statusBox.classList.add("is-guide-highlight");
+    elements.statusBox.classList.remove("is-guide-prompt-ready");
+    elements.statusBox.innerHTML = "";
+
+    const primaryLine = document.createElement("span");
+    primaryLine.className = "guide-panel-text guide-panel-line guide-panel-line--primary";
+
+    const promptLine = document.createElement("span");
+    promptLine.className = "guide-panel-text guide-panel-line guide-panel-line--prompt";
+
+    elements.statusBox.append(primaryLine, promptLine);
+    typeTextIntoElement(primaryLine, GUIDE_PANEL_PRIMARY_MESSAGE, {
+      onComplete: () => {
+        typeTextIntoElement(promptLine, GUIDE_PANEL_PROMPT_MESSAGE, {
+          onComplete: () => {
+            guideOverlayState.introPromptReady = true;
+            elements.statusBox?.classList.add("is-guide-prompt-ready");
+          },
+        });
+      },
+    });
+  }
+
   syncLlmActivityPanelState();
-  appendLlmActivityStep("Neuro", message, "info");
+}
+
+function clearGuidePanelMode() {
+  guideOverlayState.panelMode = null;
+  guideOverlayState.introPromptReady = false;
+  elements.statusBox?.classList.remove("is-guide-highlight", "is-guide-prompt-ready");
+}
+
+function clearGuideAutoHideTimer() {
+  if (guideOverlayState.autoHideTimer) {
+    window.clearTimeout(guideOverlayState.autoHideTimer);
+    guideOverlayState.autoHideTimer = null;
+  }
+}
+
+function stopGuideTyping() {
+  guideOverlayState.token += 1;
+  guideOverlayState.timers.forEach((timerId) => {
+    window.clearTimeout(timerId);
+  });
+  guideOverlayState.timers = [];
+  guideOverlayState.introPromptReady = false;
+}
+
+function scheduleGuideTimer(callback, delay = 0) {
+  const timerId = window.setTimeout(() => {
+    guideOverlayState.timers = guideOverlayState.timers.filter((item) => item !== timerId);
+    callback();
+  }, delay);
+  guideOverlayState.timers.push(timerId);
+  return timerId;
+}
+
+function prefersReducedGuideMotion() {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+}
+
+function typeTextIntoElement(element, text, { startDelay = 0, speed = GUIDE_TYPING_SPEED_MS, onComplete = null } = {}) {
+  if (!element) {
+    return;
+  }
+
+  const content = Array.from(String(text || ""));
+  const token = guideOverlayState.token;
+  const cursor = document.createElement("span");
+  cursor.className = "guide-typing-cursor";
+
+  if (prefersReducedGuideMotion()) {
+    element.textContent = content.join("");
+    if (typeof onComplete === "function") {
+      onComplete();
+    }
+    return;
+  }
+
+  element.textContent = "";
+  element.appendChild(cursor);
+
+  let index = 0;
+  const writeNext = () => {
+    if (token !== guideOverlayState.token) {
+      return;
+    }
+
+    if (index >= content.length) {
+      cursor.remove();
+      if (typeof onComplete === "function") {
+        onComplete();
+      }
+      return;
+    }
+
+    index += 1;
+    element.textContent = content.slice(0, index).join("");
+    element.appendChild(cursor);
+
+    const previousChar = content[index - 1];
+    const delay = previousChar === "\n" ? speed * 3 : speed;
+    scheduleGuideTimer(writeNext, delay);
+  };
+
+  scheduleGuideTimer(writeNext, startDelay);
+}
+
+function showGuideNote(noteKey, { force = false } = {}) {
+  if (!GUIDE_NOTES[noteKey]) {
+    clearGuideOverlay();
+    return;
+  }
+
+  if (guideOverlayState.activeNoteKey === noteKey && guideOverlayState.activeStage === state.currentStage && !force) {
+    scheduleGuideOverlayPosition();
+    return;
+  }
+
+  clearGuidePanelMode();
+  stopGuideTyping();
+  renderGuideOverlay([{ ...GUIDE_NOTES[noteKey], key: noteKey }]);
+  guideOverlayState.activeStage = state.currentStage;
+  guideOverlayState.activeNoteKey = noteKey;
+  scheduleGuideOverlayPosition();
+  queueGuideOverlayRefresh();
+
+  if (noteKey === "outline_structure") {
+    guideOverlayState.autoHideTimer = window.setTimeout(() => {
+      guideOverlayState.autoHideTimer = null;
+      const progress = loadSeenGuides();
+      if (!progress.outline_intro_completed) {
+        progress.outline_intro_completed = true;
+        saveSeenGuides(progress);
+      }
+      syncTutorialGuidance(true);
+    }, GUIDE_OUTLINE_AUTO_CLOSE_MS);
+  }
+}
+
+function renderGuideOverlay(notes) {
+  clearGuideOverlay();
+  if (!elements.guideOverlay || !notes.length || window.innerWidth <= 960) {
+    return;
+  }
+
+  elements.guideOverlay.classList.remove("hidden");
+  elements.guideOverlay.setAttribute("aria-hidden", "false");
+  guideOverlayState.notes = notes.map((note, index) => {
+    const arrowElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    arrowElement.classList.add("guide-arrow");
+
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("class", "guide-arrow-path");
+
+    const head = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    head.setAttribute("class", "guide-arrow-head");
+
+    arrowElement.append(path, head);
+
+    const noteElement = document.createElement("article");
+    noteElement.className = `guide-note guide-note--${note.size || "md"}`;
+    noteElement.style.setProperty("--guide-note-rotation", `${note.rotation || 0}deg`);
+
+    const body = document.createElement("p");
+    body.className = "guide-note-body";
+
+    const textElement = document.createElement("span");
+    textElement.className = "guide-note-text";
+    body.appendChild(textElement);
+    noteElement.appendChild(body);
+
+    elements.guideOverlay.append(arrowElement, noteElement);
+    typeTextIntoElement(textElement, note.text, {
+      startDelay: index === 0 ? 0 : 120 * index,
+      speed: GUIDE_TYPING_SPEED_MS,
+    });
+
+    return {
+      config: note,
+      arrowElement,
+      arrowPath: path,
+      arrowHead: head,
+      noteElement,
+      textElement,
+    };
+  });
+}
+
+function clearGuideOverlay() {
+  if (guideOverlayState.positionFrame) {
+    window.cancelAnimationFrame(guideOverlayState.positionFrame);
+    guideOverlayState.positionFrame = 0;
+  }
+  clearGuideAutoHideTimer();
+  guideOverlayState.notes = [];
+  guideOverlayState.activeStage = null;
+  guideOverlayState.activeNoteKey = null;
+
+  if (!elements.guideOverlay) {
+    return;
+  }
+
+  elements.guideOverlay.innerHTML = "";
+  elements.guideOverlay.classList.add("hidden");
+  elements.guideOverlay.setAttribute("aria-hidden", "true");
+}
+
+function queueGuideOverlayRefresh() {
+  if (!guideOverlayState.notes.length) {
+    return;
+  }
+
+  [90, 200, 360].forEach((delay) => {
+    scheduleGuideTimer(() => {
+      scheduleGuideOverlayPosition();
+    }, delay);
+  });
+}
+
+function scheduleGuideOverlayPosition() {
+  if (guideOverlayState.positionFrame || !guideOverlayState.notes.length) {
+    return;
+  }
+
+  guideOverlayState.positionFrame = window.requestAnimationFrame(() => {
+    guideOverlayState.positionFrame = 0;
+    positionGuideOverlay();
+  });
+}
+
+function positionGuideOverlay() {
+  if (!guideOverlayState.notes.length || state.currentStage !== guideOverlayState.activeStage) {
+    clearGuideOverlay();
+    return;
+  }
+
+  guideOverlayState.notes.forEach((item) => {
+    const target = document.querySelector(item.config.target);
+    if (!target) {
+      item.noteElement.style.display = "none";
+      item.arrowElement.style.display = "none";
+      return;
+    }
+
+    const targetRect = target.getBoundingClientRect();
+    if (!targetRect.width || !targetRect.height || targetRect.bottom < 0 || targetRect.top > window.innerHeight) {
+      item.noteElement.style.display = "none";
+      item.arrowElement.style.display = "none";
+      return;
+    }
+
+    item.noteElement.style.display = "";
+    item.arrowElement.style.display = "";
+
+    const noteRect = item.noteElement.getBoundingClientRect();
+    const position = getGuideNotePosition(targetRect, noteRect, item.config.placement || "right");
+    item.noteElement.style.left = `${position.left}px`;
+    item.noteElement.style.top = `${position.top}px`;
+
+    const placedRect = {
+      left: position.left,
+      top: position.top,
+      width: noteRect.width,
+      height: noteRect.height,
+      right: position.left + noteRect.width,
+      bottom: position.top + noteRect.height,
+    };
+    drawGuideArrow(item, placedRect, targetRect);
+  });
+}
+
+function getGuideNotePosition(targetRect, noteRect, placement) {
+  const gap = 26;
+  let left = targetRect.right + gap;
+  let top = targetRect.top + (targetRect.height - noteRect.height) / 2;
+
+  if (placement === "top-right") {
+    left = targetRect.right - noteRect.width * 0.2;
+    top = targetRect.top - noteRect.height - gap;
+  } else if (placement === "top-left") {
+    left = targetRect.left - noteRect.width * 0.8;
+    top = targetRect.top - noteRect.height - gap;
+  } else if (placement === "bottom-right") {
+    left = targetRect.right - noteRect.width * 0.15;
+    top = targetRect.bottom + gap;
+  } else if (placement === "bottom-left") {
+    left = targetRect.left - noteRect.width * 0.85;
+    top = targetRect.bottom + gap;
+  } else if (placement === "bottom") {
+    left = targetRect.left + (targetRect.width - noteRect.width) / 2;
+    top = targetRect.bottom + gap;
+  } else if (placement === "top") {
+    left = targetRect.left + (targetRect.width - noteRect.width) / 2;
+    top = targetRect.top - noteRect.height - gap;
+  }
+
+  const maxLeft = Math.max(GUIDE_VIEWPORT_MARGIN, window.innerWidth - noteRect.width - GUIDE_VIEWPORT_MARGIN);
+  const maxTop = Math.max(GUIDE_VIEWPORT_MARGIN, window.innerHeight - noteRect.height - GUIDE_VIEWPORT_MARGIN);
+  return {
+    left: clamp(left, GUIDE_VIEWPORT_MARGIN, maxLeft),
+    top: clamp(top, GUIDE_VIEWPORT_MARGIN, maxTop),
+  };
+}
+
+function drawGuideArrow(item, noteRect, targetRect) {
+  const targetCenter = {
+    x: targetRect.left + targetRect.width / 2,
+    y: targetRect.top + targetRect.height / 2,
+  };
+  const noteCenter = {
+    x: noteRect.left + noteRect.width / 2,
+    y: noteRect.top + noteRect.height / 2,
+  };
+  const start = getRectConnectionPoint(noteRect, targetCenter);
+  const end = getRectConnectionPoint(targetRect, noteCenter);
+  const padding = 18;
+  const left = Math.min(start.x, end.x) - padding;
+  const top = Math.min(start.y, end.y) - padding;
+  const width = Math.max(1, Math.abs(end.x - start.x) + padding * 2);
+  const height = Math.max(1, Math.abs(end.y - start.y) + padding * 2);
+  const localStart = { x: start.x - left, y: start.y - top };
+  const localEnd = { x: end.x - left, y: end.y - top };
+  const dx = localEnd.x - localStart.x;
+  const dy = localEnd.y - localStart.y;
+
+  let control1 = { x: localStart.x + dx * 0.35, y: localStart.y };
+  let control2 = { x: localEnd.x - dx * 0.35, y: localEnd.y };
+
+  if (Math.abs(dy) > Math.abs(dx)) {
+    control1 = { x: localStart.x, y: localStart.y + dy * 0.35 };
+    control2 = { x: localEnd.x, y: localEnd.y - dy * 0.35 };
+  }
+
+  const angle = Math.atan2(localEnd.y - control2.y, localEnd.x - control2.x);
+  const headLength = 12;
+  const headSpread = Math.PI / 7;
+  const headPath = [
+    `M ${localEnd.x} ${localEnd.y}`,
+    `L ${localEnd.x - headLength * Math.cos(angle - headSpread)} ${localEnd.y - headLength * Math.sin(angle - headSpread)}`,
+    `L ${localEnd.x - headLength * Math.cos(angle + headSpread)} ${localEnd.y - headLength * Math.sin(angle + headSpread)}`,
+    "Z",
+  ].join(" ");
+
+  item.arrowElement.style.left = `${left}px`;
+  item.arrowElement.style.top = `${top}px`;
+  item.arrowElement.setAttribute("width", `${width}`);
+  item.arrowElement.setAttribute("height", `${height}`);
+  item.arrowElement.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  item.arrowPath.setAttribute(
+    "d",
+    `M ${localStart.x} ${localStart.y} C ${control1.x} ${control1.y}, ${control2.x} ${control2.y}, ${localEnd.x} ${localEnd.y}`,
+  );
+  item.arrowHead.setAttribute("d", headPath);
+}
+
+function getRectConnectionPoint(rect, towardPoint) {
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  const dx = towardPoint.x - centerX;
+  const dy = towardPoint.y - centerY;
+  const halfWidth = rect.width / 2 || 1;
+  const halfHeight = rect.height / 2 || 1;
+
+  if (!dx && !dy) {
+    return { x: centerX, y: centerY };
+  }
+
+  if (Math.abs(dx) / halfWidth > Math.abs(dy) / halfHeight) {
+    const ratio = halfWidth / Math.max(Math.abs(dx), 1);
+    return {
+      x: centerX + Math.sign(dx) * halfWidth,
+      y: centerY + dy * ratio,
+    };
+  }
+
+  const ratio = halfHeight / Math.max(Math.abs(dy), 1);
+  return {
+    x: centerX + dx * ratio,
+    y: centerY + Math.sign(dy) * halfHeight,
+  };
+}
+
+function isGuideBasicInfoReady() {
+  const storyType = elements.customGenre.value.trim() || state.genre;
+  const synopsis = elements.synopsis.value.trim();
+  return Boolean(storyType && synopsis);
+}
+
+function maybeCompleteBasicInfoGuide() {
+  const progress = loadSeenGuides();
+  if (progress.basic_info_completed || !progress.basic_flow_completed || !isGuideBasicInfoReady()) {
+    return;
+  }
+
+  progress.basic_info_completed = true;
+  saveSeenGuides(progress);
+  syncTutorialGuidance(true);
+}
+
+function unlockCharactersAiGuide() {
+  const progress = loadSeenGuides();
+  let changed = false;
+
+  if (!progress.characters_intro_completed) {
+    progress.characters_intro_completed = true;
+    changed = true;
+  }
+  if (!progress.characters_graph_unlocked) {
+    progress.characters_graph_unlocked = true;
+    changed = true;
+  }
+  if (!progress.characters_graph_completed) {
+    progress.characters_graph_completed = true;
+    changed = true;
+  }
+  if (!progress.characters_ai_unlocked) {
+    progress.characters_ai_unlocked = true;
+    changed = true;
+  }
+  if (!changed) {
+    return;
+  }
+
+  saveSeenGuides(progress);
+  syncTutorialGuidance(true);
+}
+
+function unlockOutlineToolsGuide() {
+  const progress = loadSeenGuides();
+  if (progress.outline_tools_unlocked) {
+    return;
+  }
+
+  progress.outline_tools_unlocked = true;
+  saveSeenGuides(progress);
+  syncTutorialGuidance(true);
+}
+
+function unlockStoryGuide() {
+  const progress = loadSeenGuides();
+  if (progress.story_unlocked) {
+    return;
+  }
+
+  progress.story_unlocked = true;
+  saveSeenGuides(progress);
+  syncTutorialGuidance(true);
+}
+
+function isGuideStageSurfaceTarget(target, stage) {
+  const section = getStageSection(stage);
+  return Boolean(section && target instanceof Element && section.contains(target));
+}
+
+function isGuideDismissTarget(target) {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  if (target.closest("#llm-activity-panel, .modal-overlay, #story-selection-toolbar")) {
+    return false;
+  }
+
+  return true;
+}
+
+function handleGuidePointerDown(event) {
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target) {
+    return false;
+  }
+
+  const progress = loadSeenGuides();
+  let changed = false;
+
+  if (!progress.intro_completed) {
+    if (guideOverlayState.introPromptReady && isGuideStageSurfaceTarget(target, "basic")) {
+      progress.intro_completed = true;
+      changed = true;
+    }
+  } else if (state.currentStage === "basic" && !progress.basic_flow_completed) {
+    if (isGuideStageSurfaceTarget(target, "basic")) {
+      progress.basic_flow_completed = true;
+      changed = true;
+    }
+  } else if (state.currentStage === "characters" && progress.characters_ai_unlocked && !progress.characters_ai_completed) {
+    if (isGuideDismissTarget(target)) {
+      progress.characters_ai_completed = true;
+      changed = true;
+    }
+  } else if (state.currentStage === "characters" && progress.characters_graph_unlocked && !progress.characters_graph_completed) {
+    if (isGuideDismissTarget(target)) {
+      progress.characters_graph_completed = true;
+      changed = true;
+    }
+  } else if (state.currentStage === "characters" && !progress.characters_intro_completed) {
+    if (target.closest("#rel-area, #character-graph-stage, #graph-canvas, #graph-nodes, #graph-svg")) {
+      progress.characters_intro_completed = true;
+      progress.characters_graph_unlocked = true;
+      changed = true;
+    }
+  } else if (state.currentStage === "outline" && progress.outline_tools_unlocked && !progress.outline_tools_completed) {
+    if (isGuideDismissTarget(target)) {
+      progress.outline_tools_completed = true;
+      changed = true;
+    }
+  } else if (state.currentStage === "story" && progress.story_unlocked && !progress.story_completed) {
+    if (isGuideDismissTarget(target)) {
+      progress.story_completed = true;
+      changed = true;
+    }
+  }
+
+  if (!changed) {
+    return false;
+  }
+
+  saveSeenGuides(progress);
+  syncTutorialGuidance(true);
+  return true;
 }
 
 function loadSeenGuides() {
   try {
     const raw = window.localStorage.getItem(STORY_GUIDE_STORAGE_KEY);
     if (!raw) {
-      return {};
+      return getDefaultGuideProgress();
     }
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
+    return parsed && typeof parsed === "object"
+      ? { ...getDefaultGuideProgress(), ...parsed }
+      : getDefaultGuideProgress();
   } catch (error) {
     console.warn("读取 Neuro 引导标记失败：", error);
-    return {};
+    return getDefaultGuideProgress();
   }
 }
 
 function saveSeenGuides(guides) {
   try {
-    window.localStorage.setItem(STORY_GUIDE_STORAGE_KEY, JSON.stringify(guides || {}));
+    window.localStorage.setItem(
+      STORY_GUIDE_STORAGE_KEY,
+      JSON.stringify({ ...getDefaultGuideProgress(), ...(guides || {}) }),
+    );
   } catch (error) {
     console.warn("保存 Neuro 引导标记失败：", error);
   }
@@ -1344,6 +2104,7 @@ function bindStoryDraftInputs() {
   ].forEach((control) => {
     control.addEventListener("input", () => {
       markStoryDraftDirty();
+      maybeCompleteBasicInfoGuide();
     });
   });
 }
@@ -1528,6 +2289,7 @@ function syncLlmActivityPanelState() {
     llmActivity.active ? "展开 AI 运行面板（当前正在运行）" : "展开 AI 运行面板",
   );
   elements.llmActivityToggle.title = llmActivity.active ? "展开 AI 运行面板（当前正在运行）" : "展开 AI 运行面板";
+  queueGuideOverlayRefresh();
 }
 
 function setLlmActivityStatus(label, { busy = false, paused = false } = {}) {
@@ -1544,6 +2306,9 @@ function setLlmActivityStatus(label, { busy = false, paused = false } = {}) {
 }
 
 function setAssistantSummary(message) {
+  clearGuidePanelMode();
+  stopGuideTyping();
+  clearGuideOverlay();
   if (elements.llmActivitySummary) {
     elements.llmActivitySummary.textContent = message;
   }
@@ -1901,6 +2666,7 @@ function renderChipGroup(container, options, key) {
       state[key] = option;
       renderChipGroup(container, options, key);
       markStoryDraftDirty();
+      maybeCompleteBasicInfoGuide();
     });
     container.appendChild(button);
   });
@@ -2924,6 +3690,7 @@ function handleSaveRelations() {
   updateRelationActionState();
   saveWorkspaceSnapshot();
   setStatus("当前梗概、角色卡和关系网已保存，可以使用 AI 补充关系。", false);
+  unlockCharactersAiGuide();
 }
 
 function validateStoryContextForRelationSave(payload) {
@@ -3179,7 +3946,7 @@ async function handleOutlineSubmit(event) {
         renderStory();
         appendLlmActivityStep("渲染页面结果", "正在把新大纲写入右侧结果区。");
         saveWorkspaceSnapshot();
-        setCurrentStage("outline");
+        setCurrentStage("outline", { showGuide: false });
         if (autoNamedCharacters.length) {
           const namedSummary = formatAutoNamedCharacters(autoNamedCharacters);
           setStatus(
@@ -3195,6 +3962,7 @@ async function handleOutlineSubmit(event) {
           setStatus("大纲已生成，可以继续重生成，或直接按当前大纲生成全文。", false);
           finishLlmActivityRun("大纲已生成完成，可以继续调整或直接生成正文。");
         }
+        unlockOutlineToolsGuide();
       },
     });
   } catch (error) {
@@ -3265,7 +4033,7 @@ async function handleOutlineRegenerate() {
         appendLlmActivityStep("渲染新大纲", "正在将新的大纲内容写回页面。");
         renderOutline();
         saveWorkspaceSnapshot();
-        setCurrentStage("outline");
+        setCurrentStage("outline", { showGuide: false });
         if (autoNamedCharacters.length) {
           const namedSummary = formatAutoNamedCharacters(autoNamedCharacters);
           setStatus(
@@ -3281,6 +4049,7 @@ async function handleOutlineRegenerate() {
           setStatus("新的大纲已经生成，可以继续调整，或开始逐章创作。", false);
           finishLlmActivityRun("新的大纲已经生成，可以继续调整后再生成正文。");
         }
+        syncTutorialGuidance(true);
       },
     });
   } catch (error) {
@@ -3330,9 +4099,10 @@ async function handleStoryGenerate() {
     appendLlmActivityStep("渲染章节内容", "正在把生成结果写入正文展示区。");
     renderStory();
     saveWorkspaceSnapshot();
-    setCurrentStage("story");
+    setCurrentStage("story", { showGuide: false });
     setStatus("全文生成完成。你可以继续修改设定后重新走一次流程。", false);
     finishLlmActivityRun("正文已生成完成，现在可以导出单章或全部正文。");
+    unlockStoryGuide();
   } catch (error) {
     setStatus(error.message || "正文生成失败。", false, true);
     finishLlmActivityRun(error.message || "正文生成失败。", "error");
@@ -4231,6 +5001,7 @@ function closeStorySelectionToolbar({ preserveSelection = true } = {}) {
 }
 
 function handleGlobalPointerDown(event) {
+  handleGuidePointerDown(event);
   if (elements.storySelectionToolbar?.contains(event.target)) {
     return;
   }

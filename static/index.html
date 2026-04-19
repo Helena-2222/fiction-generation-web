@@ -2,12 +2,12 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>神经元脚本</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Serif+SC:wght@300;400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@300;400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/static/styles.css" />
@@ -67,7 +67,7 @@
 
       <div class="main-col">
         <header class="topbar">
-          <nav class="step-tabs" aria-label="创作阶段">
+          <nav id="top-stage-tabs" class="step-tabs" aria-label="创作阶段">
             <button type="button" class="step-tab stage-tab is-active" data-stage-target="basic">基本信息</button>
             <button type="button" class="step-tab stage-tab" data-stage-target="characters">角色关系</button>
             <button type="button" class="step-tab stage-tab" data-stage-target="outline">大纲生成</button>
@@ -115,7 +115,7 @@
                   ></textarea>
                 </div>
 
-                <div class="form-section">
+                <div class="form-section" id="field-worldview">
                   <div class="form-label">世界观</div>
                   <div class="worldview-grid">
                     <div>
@@ -197,7 +197,7 @@
                   <div class="rel-resize-handle" id="rel-resize-handle" title="拖拽调整面板宽度"></div>
                   <div class="rel-label">角色关系地图 · 可连线 · 可缩放</div>
 
-                  <div class="graph-wrap">
+                  <div id="character-graph-stage" class="graph-wrap">
                     <div id="graph-canvas" class="graph-canvas rel-canvas">
                       <svg id="graph-svg" class="graph-svg"></svg>
                       <div id="graph-nodes" class="graph-nodes"></div>
@@ -224,7 +224,7 @@
                   <div class="outline-synopsis-label">
                     <span>故事梗概</span>
                     <div class="outline-actions-row">
-                      <div class="outline-icons">
+                      <div id="outline-tools-anchor" class="outline-icons">
                         <button type="button" id="outline-history" class="icon-btn-wrap icon-button" title="历史记录" aria-label="历史记录">
                           <span class="icon-btn" aria-hidden="true">
                             <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -287,7 +287,6 @@
             </div>
 
             <div class="neuro-meta">
-              <div id="status-pill" class="status-pill">就绪</div>
               <div id="status-box" class="status-box">填写基础设定后，先生成故事大纲；若不满意，可以补充反馈并重生成。</div>
               <div id="llm-activity-status" class="sr-only">待命</div>
               <p id="llm-activity-summary" class="sr-only">填写基础设定后，先生成故事大纲；若不满意，可以补充反馈并重生成。</p>
@@ -330,6 +329,8 @@
     </div>
 
     <div id="favorite-toast" class="favorite-toast hidden" aria-live="polite" aria-hidden="true"></div>
+
+    <div id="neuro-guide-overlay" class="neuro-guide-overlay hidden" aria-hidden="true"></div>
 
     <div id="story-edit-modal" class="modal-overlay hidden" aria-hidden="true">
       <div class="modal-card">
