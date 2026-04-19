@@ -42,8 +42,13 @@ llm_task_manager = LlmTaskManager(story_service)
 
 
 @app.get("/")
-async def index() -> FileResponse:
+async def landing() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/create")
+async def create_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "create.html")
 
 
 @app.get("/api/health")

@@ -1,448 +1,1543 @@
 ﻿<!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>神经元脚本</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@300;400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="/static/styles.css" />
-  </head>
-  <body>
-    <div class="app">
-      <aside id="sidebar-rail" class="sidebar rail-shell" aria-label="流程导航">
-        <button
-          type="button"
-          id="sidebar-avatar-toggle"
-          class="sidebar-avatar"
-          aria-label="用户"
-          aria-expanded="false"
-          aria-controls="sidebar-detail-panel"
-        >
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <circle cx="10" cy="7.5" r="3"></circle>
-            <path d="M4 17c0-3 2.7-5 6-5s6 2 6 5"></path>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>神经元脚本 · Neuron Script — AI 小说创作伙伴</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --paper: #EBE5DF;
+  --page: #F7F3F0;
+  --ink: #222222;
+  --ink-soft: #7A6F64;
+  --ink-hint: #A69076;
+  --accent: #5E503F;
+  --accent-light: #D4C4B0;
+  --accent-warm: #C8A87A;
+  --white: #FDFCF9;
+  --border: rgba(94,80,63,0.12);
+  --serif: 'Noto Serif SC', 'Instrument Serif', serif;
+  --sans: 'DM Sans', system-ui, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--sans);
+  background: var(--paper);
+  color: var(--ink);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── GRAIN OVERLAY ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 1000;
+  opacity: 0.5;
+}
+
+/* ── NAV ── */
+nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 48px;
+  background: rgba(235,229,223,0.85);
+  backdrop-filter: blur(16px);
+  border-bottom: 0.5px solid var(--border);
+}
+
+.nav-logo {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+.nav-logo span { color: var(--accent); }
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+.nav-links a {
+  font-size: 13px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  letter-spacing: 0.02em;
+  transition: color 0.2s;
+}
+.nav-links a:hover { color: var(--ink); }
+
+.nav-cta {
+  padding: 9px 22px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.2s, transform 0.2s;
+  font-family: var(--sans);
+}
+.nav-cta:hover { background: #4A3C2E; transform: translateY(-1px); }
+
+/* ── HERO ── */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 120px 24px 80px;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(200,168,122,0.18) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 40% at 20% 80%, rgba(94,80,63,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 80% 60%, rgba(212,196,176,0.15) 0%, transparent 50%);
+}
+
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--white);
+  border: 0.5px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 36px;
+  animation: fadeUp 0.8s ease both;
+}
+.hero-eyebrow::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent-warm);
+}
+
+.hero-title {
+  font-family: var(--serif);
+  font-size: clamp(48px, 7vw, 92px);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  max-width: 860px;
+  animation: fadeUp 0.8s ease 0.1s both;
+}
+
+.hero-title em {
+  font-style: italic;
+  color: var(--accent);
+  position: relative;
+}
+
+.hero-sub {
+  margin-top: 28px;
+  font-size: 17px;
+  color: var(--ink-soft);
+  max-width: 520px;
+  line-height: 1.75;
+  font-weight: 300;
+  animation: fadeUp 0.8s ease 0.2s both;
+}
+
+.hero-actions {
+  margin-top: 48px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  animation: fadeUp 0.8s ease 0.3s both;
+}
+
+.btn-hero {
+  padding: 14px 32px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.25s;
+  font-family: var(--sans);
+  box-shadow: 0 8px 24px rgba(94,80,63,0.25);
+}
+.btn-hero:hover { background: #4A3C2E; transform: translateY(-2px); box-shadow: 0 12px 32px rgba(94,80,63,0.3); }
+
+.btn-ghost {
+  padding: 14px 28px;
+  border: 0.5px solid rgba(94,80,63,0.3);
+  border-radius: 999px;
+  font-size: 15px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  transition: all 0.25s;
+  font-family: var(--sans);
+}
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); background: rgba(94,80,63,0.04); }
+
+.hero-scroll-hint {
+  position: absolute;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-hint);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  animation: fadeUp 1s ease 0.6s both;
+}
+.scroll-line {
+  width: 1px;
+  height: 40px;
+  background: linear-gradient(to bottom, var(--accent-light), transparent);
+  animation: scrollPulse 2s ease-in-out infinite;
+}
+@keyframes scrollPulse { 0%,100% { opacity:0.4; transform: scaleY(1); } 50% { opacity:1; transform: scaleY(1.2); } }
+
+/* ── PRODUCT MOCKUP ── */
+.hero-mockup {
+  margin-top: 72px;
+  width: min(1100px, 90vw);
+  position: relative;
+  animation: fadeUp 1s ease 0.4s both;
+}
+
+.mockup-frame {
+  background: var(--white);
+  border-radius: 20px;
+  box-shadow: 0 32px 80px rgba(94,80,63,0.18), 0 0 0 0.5px rgba(94,80,63,0.12);
+  overflow: hidden;
+}
+
+.mockup-bar {
+  height: 44px;
+  background: var(--page);
+  border-bottom: 0.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 8px;
+}
+.mockup-dot { width: 10px; height: 10px; border-radius: 50%; }
+.mockup-dot:nth-child(1) { background: #FF6057; }
+.mockup-dot:nth-child(2) { background: #FFBD2E; }
+.mockup-dot:nth-child(3) { background: #29C940; }
+.mockup-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 auto;
+}
+.m-tab {
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-family: var(--sans);
+}
+.m-tab.active {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 500;
+}
+
+.mockup-body {
+  display: grid;
+  grid-template-columns: 52px 1fr 240px;
+  min-height: 420px;
+}
+
+.m-sidebar {
+  background: var(--paper);
+  border-right: 0.5px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0;
+  gap: 10px;
+}
+.m-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: rgba(94,80,63,0.08);
+  display: flex; align-items: center; justify-content: center;
+}
+.m-icon svg { width: 14px; height: 14px; color: var(--accent); }
+.m-icon.active { background: var(--accent); }
+.m-icon.active svg { color: #fff; }
+
+.m-main { padding: 24px 32px; overflow: hidden; }
+
+.m-section-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-hint);
+  margin-bottom: 10px;
+}
+
+.m-title {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 400;
+  margin-bottom: 6px;
+}
+.m-subtitle { font-size: 11px; color: var(--ink-soft); margin-bottom: 20px; }
+
+.m-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.m-chip {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 0.5px solid var(--border);
+  background: var(--white);
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.m-chip.sel { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 500; }
+
+.m-textarea {
+  width: 100%;
+  background: var(--page);
+  border: 0.5px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-family: var(--serif);
+  line-height: 1.7;
+  min-height: 80px;
+  margin-bottom: 16px;
+  font-style: italic;
+}
+
+.m-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.m-field {
+  background: var(--page);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.m-field-label { font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-hint); margin-bottom: 3px; }
+.m-field-val { font-size: 11px; color: var(--ink-soft); }
+
+.m-neuro {
+  background: var(--paper);
+  border-left: 0.5px solid var(--border);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.m-neuro-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 0.5px solid var(--border);
+}
+.m-neuro-avatar {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: #fff;
+}
+.m-neuro-name { font-size: 12px; font-weight: 500; }
+.m-neuro-tag {
+  margin-left: auto;
+  font-size: 9px;
+  background: rgba(94,80,63,0.10);
+  color: var(--ink-soft);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+
+.m-bubble {
+  background: var(--white);
+  border: 0.5px solid var(--border);
+  border-radius: 4px 10px 10px 10px;
+  padding: 8px 10px;
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  line-height: 1.65;
+}
+.m-bubble b { color: var(--ink); font-weight: 500; }
+
+.m-neuro-input {
+  margin-top: auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--border);
+}
+.m-neuro-input-box {
+  flex: 1;
+  background: var(--white);
+  border: 0.5px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 10px;
+  color: var(--ink-hint);
+}
+.m-neuro-send {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+}
+.m-neuro-send svg { width: 9px; height: 9px; color: #fff; }
+
+/* ── PAIN SECTION ── */
+.section { padding: 120px 48px; }
+.section-inner { max-width: 1100px; margin: 0 auto; }
+
+.pain-section {
+  background: var(--ink);
+  color: var(--white);
+  padding: 120px 48px;
+}
+
+.pain-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-warm);
+  margin-bottom: 24px;
+  font-weight: 500;
+}
+
+.pain-title {
+  font-family: var(--serif);
+  font-size: clamp(36px, 5vw, 60px);
+  font-weight: 400;
+  line-height: 1.15;
+  max-width: 700px;
+  margin-bottom: 64px;
+}
+.pain-title em { font-style: italic; color: var(--accent-warm); }
+
+.pain-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.pain-card {
+  background: rgba(255,255,255,0.04);
+  padding: 40px 32px;
+  position: relative;
+  transition: background 0.3s;
+}
+.pain-card:hover { background: rgba(255,255,255,0.07); }
+
+.pain-num {
+  font-family: var(--serif);
+  font-size: 48px;
+  color: rgba(200,168,122,0.2);
+  font-weight: 600;
+  line-height: 1;
+  margin-bottom: 20px;
+}
+
+.pain-card-title {
+  font-size: 17px;
+  font-weight: 500;
+  margin-bottom: 12px;
+  color: #fff;
+  font-family: var(--serif);
+}
+.pain-card-body { font-size: 14px; color: rgba(255,255,255,0.55); line-height: 1.75; }
+
+/* ── HOW IT WORKS ── */
+.steps-section { background: var(--page); }
+
+.section-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 20px;
+  font-weight: 500;
+}
+
+.section-title {
+  font-family: var(--serif);
+  font-size: clamp(32px, 4vw, 52px);
+  font-weight: 400;
+  line-height: 1.2;
+  color: var(--ink);
+  margin-bottom: 16px;
+}
+.section-title em { font-style: italic; color: var(--accent); }
+
+.section-sub {
+  font-size: 16px;
+  color: var(--ink-soft);
+  line-height: 1.75;
+  max-width: 520px;
+  margin-bottom: 72px;
+  font-weight: 300;
+}
+
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+
+.step-card {
+  background: var(--white);
+  border-radius: 20px;
+  padding: 32px 24px;
+  border: 0.5px solid var(--border);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+.step-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-warm));
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.step-card:hover { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(94,80,63,0.12); }
+.step-card:hover::before { opacity: 1; }
+
+.step-number {
+  font-family: var(--serif);
+  font-size: 40px;
+  color: var(--accent-light);
+  font-weight: 600;
+  line-height: 1;
+  margin-bottom: 20px;
+}
+
+.step-title {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 10px;
+  font-family: var(--serif);
+}
+.step-body { font-size: 13.5px; color: var(--ink-soft); line-height: 1.75; }
+
+.step-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: rgba(94,80,63,0.08);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 20px;
+}
+.step-icon svg { width: 18px; height: 18px; color: var(--accent); }
+
+/* ── FEATURES: ALTERNATING ── */
+.features-section { background: var(--paper); }
+
+.feature-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px;
+  align-items: center;
+  margin-bottom: 120px;
+}
+.feature-row:last-child { margin-bottom: 0; }
+.feature-row.rev { direction: rtl; }
+.feature-row.rev > * { direction: ltr; }
+
+.feature-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-warm);
+  margin-bottom: 16px;
+}
+
+.feature-title {
+  font-family: var(--serif);
+  font-size: clamp(26px, 3vw, 40px);
+  font-weight: 400;
+  line-height: 1.25;
+  color: var(--ink);
+  margin-bottom: 20px;
+}
+.feature-title em { font-style: italic; color: var(--accent); }
+
+.feature-body {
+  font-size: 15px;
+  color: var(--ink-soft);
+  line-height: 1.8;
+  margin-bottom: 28px;
+  font-weight: 300;
+}
+
+.feature-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.feature-pill {
+  padding: 6px 14px;
+  background: var(--white);
+  border: 0.5px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.feature-visual {
+  background: var(--white);
+  border-radius: 20px;
+  border: 0.5px solid var(--border);
+  box-shadow: 0 16px 48px rgba(94,80,63,0.10);
+  overflow: hidden;
+  aspect-ratio: 4/3;
+  position: relative;
+}
+
+/* Feature visual 1: character cards */
+.fv-char {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+}
+.fv-char-tabs { display: flex; gap: 0; }
+.fv-tab {
+  padding: 6px 16px;
+  font-size: 11px;
+  border-radius: 8px 8px 0 0;
+  border: 0.5px solid var(--border);
+  border-bottom: none;
+  background: var(--page);
+  color: var(--ink-soft);
+}
+.fv-tab.a1 { border-top: 2px solid #C8A830; background: var(--white); color: var(--ink); font-weight: 500; }
+.fv-tab.a2 { border-top: 2px solid #C87878; }
+.fv-tab.a3 { border-top: 2px solid #7898C8; }
+.fv-char-card {
+  flex: 1;
+  background: var(--white);
+  border: 0.5px solid var(--border);
+  border-radius: 0 12px 12px 12px;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.fv-field { display: flex; flex-direction: column; gap: 3px; }
+.fv-fl { font-size: 8.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-hint); }
+.fv-fv {
+  background: var(--page);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.fv-full { grid-column: 1/-1; }
+.fv-rel-graph {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  background: var(--page);
+  border-radius: 12px;
+  border: 0.5px solid var(--border);
+  padding: 10px 14px;
+  font-size: 10px;
+  color: var(--ink-soft);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Feature visual 2: outline arcs */
+.fv-outline { padding: 20px; height: 100%; display: flex; flex-direction: column; gap: 12px; }
+.fv-arc-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; flex: 1; }
+.fv-arc {
+  background: var(--page);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fv-arc-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  text-align: center;
+}
+.fv-arc-chips {
+  display: flex;
+  justify-content: center;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+.fv-chip-sm {
+  background: rgba(94,80,63,0.08);
+  color: var(--ink-soft);
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-size: 8.5px;
+}
+.fv-arc-text {
+  font-size: 9.5px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+  flex: 1;
+}
+.fv-arc.loading { background: linear-gradient(90deg, var(--page) 25%, #E8E2DA 50%, var(--page) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+.fv-synopsis {
+  background: var(--white);
+  border: 0.5px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 11px;
+  color: var(--ink-soft);
+  font-style: italic;
+  line-height: 1.6;
+  font-family: var(--serif);
+}
+
+/* Feature visual 3: prose */
+.fv-prose { padding: 24px 28px; height: 100%; display: flex; flex-direction: column; }
+.fv-prose-title {
+  font-family: var(--serif);
+  font-size: 18px;
+  font-style: italic;
+  margin-bottom: 16px;
+  color: var(--ink);
+}
+.fv-prose-content {
+  flex: 1;
+  font-family: var(--serif);
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--ink);
+}
+.fv-prose-content p { text-indent: 2em; margin-bottom: 0.8em; }
+.fv-human { color: #2B5EA7; background: rgba(43,94,167,0.07); border-radius: 2px; padding: 0 1px; }
+.fv-selected { background: rgba(200,168,122,0.25); border-radius: 2px; padding: 0 1px; }
+
+.fv-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--ink);
+  border-radius: 8px;
+  padding: 4px;
+  margin-bottom: 8px;
+  align-self: flex-start;
+}
+.fv-tbtn {
+  padding: 3px 8px;
+  color: rgba(255,255,255,0.8);
+  font-size: 9.5px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.fv-tbtn:hover { background: rgba(255,255,255,0.1); }
+
+/* Feature visual 4: favorites */
+.fv-favs { padding: 16px; height: 100%; display: flex; flex-direction: column; gap: 8px; }
+.fv-fav-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 0.5px solid var(--border);
+}
+.fv-fav-title { font-size: 11px; font-weight: 600; color: var(--ink); }
+.fv-fav-count {
+  background: var(--accent-warm);
+  color: #fff;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 9.5px;
+  font-weight: 600;
+}
+.fv-fav-item {
+  background: var(--page);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  font-style: italic;
+  line-height: 1.55;
+  font-family: var(--serif);
+  position: relative;
+}
+.fv-fav-date { font-size: 9px; color: var(--ink-hint); margin-bottom: 4px; font-style: normal; font-family: var(--sans); }
+
+/* ── NEURO FEATURE ── */
+.neuro-section {
+  background: var(--ink);
+  color: var(--white);
+  padding: 120px 48px;
+  overflow: hidden;
+  position: relative;
+}
+
+.neuro-bg-glow {
+  position: absolute;
+  width: 600px; height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(200,168,122,0.12) 0%, transparent 70%);
+  top: -100px; right: -100px;
+  pointer-events: none;
+}
+
+.neuro-layout {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: 80px;
+  align-items: center;
+}
+
+.neuro-chat {
+  background: rgba(255,255,255,0.04);
+  border: 0.5px solid rgba(255,255,255,0.1);
+  border-radius: 24px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.neuro-chat-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 16px;
+  border-bottom: 0.5px solid rgba(255,255,255,0.08);
+}
+.neuro-chat-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #fff;
+}
+.neuro-chat-name { font-size: 14px; font-weight: 500; }
+.neuro-chat-status {
+  margin-left: auto;
+  font-size: 10px;
+  color: rgba(255,255,255,0.4);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: #5DCE8A; animation: pulseDot 2s ease-in-out infinite; }
+@keyframes pulseDot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.nchat-bubble {
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px 14px 14px 14px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.75);
+  line-height: 1.7;
+}
+.nchat-bubble b { color: rgba(255,255,255,0.95); }
+.nchat-bubble.accent {
+  background: rgba(200,168,122,0.12);
+  border: 0.5px solid rgba(200,168,122,0.2);
+}
+
+.nchat-input {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-top: 16px;
+  border-top: 0.5px solid rgba(255,255,255,0.08);
+}
+.nchat-input-box {
+  flex: 1;
+  background: rgba(255,255,255,0.06);
+  border: 0.5px solid rgba(255,255,255,0.1);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.4);
+  font-family: var(--sans);
+}
+.nchat-send {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.nchat-send svg { width: 12px; height: 12px; color: #fff; }
+
+/* ── TESTIMONIAL / QUOTE ── */
+.quote-section {
+  background: var(--page);
+  padding: 100px 48px;
+  text-align: center;
+}
+
+.big-quote {
+  font-family: var(--serif);
+  font-size: clamp(28px, 4vw, 54px);
+  font-weight: 400;
+  font-style: italic;
+  line-height: 1.3;
+  color: var(--ink);
+  max-width: 800px;
+  margin: 0 auto 32px;
+}
+.big-quote em { color: var(--accent); }
+
+.quote-attr {
+  font-size: 13px;
+  color: var(--ink-hint);
+  letter-spacing: 0.04em;
+}
+
+/* ── CTA ── */
+.cta-section {
+  background: var(--accent);
+  padding: 120px 48px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.cta-bg {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 100% at 50% 50%, rgba(255,255,255,0.06) 0%, transparent 70%);
+}
+
+.cta-title {
+  font-family: var(--serif);
+  font-size: clamp(36px, 5vw, 64px);
+  font-weight: 400;
+  color: #fff;
+  line-height: 1.15;
+  margin-bottom: 20px;
+  position: relative;
+}
+.cta-title em { font-style: italic; color: rgba(255,255,255,0.65); }
+
+.cta-sub {
+  font-size: 16px;
+  color: rgba(255,255,255,0.65);
+  margin-bottom: 48px;
+  font-weight: 300;
+  position: relative;
+}
+
+.btn-cta-white {
+  padding: 16px 40px;
+  background: #fff;
+  color: var(--accent);
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.25s;
+  display: inline-block;
+  position: relative;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+  font-family: var(--sans);
+}
+.btn-cta-white:hover { transform: translateY(-3px); box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+
+/* ── FOOTER ── */
+footer {
+  background: var(--ink);
+  color: rgba(255,255,255,0.4);
+  padding: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.footer-logo {
+  font-family: var(--serif);
+  font-size: 15px;
+  color: rgba(255,255,255,0.7);
+}
+.footer-logo span { color: var(--accent-warm); }
+.footer-copy { font-size: 12px; }
+
+/* ── SCROLL ANIMATIONS ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(32px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.reveal-delay-1 { transition-delay: 0.1s; }
+.reveal-delay-2 { transition-delay: 0.2s; }
+.reveal-delay-3 { transition-delay: 0.3s; }
+.reveal-delay-4 { transition-delay: 0.4s; }
+
+/* ── HORIZONTAL SCROLL SECTION ── */
+.hscroll-wrapper {
+  overflow: hidden;
+  position: relative;
+  padding: 80px 0;
+  background: var(--paper);
+}
+
+.hscroll-track {
+  display: flex;
+  gap: 20px;
+  width: max-content;
+  animation: scrollLeft 30s linear infinite;
+}
+.hscroll-track:hover { animation-play-state: paused; }
+
+.hscroll-item {
+  background: var(--white);
+  border: 0.5px solid var(--border);
+  border-radius: 16px;
+  padding: 20px 24px;
+  min-width: 280px;
+  max-width: 280px;
+  flex-shrink: 0;
+}
+.hscroll-quote {
+  font-family: var(--serif);
+  font-size: 13px;
+  font-style: italic;
+  color: var(--ink-soft);
+  line-height: 1.7;
+  margin-bottom: 16px;
+}
+.hscroll-name { font-size: 11px; color: var(--ink-hint); font-weight: 500; }
+
+@keyframes scrollLeft {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 900px) {
+  nav { padding: 16px 24px; }
+  .nav-links { display: none; }
+  .section { padding: 80px 24px; }
+  .steps-grid { grid-template-columns: 1fr 1fr; }
+  .feature-row { grid-template-columns: 1fr; gap: 40px; }
+  .feature-row.rev { direction: ltr; }
+  .pain-grid { grid-template-columns: 1fr; }
+  .neuro-layout { grid-template-columns: 1fr; }
+  .mockup-body { grid-template-columns: 1fr; }
+  .m-sidebar { display: none; }
+  .m-neuro { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">神经元<span>脚本</span></div>
+  <div class="nav-links">
+    <a href="#features">功能</a>
+    <a href="#how">如何运作</a>
+    <a href="#neuro">Neuro AI</a>
+  </div>
+  <a href="/create?stage=basic" class="nav-cta">开始创作</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-eyebrow">人机协同小说创作平台</div>
+  <h1 class="hero-title">
+    你有故事，<em>我来帮你<br>把它写出来</em>
+  </h1>
+  <p class="hero-sub">
+    从一个模糊的想法，到一部结构完整、人物鲜活的小说。<br>
+    Neuron Script 陪你走完创作的每一步。
+  </p>
+  <div class="hero-actions">
+    <a href="/create?stage=basic" class="btn-hero">免费开始创作</a>
+    <a href="#how" class="btn-ghost">了解如何运作 →</a>
+  </div>
+
+  <!-- MOCKUP -->
+  <div class="hero-mockup">
+    <div class="mockup-frame">
+      <div class="mockup-bar">
+        <div class="mockup-dot"></div>
+        <div class="mockup-dot"></div>
+        <div class="mockup-dot"></div>
+        <div class="mockup-tabs">
+          <div class="m-tab active">基本信息</div>
+          <div class="m-tab">角色关系</div>
+          <div class="m-tab">大纲生成</div>
+          <div class="m-tab">正文生成</div>
+        </div>
+      </div>
+      <div class="mockup-body">
+        <div class="m-sidebar">
+          <div class="m-icon active">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="7.5" r="3"/><path d="M4 17c0-3 2.7-5 6-5s6 2 6 5"/></svg>
+          </div>
+          <div class="m-icon">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h12v12H4z"/><path d="M7 8h6M7 11h4"/></svg>
+          </div>
+        </div>
+        <div class="m-main">
+          <div class="m-title">神经元脚本</div>
+          <div class="m-subtitle">开始你的创作之旅</div>
+          <div class="m-section-label">故事类型 *</div>
+          <div class="m-chips">
+            <div class="m-chip">爱情</div>
+            <div class="m-chip sel">奇幻</div>
+            <div class="m-chip">悬疑</div>
+            <div class="m-chip">科幻</div>
+            <div class="m-chip">历史</div>
+            <div class="m-chip">自定义：输入类型</div>
+          </div>
+          <div class="m-section-label">故事梗概 *</div>
+          <div class="m-textarea">新世界大陆浮于奇异海面，私人飞行器普及。一位退休飞行器设计师，因徒弟飞行器故障，与旧友重逢，却卷入国王顾问的阴谋……</div>
+          <div class="m-section-label">世界观</div>
+          <div class="m-grid">
+            <div class="m-field"><div class="m-field-label">时间背景</div><div class="m-field-val">未来 2100</div></div>
+            <div class="m-field"><div class="m-field-label">物理环境</div><div class="m-field-val">城市大陆被大海包围</div></div>
+            <div class="m-field"><div class="m-field-label">社会环境</div><div class="m-field-val">君主制与科技并行</div></div>
+            <div class="m-field"><div class="m-field-label">语言风格</div><div class="m-field-val">幽默轻松 · 冒险</div></div>
+          </div>
+        </div>
+        <div class="m-neuro">
+          <div class="m-neuro-head">
+            <div class="m-neuro-avatar">N</div>
+            <div class="m-neuro-name">Neuro AI</div>
+            <div class="m-neuro-tag">基本信息</div>
+          </div>
+          <div class="m-bubble">你好！我是 <b>Neuro</b>，你的 AI 创作伙伴。我会在每个环节为你提供引导和建议 ✨</div>
+          <div class="m-bubble"><b>故事类型</b>和<b>故事梗概</b>是必填项，它们将直接影响 AI 生成的风格和内容质量。</div>
+          <div class="m-bubble">世界观和语言风格选填，但填得越详细，生成结果越贴合你的设想！</div>
+          <div class="m-neuro-input">
+            <div class="m-neuro-input-box">问 Neuro…</div>
+            <div class="m-neuro-send">
+              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 6h10M7 2l4 4-4 4"/></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hero-scroll-hint">
+    <div class="scroll-line"></div>
+    <span>向下探索</span>
+  </div>
+</section>
+
+<!-- PAIN POINTS -->
+<section class="pain-section">
+  <div class="section-inner" style="max-width:1100px; margin:0 auto;">
+    <div class="pain-eyebrow reveal">你是不是也有过这些时刻</div>
+    <h2 class="pain-title reveal">
+      灵感一闪而过，<em>落笔却无从开始</em>
+    </h2>
+    <div class="pain-grid reveal">
+      <div class="pain-card">
+        <div class="pain-num">01</div>
+        <div class="pain-card-title">碎片化灵感，无法落地</div>
+        <div class="pain-card-body">故事在脑海中模糊闪烁，每次尝试下笔，却发现它们无法连成一条线。你有世界，有人物，但不知道怎么把它们组装成一个完整的故事。</div>
+      </div>
+      <div class="pain-card">
+        <div class="pain-num">02</div>
+        <div class="pain-card-title">情节结构，无从布局</div>
+        <div class="pain-card-body">开头写了三章，不知道高潮在哪。故事走着走着就散了，人物失去目标，读者（包括你自己）失去方向。结构，是小说最难的功课。</div>
+      </div>
+      <div class="pain-card">
+        <div class="pain-num">03</div>
+        <div class="pain-card-title">人物弧光，难以把握</div>
+        <div class="pain-card-body">主角从头到尾都是同一个人。人物没有成长，没有转变，故事就只是一连串事件。你知道有什么不对，但不知道怎么改。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="section steps-section" id="how">
+  <div class="section-inner">
+    <div class="section-eyebrow reveal">四步创作流程</div>
+    <h2 class="section-title reveal">从想法到完稿，<em>每一步都有人陪</em></h2>
+    <p class="section-sub reveal">Neuron Script 把小说创作拆解成四个清晰的步骤，Neuro AI 在每个环节为你提供专业引导。</p>
+    <div class="steps-grid">
+      <div class="step-card reveal reveal-delay-1">
+        <div class="step-icon">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h12v12H4z"/><path d="M7 8h6M7 11h4"/></svg>
+        </div>
+        <div class="step-number">01</div>
+        <div class="step-title">基本信息</div>
+        <div class="step-body">确立故事骨架。选择类型、描述梗概、设定世界观，AI 从你的只言片语中理解你的创作意图。</div>
+      </div>
+      <div class="step-card reveal reveal-delay-2">
+        <div class="step-icon">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="6" r="2"/><circle cx="13" cy="6" r="2"/><circle cx="10" cy="14" r="2"/><path d="M9 8l-2 4m4-4l2 4m-4-8v2"/></svg>
+        </div>
+        <div class="step-number">02</div>
+        <div class="step-title">角色关系</div>
+        <div class="step-body">填写角色档案，拖拽建立关系图谱。AI 理解每个人的动机与弧光，确保人物立体可信。</div>
+      </div>
+      <div class="step-card reveal reveal-delay-3">
+        <div class="step-icon">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5h14M6 10h8M9 15h2"/></svg>
+        </div>
+        <div class="step-number">03</div>
+        <div class="step-title">大纲生成</div>
+        <div class="step-body">按开端→发展→高潮→结局的经典叙事弧线，AI 为你构建章节结构，每章都有完整的情节规划。</div>
+      </div>
+      <div class="step-card reveal reveal-delay-4">
+        <div class="step-icon">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h12v12H4z"/><path d="M7 8h6M7 11h4M7 14h3"/></svg>
+        </div>
+        <div class="step-number">04</div>
+        <div class="step-title">正文生成</div>
+        <div class="step-body">AI 生成完整正文，你可以选中任意文字手动编辑或局部重写，收藏喜欢的句子，人机协作完成创作。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="section features-section" id="features">
+  <div class="section-inner">
+
+    <!-- Feature 1: Character system -->
+    <div class="feature-row">
+      <div>
+        <div class="feature-label reveal">角色档案系统</div>
+        <h3 class="feature-title reveal">让每个角色<em>活起来</em></h3>
+        <p class="feature-body reveal">不只是名字和年龄。为每位角色填写性格、核心动机、内在冲突和人物弧光，用可视化关系图谱连接他们之间的情感网络。AI 会记住这一切，并在整个创作过程中保持人物一致性。</p>
+        <div class="feature-pills reveal">
+          <div class="feature-pill">彩色角色标签</div>
+          <div class="feature-pill">可视化关系图</div>
+          <div class="feature-pill">AI 补充关系</div>
+          <div class="feature-pill">人物弧光追踪</div>
+        </div>
+      </div>
+      <div class="feature-visual reveal">
+        <div class="fv-char">
+          <div class="fv-char-tabs">
+            <div class="fv-tab a1">林远</div>
+            <div class="fv-tab a2">苏映</div>
+            <div class="fv-tab a3">陈默</div>
+            <div class="fv-tab">＋</div>
+          </div>
+          <div class="fv-char-card">
+            <div class="fv-field"><div class="fv-fl">姓名</div><div class="fv-fv">林远</div></div>
+            <div class="fv-field"><div class="fv-fl">年龄</div><div class="fv-fv">34岁</div></div>
+            <div class="fv-field"><div class="fv-fl">身份/职业</div><div class="fv-fv">退休飞行器设计师</div></div>
+            <div class="fv-field"><div class="fv-fl">性别</div><div class="fv-fv">男</div></div>
+            <div class="fv-field fv-full"><div class="fv-fl">核心动机</div><div class="fv-fv">在平静中寻找失去的意义，却被命运卷入更大的麻烦</div></div>
+            <div class="fv-field fv-full"><div class="fv-fl">人物弧光</div><div class="fv-fv">从逃避责任的隐士，到重新承担守护者角色</div></div>
+          </div>
+        </div>
+        <!-- Mini relationship graph overlay -->
+        <div class="fv-rel-graph">
+          <svg width="100" height="80" viewBox="0 0 100 80">
+            <line x1="50" y1="15" x2="20" y2="60" stroke="#D4B07A" stroke-width="1" marker-end="url(#a)"/>
+            <line x1="50" y1="15" x2="80" y2="60" stroke="#D4B07A" stroke-width="1" marker-end="url(#a)"/>
+            <line x1="80" y1="60" x2="25" y2="60" stroke="#D4B07A" stroke-width="1" marker-end="url(#a)"/>
+            <defs><marker id="a" markerWidth="4" markerHeight="4" refX="3" refY="2" orient="auto"><path d="M0,0 L0,4 L4,2 z" fill="#C8A060"/></marker></defs>
+            <ellipse cx="50" cy="12" rx="18" ry="9" fill="white" stroke="#C8A830" stroke-width="1"/>
+            <text x="50" y="16" text-anchor="middle" font-size="7" fill="#6A5010">林远</text>
+            <ellipse cx="20" cy="62" rx="14" ry="8" fill="white" stroke="#C87878" stroke-width="1"/>
+            <text x="20" y="65" text-anchor="middle" font-size="7" fill="#7A2828">苏映</text>
+            <ellipse cx="80" cy="62" rx="14" ry="8" fill="white" stroke="#7898C8" stroke-width="1"/>
+            <text x="80" y="65" text-anchor="middle" font-size="7" fill="#1A3A7A">陈默</text>
           </svg>
-        </button>
+          <div style="font-size:8px;color:#A69076;text-align:center;">角色关系图</div>
+        </div>
+      </div>
+    </div>
 
-        <div class="sidebar-spacer"></div>
-
-        <button type="button" class="sidebar-icon rail-node rail-node-muted" aria-label="设置" title="设置">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <circle cx="10" cy="10" r="2.5"></circle>
-            <path d="M10 3v2M10 15v2M3 10h2M15 10h2M5.05 5.05l1.41 1.41M13.54 13.54l1.41 1.41M5.05 14.95l1.41-1.41M13.54 6.46l1.41-1.41"></path>
-          </svg>
-        </button>
-
-        <div id="sidebar-detail-panel" class="sidebar-detail-panel" aria-hidden="true">
-          <div class="sidebar-detail-scroll">
-            <div class="sidebar-profile-card">
-              <div class="sidebar-profile-avatar" aria-hidden="true">
-                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <circle cx="10" cy="7.5" r="3"></circle>
-                  <path d="M4 17c0-3 2.7-5 6-5s6 2 6 5"></path>
-                </svg>
-              </div>
-              <div>
-                <div class="sidebar-profile-name">创作者</div>
-                <p class="sidebar-profile-note">喜欢的句子会保存在这里，方便之后回看。</p>
-              </div>
+    <!-- Feature 2: Outline -->
+    <div class="feature-row rev">
+      <div>
+        <div class="feature-label reveal">AI 大纲系统</div>
+        <h3 class="feature-title reveal">经典叙事弧线，<em>一键成型</em></h3>
+        <p class="feature-body reveal">AI 按照开端→发展→高潮→结局的四段叙事结构，为你生成完整大纲，并为每个章节规划具体情节。你可以查看历史版本、调整方向，让 AI 重新生成。</p>
+        <div class="feature-pills reveal">
+          <div class="feature-pill">四段式叙事结构</div>
+          <div class="feature-pill">章节情节规划</div>
+          <div class="feature-pill">历史版本记录</div>
+          <div class="feature-pill">导出大纲文件</div>
+        </div>
+      </div>
+      <div class="feature-visual reveal">
+        <div class="fv-outline">
+          <div class="fv-synopsis">"新世界大陆浮于奇异海面，私人飞行器普及。弗林特·瓦伦丁，一位退休飞行器设计师，因徒弟奥利弗飞行器故障与旧友重逢，却卷入国王顾问的阴谋……"</div>
+          <div class="fv-arc-row">
+            <div class="fv-arc">
+              <div class="fv-arc-label">开端</div>
+              <div class="fv-arc-chips"><div class="fv-chip-sm">第1章</div><div style="font-size:8px;color:#A69076;">—</div><div class="fv-chip-sm">第2章</div></div>
+              <div class="fv-arc-text">奥利弗飞行器故障，弗林特被迫出山，与塞巴斯蒂安重逢，西尔维斯特以合作名义介入，四人关系暗流涌动。</div>
             </div>
-
-            <section class="sidebar-module">
-              <div class="sidebar-module-header">
-                <h3>我的收藏</h3>
-                <span id="favorite-count-badge" class="sidebar-count-badge">0</span>
-              </div>
-              <p class="sidebar-module-tip">在正文里选中句子后，点击爱心即可加入收藏。</p>
-              <div id="favorite-list" class="favorite-list"></div>
-            </section>
-          </div>
-        </div>
-      </aside>
-
-      <div class="main-col">
-        <header class="topbar">
-          <nav id="top-stage-tabs" class="step-tabs" aria-label="创作阶段">
-            <button type="button" class="step-tab stage-tab is-active" data-stage-target="basic">基本信息</button>
-            <button type="button" class="step-tab stage-tab" data-stage-target="characters">角色关系</button>
-            <button type="button" class="step-tab stage-tab" data-stage-target="outline">大纲生成</button>
-            <button type="button" class="step-tab stage-tab" data-stage-target="story">正文生成</button>
-          </nav>
-
-          <button
-            type="button"
-            id="llm-activity-toggle"
-            class="neuro-toggle"
-            aria-label="展开 Neuro 助手面板"
-            title="展开 Neuro 助手面板"
-          >
-            <span class="neuro-toggle-mark">N</span>
-          </button>
-        </header>
-
-        <div class="content-area">
-          <form id="story-form" class="page-shell">
-            <section id="stage-basic" class="page stage-panel is-current" data-stage-screen="basic">
-              <div class="scroll-area" id="scroll-0">
-                <h1 class="page-title">神经元脚本</h1>
-                <p class="page-subtitle">开始你的创作之旅</p>
-                <p class="form-hint">带 <b>（*）</b> 为必选／必填项</p>
-
-                <div class="form-section" id="field-type">
-                  <div class="form-label">故事类型 <span class="required-badge">（*）</span></div>
-                  <div class="type-chips">
-                    <div id="genre-options" class="type-chips"></div>
-                    <label class="chip custom-chip custom-chip-input" for="custom-genre">
-                      自定义：
-                      <input id="custom-genre" class="chip-input" type="text" placeholder="输入类型" />
-                    </label>
-                  </div>
-                </div>
-
-                <div class="form-section" id="field-synopsis">
-                  <label class="form-label" for="synopsis">故事梗概 <span class="required-badge">（*）</span></label>
-                  <textarea
-                    id="synopsis"
-                    class="textarea-field"
-                    rows="5"
-                    placeholder="描述你的故事核心——主角是谁，面临什么困境，追求什么目标……"
-                    required
-                  ></textarea>
-                </div>
-
-                <div class="form-section" id="field-worldview">
-                  <div class="form-label">世界观</div>
-                  <div class="worldview-grid">
-                    <div>
-                      <label class="input-label-sm" for="worldview-time">时间背景</label>
-                      <input id="worldview-time" class="input-field" type="text" placeholder="如：近未来 2087 年" />
-                    </div>
-                    <div>
-                      <label class="input-label-sm" for="worldview-physical">物理环境</label>
-                      <input id="worldview-physical" class="input-field" type="text" placeholder="如：浮空大陆，引力异常" />
-                    </div>
-                    <div>
-                      <label class="input-label-sm" for="worldview-social">社会环境</label>
-                      <input id="worldview-social" class="input-field" type="text" placeholder="如：科技与修炼并行的文明" />
-                    </div>
-                  </div>
-                </div>
-
-                <div class="form-section">
-                  <div class="form-label">语言风格</div>
-                  <div class="type-chips">
-                    <div id="style-options" class="type-chips"></div>
-                    <label class="chip custom-chip custom-chip-input" for="custom-style">
-                      自定义：
-                      <input id="custom-style" class="chip-input" type="text" placeholder="输入风格" />
-                    </label>
-                  </div>
-                </div>
-
-                <div class="form-section">
-                  <div class="form-label">篇幅设定</div>
-                  <div class="metrics-stack">
-                    <div class="metrics-row">
-                      <div class="char-input-group">
-                        <label class="char-input-label" for="total-words">整体篇幅 <span class="inline-required">*</span></label>
-                        <div class="metric-input-shell">
-                          <input id="total-words" class="input-field" type="number" min="1000" step="100" value="12000" required />
-                          <span class="input-unit">字</span>
-                        </div>
-                      </div>
-                      <div class="char-input-group">
-                        <label class="char-input-label" for="chapter-words">每章目标字数</label>
-                        <div class="metric-input-shell">
-                          <input id="chapter-words" class="input-field" type="number" min="500" step="100" value="2000" />
-                          <span class="input-unit">字</span>
-                        </div>
-                      </div>
-
-                      <div class="char-input-group">
-                        <div class="char-input-label">预估章节数（自动计算）</div>
-                        <div class="metric-input-shell metric-display-shell">
-                          <div id="chapter-count" class="metric-display">6 章</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="next-btn">
-                  <button type="button" id="go-to-characters" class="btn-primary primary-button">
-                    编辑角色
-                    <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                      <path d="M2 7h10M8 3l4 4-4 4"></path>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            <section id="stage-characters" class="page stage-panel" data-stage-screen="characters">
-              <div class="character-page">
-                <div class="char-editor" id="scroll-1">
-                  <div id="character-list"></div>
-                  <button type="button" id="add-character" class="hidden-button" aria-hidden="true" tabindex="-1">
-                    新增角色
-                  </button>
-                </div>
-
-                <div class="relationship-area relation-panel" id="rel-area">
-                  <div class="rel-resize-handle" id="rel-resize-handle" title="拖拽调整面板宽度"></div>
-                  <div class="rel-label">角色关系地图 · 可连线 · 可缩放</div>
-
-                  <div id="character-graph-stage" class="graph-wrap">
-                    <div id="graph-canvas" class="graph-canvas rel-canvas">
-                      <svg id="graph-svg" class="graph-svg"></svg>
-                      <div id="graph-nodes" class="graph-nodes"></div>
-                      <div id="relation-labels" class="relation-labels"></div>
-                    </div>
-                  </div>
-
-                  <p id="relation-save-state" class="relation-save-state">
-                    编辑完故事梗概、角色卡和关系网后，请先点击“保存关系”，再使用 AI 补充。
-                  </p>
-
-                  <div class="rel-actions relation-toolbar">
-                    <button type="button" id="save-relations" class="btn-secondary ghost-button">保存关系</button>
-                    <button type="button" id="supplement-relations" class="btn-secondary btn-ai secondary-button" disabled>AI补充</button>
-                    <button type="submit" id="generate-outline" class="btn-primary primary-button">生成大纲</button>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section id="stage-outline" class="page stage-panel" data-stage-screen="outline">
-              <div class="outline-main" id="scroll-2">
-                <div class="outline-page-header">
-                  <div class="outline-synopsis-label">
-                    <span>故事梗概</span>
-                    <div class="outline-actions-row">
-                      <div id="outline-tools-anchor" class="outline-icons">
-                        <button type="button" id="outline-history" class="icon-btn-wrap icon-button" title="历史记录" aria-label="历史记录">
-                          <span class="icon-btn" aria-hidden="true">
-                            <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
-                              <circle cx="7" cy="7" r="5"></circle>
-                              <path d="M7 4v3l2 2"></path>
-                            </svg>
-                          </span>
-                        </button>
-
-                        <button type="button" id="regenerate-outline" class="icon-btn-wrap icon-button" title="重新生成" aria-label="重新生成" disabled>
-                          <span class="icon-btn" aria-hidden="true">
-                            <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
-                              <path d="M2 7a5 5 0 1 1 3.5 4.7"></path>
-                              <path d="M10 4 8 7l2 3"></path>
-                            </svg>
-                          </span>
-                        </button>
-
-                        <button type="button" id="export-outline" class="icon-btn-wrap icon-button" title="导出大纲" aria-label="导出大纲" disabled>
-                          <span class="icon-btn" aria-hidden="true">
-                            <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
-                              <path d="M2 10v2h10v-2M7 2v7M4 6l3 3 3-3"></path>
-                            </svg>
-                          </span>
-                        </button>
-                      </div>
-
-                      <button type="button" id="generate-story" class="btn-primary primary-button" disabled>生成正文</button>
-                    </div>
-                  </div>
-                </div>
-
-                <div id="outline-result" class="outline-result empty-state">还没有生成大纲。</div>
-              </div>
-            </section>
-
-            <section id="stage-story" class="page stage-panel" data-stage-screen="story">
-              <div class="prose-main" id="scroll-3">
-                <div class="prose-title-bar prose-title-bar-static">
-                  <div class="prose-title-info">
-                    <span class="prose-title">正文生成</span>
-                  </div>
-                  <div class="prose-actions">
-                    <button type="button" id="export-all-story" class="btn-export-main" disabled>导出全书</button>
-                  </div>
-                </div>
-                <div id="story-result" class="story-result empty-state">大纲确认后，这里会依次展示每个篇章的正文。</div>
-              </div>
-            </section>
-          </form>
-
-          <aside id="llm-activity-panel" class="neuro-panel" aria-live="polite" aria-label="Neuro 助手">
-            <div id="neuro-drag-handle" class="neuro-drag-edge"></div>
-
-            <div class="neuro-header">
-              <div class="neuro-avatar"><span>N</span></div>
-              <span id="llm-activity-title" class="neuro-name">Neuro AI</span>
-              <span id="neuro-stage-label" class="neuro-stage">基本信息</span>
-              <button type="button" id="llm-activity-close" class="neuro-close tiny-button">收起</button>
+            <div class="fv-arc">
+              <div class="fv-arc-label">发展</div>
+              <div class="fv-arc-chips"><div class="fv-chip-sm">第3章</div><div style="font-size:8px;color:#A69076;">—</div><div class="fv-chip-sm">第5章</div></div>
+              <div class="fv-arc-text">火山探险中发现故障线索，奥利弗与塞巴斯蒂安因西尔维斯特挑拨产生分歧，人物微变化显现。</div>
             </div>
-
-            <div class="neuro-meta">
-              <div id="status-box" class="status-box">填写基础设定后，先生成故事大纲；若不满意，可以补充反馈并重生成。</div>
-              <div id="llm-activity-status" class="sr-only">待命</div>
-              <p id="llm-activity-summary" class="sr-only">填写基础设定后，先生成故事大纲；若不满意，可以补充反馈并重生成。</p>
+            <div class="fv-arc loading">
+              <div class="fv-arc-label">高潮</div>
+              <div class="fv-arc-chips"><div class="fv-chip-sm">第6章</div><div style="font-size:8px;color:#A69076;">—</div><div class="fv-chip-sm">第8章</div></div>
             </div>
-
-            <div id="llm-activity-actions" class="action-row llm-activity-actions hidden">
-              <button type="button" id="llm-activity-stop" class="ghost-button">停止生成</button>
-              <button type="button" id="llm-activity-resume" class="secondary-button hidden">继续本次生成</button>
-              <button type="button" id="llm-activity-discard" class="tiny-button hidden">放弃本次生成</button>
+            <div class="fv-arc loading">
+              <div class="fv-arc-label">结局</div>
+              <div class="fv-arc-chips"><div class="fv-chip-sm">第9章</div><div style="font-size:8px;color:#A69076;">—</div><div class="fv-chip-sm">第10章</div></div>
             </div>
-
-            <ol id="llm-activity-log" class="neuro-body llm-activity-log"></ol>
-
-            <div id="neuro-input-row" class="neuro-input-row">
-              <div class="neuro-input-shell">
-                <label id="neuro-input-label" class="neuro-input-label hidden" for="outline-feedback">改进意见</label>
-                <p id="neuro-input-hint" class="neuro-input-hint hidden">首版大纲生成后，你可以在这里填写改进意见。</p>
-                <textarea
-                  id="outline-feedback"
-                  class="textarea-field textarea-compact neuro-feedback-input hidden"
-                  rows="4"
-                  placeholder="如果想调整大纲，可以在这里补充方向，例如：加强情感张力、减少支线、增加悬疑误导。"
-                ></textarea>
-                <div id="neuro-input-placeholder" class="neuro-input-placeholder">故事正在这里留下轨迹……</div>
-              </div>
-            </div>
-          </aside>
-        </div>
-      </div>
-    </div>
-
-    <div id="story-selection-toolbar" class="story-selection-toolbar hidden" aria-hidden="true">
-      <button type="button" id="story-selection-edit" class="sel-btn">手动编辑</button>
-      <button type="button" id="story-selection-regenerate" class="sel-btn">AI局部重写</button>
-      <button type="button" id="story-selection-favorite" class="sel-btn sel-btn-icon" aria-label="喜欢" title="喜欢">
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
-          <path d="M10 16.2 4.7 11.5a3.5 3.5 0 0 1 5-4.9L10 7l.3-.4a3.5 3.5 0 0 1 5 4.9L10 16.2Z"></path>
-        </svg>
-      </button>
-    </div>
-
-    <div id="favorite-toast" class="favorite-toast hidden" aria-live="polite" aria-hidden="true"></div>
-
-    <div id="neuro-guide-overlay" class="neuro-guide-overlay hidden" aria-hidden="true"></div>
-
-    <div id="story-edit-modal" class="modal-overlay hidden" aria-hidden="true">
-      <div class="modal-card">
-        <div class="section-heading compact">
-          <div>
-            <p class="section-kicker">Selection Edit</p>
-            <h3>编辑选中文本</h3>
-          </div>
-          <button type="button" id="story-edit-close" class="tiny-button">关闭</button>
-        </div>
-        <div class="field-group">
-          <label for="story-edit-textarea">编辑内容</label>
-          <textarea id="story-edit-textarea" class="textarea-field" rows="8" placeholder="在这里修改你选中的正文。"></textarea>
-        </div>
-        <div class="action-row">
-          <button type="button" id="story-edit-save" class="primary-button">保存修改</button>
-          <button type="button" id="story-edit-cancel" class="ghost-button">取消</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="outline-history-modal" class="modal-overlay hidden" aria-hidden="true">
-      <div class="modal-card">
-        <div class="section-heading compact">
-          <div>
-            <p class="section-kicker">Outline History</p>
-            <h3>大纲历史记录</h3>
-          </div>
-          <button type="button" id="outline-history-close" class="tiny-button">关闭</button>
-        </div>
-        <div id="outline-history-list" class="outline-history-list"></div>
-      </div>
-    </div>
-
-    <div id="relation-modal" class="modal-overlay hidden" aria-hidden="true">
-      <div class="modal-card">
-        <div class="section-heading compact">
-          <div>
-            <p class="section-kicker">Relation Editor</p>
-            <h3>编辑角色关系</h3>
-          </div>
-          <button type="button" id="relation-modal-close" class="tiny-button">关闭</button>
-        </div>
-        <p id="relation-direction" class="micro-tip"></p>
-        <div class="field-group">
-          <label for="relation-label-input">正向关系</label>
-          <input id="relation-label-input" class="input-field" type="text" list="relation-presets" placeholder="例如：朋友、同事、爱慕者" />
-        </div>
-        <label class="check-row">
-          <input id="relation-reverse-toggle" type="checkbox" />
-          <span>同时设定为反向关系</span>
-        </label>
-        <div id="reverse-relation-group" class="field-group hidden">
-          <label for="reverse-relation-label-input">反向关系</label>
-          <input id="reverse-relation-label-input" class="input-field" type="text" list="relation-presets" placeholder="例如：朋友、同事、子女、下属" />
-        </div>
-        <div class="action-row">
-          <button type="button" id="relation-save-button" class="primary-button">保存该条关系</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="relation-delete-modal" class="modal-overlay hidden" aria-hidden="true">
-      <div class="modal-card modal-card-compact">
-        <div class="section-heading compact">
-          <div>
-            <p class="section-kicker">Delete Relation</p>
-            <h3>删除关系</h3>
           </div>
         </div>
-        <p id="relation-delete-message" class="micro-tip"></p>
-        <div class="action-row modal-confirm-actions">
-          <button type="button" id="relation-delete-confirm" class="primary-button danger-button">确认</button>
-          <button type="button" id="relation-delete-cancel" class="ghost-button">取消</button>
-        </div>
       </div>
     </div>
 
-    <div id="llm-task-pause-modal" class="modal-overlay hidden" aria-hidden="true">
-      <div class="modal-card modal-card-compact">
-        <div class="section-heading compact">
-          <div>
-            <p class="section-kicker">LLM Task</p>
-            <h3>本次生成已暂停</h3>
+    <!-- Feature 3: Prose -->
+    <div class="feature-row">
+      <div>
+        <div class="feature-label reveal">人机协同正文</div>
+        <h3 class="feature-title reveal">AI 生成，你来<em>把关与打磨</em></h3>
+        <p class="feature-body reveal">AI 生成完整正文后，选中任何一段文字，可以手动编辑或让 AI 局部重写。蓝色标注你修改过的部分，一目了然。最终的作品，是你和 AI 共同完成的。</p>
+        <div class="feature-pills reveal">
+          <div class="feature-pill">选中文字即可编辑</div>
+          <div class="feature-pill">AI 局部重写</div>
+          <div class="feature-pill">人工编辑标注</div>
+          <div class="feature-pill">一键导出全书</div>
+        </div>
+      </div>
+      <div class="feature-visual reveal">
+        <div class="fv-prose">
+          <div class="fv-prose-title">《浮城奇谭》</div>
+          <div class="fv-toolbar">
+            <div class="fv-tbtn">手动编辑</div>
+            <div class="fv-tbtn">AI 局部重写</div>
+            <div class="fv-tbtn">✕</div>
           </div>
-          <button type="button" id="llm-task-pause-close" class="tiny-button">关闭</button>
-        </div>
-        <p id="llm-task-pause-message" class="micro-tip">
-          当前 LLM 调用已经暂停。你可以先返回编辑；若选择继续，将按暂停前的输入重新发起本次生成。
-        </p>
-        <div class="action-row modal-confirm-actions">
-          <button type="button" id="llm-task-pause-resume" class="primary-button">继续本次生成</button>
-          <button type="button" id="llm-task-pause-discard" class="ghost-button">放弃本次生成</button>
+          <div class="fv-prose-content">
+            <p>新世界大陆的清晨总是从浮力开始。海水像巨大的蓝色果冻，托着整片城市大陆轻轻摇晃，阳光洒在火山轮廓上，给森林镀了层金边。</p>
+            <p><span class="fv-human">奥利弗·费恩驾驶着他的"云雀三号"私人飞行器，正要去参加飞行器竞速赛的预选。他哼着歌，想象着自己夺冠后师父弗林特那副"我早就知道"的表情。</span></p>
+            <p>突然，仪表盘上的数字开始<span class="fv-selected">跳舞。"什么鬼？"奥利弗嘟囔着，试图稳住操纵杆。</span>飞行器像喝醉的海鸥，在空中画了个不规则的弧线，然后直直朝下方那片茂密的森林坠去。</p>
+          </div>
         </div>
       </div>
     </div>
 
-    <datalist id="relation-presets">
-      <option value="朋友"></option>
-      <option value="亲人"></option>
-      <option value="恋人"></option>
-      <option value="师生"></option>
-      <option value="同事"></option>
-      <option value="宿敌"></option>
-      <option value="盟友"></option>
-      <option value="上下级"></option>
-      <option value="爱慕者"></option>
-      <option value="母亲"></option>
-      <option value="父亲"></option>
-      <option value="子女"></option>
-    </datalist>
+    <!-- Feature 4: Favorites -->
+    <div class="feature-row rev">
+      <div>
+        <div class="feature-label reveal">句子收藏系统</div>
+        <h3 class="feature-title reveal">遇见好句子，<em>一键珍藏</em></h3>
+        <p class="feature-body reveal">创作过程中，AI 偶尔会生成让你眼睛一亮的句子。选中它，点击收藏，所有你喜欢的句子都会保存在左侧面板，随时回看，成为你下一个灵感的起点。</p>
+        <div class="feature-pills reveal">
+          <div class="feature-pill">选中即可收藏</div>
+          <div class="feature-pill">按章节分组</div>
+          <div class="feature-pill">日期记录</div>
+          <div class="feature-pill">一键删除管理</div>
+        </div>
+      </div>
+      <div class="feature-visual reveal">
+        <div class="fv-favs">
+          <div class="fv-fav-head">
+            <div class="fv-fav-title">我的收藏</div>
+            <div class="fv-fav-count">5</div>
+          </div>
+          <div style="font-size:10px;color:#A69076;padding:4px 0;">在正文里选中句子后，点击爱心即可加入收藏。</div>
+          <div class="fv-fav-item"><div class="fv-fav-date">04/19</div>"飞行器像喝醉的海鸥，在空中画了个不规则的弧线。"</div>
+          <div class="fv-fav-item"><div class="fv-fav-date">04/19</div>"海水像巨大的蓝色果冻，托着整片城市大陆轻轻摇晃。"</div>
+          <div class="fv-fav-item"><div class="fv-fav-date">04/19</div>"那花叫'夜语兰'，只在月光下开放，据说它的低语能揭示隐藏的真相。"</div>
+          <div class="fv-fav-item"><div class="fv-fav-date">04/19</div>"这个人太完美了，完美得让人不安。"</div>
+        </div>
+      </div>
+    </div>
 
-    <script src="/static/app.js" defer></script>
-  </body>
+  </div>
+</section>
+
+<!-- NEURO AI FEATURE -->
+<section class="neuro-section" id="neuro">
+  <div class="neuro-bg-glow"></div>
+  <div class="neuro-layout">
+    <div>
+      <div class="pain-eyebrow reveal">你的 AI 创作伙伴</div>
+      <h2 class="pain-title reveal" style="color:#fff;">Neuro 陪你<em>走完每一步</em></h2>
+      <p class="section-sub reveal" style="color:rgba(255,255,255,0.5);margin-bottom:40px;">不是一个冷冰冰的写作工具，而是一个了解你创作意图的 AI 伙伴。在每个创作环节，Neuro 都会主动提供专业引导、实时建议和灵感激发。</p>
+      <div class="steps-grid" style="grid-template-columns:1fr 1fr;gap:16px;">
+        <div style="background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.1);border-radius:16px;padding:20px;">
+          <div style="font-size:13px;font-weight:500;color:#fff;margin-bottom:6px;">实时引导</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.45);line-height:1.65;">每个步骤都有专属建议，不让你陷入空白焦虑</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.1);border-radius:16px;padding:20px;">
+          <div style="font-size:13px;font-weight:500;color:#fff;margin-bottom:6px;">改进建议</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.45);line-height:1.65;">可以告诉 Neuro 你对大纲的想法，AI 重新生成</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.1);border-radius:16px;padding:20px;">
+          <div style="font-size:13px;font-weight:500;color:#fff;margin-bottom:6px;">随时对话</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.45);line-height:1.65;">问创作问题，聊故事思路，Neuro 随时响应</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.1);border-radius:16px;padding:20px;">
+          <div style="font-size:13px;font-weight:500;color:#fff;margin-bottom:6px;">灵活收起</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.45);line-height:1.65;">专注创作时可收起面板，需要时随时呼出</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="neuro-chat reveal">
+      <div class="neuro-chat-head">
+        <div class="neuro-chat-avatar">N</div>
+        <div class="neuro-chat-name">Neuro AI</div>
+        <div class="neuro-chat-status">
+          <div class="status-dot"></div>
+          正文生成中
+        </div>
+      </div>
+      <div class="nchat-bubble">正文已生成完毕！✍️ 你可以<b>选中任意文字</b>来进行手动编辑或让 AI 局部重写。</div>
+      <div class="nchat-bubble"><b>蓝色文字</b>是你手动编辑过的内容，<b>黑色文字</b>是 AI 生成的原文，两者一目了然。</div>
+      <div class="nchat-bubble accent">💡 第三段的节奏可以再快一些——"突然"这个转折之后，可以考虑用更短的句子制造紧张感。</div>
+      <div class="nchat-bubble">
+        <b>正在推进各章节生成</b>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:rgba(255,255,255,0.5);">
+            <div style="width:5px;height:5px;border-radius:50%;background:#5DCE8A;"></div>
+            正在推进前段章节 — 预计共处理 6 章
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:rgba(255,255,255,0.5);">
+            <div style="width:5px;height:5px;border-radius:50%;background:#C8A87A;"></div>
+            正在衔接人物弧光与关系变化
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:rgba(255,255,255,0.35);">
+            <div style="width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,0.2);"></div>
+            正在整理章节连续性
+          </div>
+        </div>
+      </div>
+      <div class="nchat-input">
+        <div class="nchat-input-box">故事正在这里留下轨迹……</div>
+        <div class="nchat-send">
+          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 6h10M7 2l4 4-4 4"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SCROLLING QUOTES -->
+<div class="hscroll-wrapper">
+  <div style="text-align:center;margin-bottom:40px;">
+    <div class="section-eyebrow" style="display:inline-block;">创作者的声音</div>
+  </div>
+  <div class="hscroll-track">
+    <div class="hscroll-item"><div class="hscroll-quote">"我有故事想法三年了，但一直不知道怎么把它们连起来。用了 Neuron Script 之后，两周写出了第一章。"</div><div class="hscroll-name">小说爱好者 · 晓雨</div></div>
+    <div class="hscroll-item"><div class="hscroll-quote">"角色关系图功能太厉害了，我的主角终于有了自己的动机，不再是一个工具人。"</div><div class="hscroll-name">轻小说创作者 · 阿林</div></div>
+    <div class="hscroll-item"><div class="hscroll-quote">"大纲生成帮我想清楚了高潮在哪，之前写到一半就没方向了，现在知道目标了。"</div><div class="hscroll-name">历史小说爱好者 · 沈默</div></div>
+    <div class="hscroll-item"><div class="hscroll-quote">"Neuro 会提醒我某个角色的性格跟之前的设定不一致，这种细节我自己根本注意不到。"</div><div class="hscroll-name">奇幻小说写作者 · 云上月</div></div>
+    <div class="hscroll-item"><div class="hscroll-quote">"收藏句子功能让我有个地方保存灵感，现在写作时不再害怕「好句子一闪而过」了。"</div><div class="hscroll-name">文字爱好者 · 苏苏</div></div>
+    <!-- Duplicate for seamless loop -->
+    <div class="hscroll-item"><div class="hscroll-quote">"我有故事想法三年了，但一直不知道怎么把它们连起来。用了 Neuron Script 之后，两周写出了第一章。"</div><div class="hscroll-name">小说爱好者 · 晓雨</div></div>
+    <div class="hscroll-item"><div class="hscroll-quote">"角色关系图功能太厉害了，我的主角终于有了自己的动机，不再是一个工具人。"</div><div class="hscroll-name">轻小说创作者 · 阿林</div></div>
+    <div class="hscroll-item"><div class="hscroll-quote">"大纲生成帮我想清楚了高潮在哪，之前写到一半就没方向了，现在知道目标了。"</div><div class="hscroll-name">历史小说爱好者 · 沈默</div></div>
+    <div class="hscroll-item"><div class="hscroll-quote">"Neuro 会提醒我某个角色的性格跟之前的设定不一致，这种细节我自己根本注意不到。"</div><div class="hscroll-name">奇幻小说写作者 · 云上月</div></div>
+    <div class="hscroll-item"><div class="hscroll-quote">"收藏句子功能让我有个地方保存灵感，现在写作时不再害怕「好句子一闪而过」了。"</div><div class="hscroll-name">文字爱好者 · 苏苏</div></div>
+  </div>
+</div>
+
+<!-- BIG QUOTE -->
+<section class="quote-section">
+  <div class="big-quote reveal">
+    "每一个想写小说的人，<em>都值得一个真正懂创作的 AI 伙伴。</em>"
+  </div>
+  <div class="quote-attr reveal">— Neuron Script 的设计初衷</div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="cta-bg"></div>
+  <h2 class="cta-title reveal">你的故事，<em>等你来写</em></h2>
+  <p class="cta-sub reveal">从一个想法开始，Neuro 陪你走到最后一行字。</p>
+  <a href="/create?stage=basic" class="btn-cta-white reveal">立即开始，免费创作</a>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">神经元<span>脚本</span> · Neuron Script</div>
+  <div class="footer-copy">© 2025 Neuron Script. AI 驱动的小说创作工作台。</div>
+</footer>
+
+<script>
+// Intersection Observer for reveal animations
+const reveals = document.querySelectorAll('.reveal');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+reveals.forEach(el => observer.observe(el));
+
+// Smooth nav background on scroll
+const nav = document.querySelector('nav');
+window.addEventListener('scroll', () => {
+  if (window.scrollY > 60) {
+    nav.style.boxShadow = '0 1px 20px rgba(94,80,63,0.1)';
+  } else {
+    nav.style.boxShadow = 'none';
+  }
+});
+</script>
+</body>
 </html>

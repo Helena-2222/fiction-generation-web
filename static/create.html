@@ -1,0 +1,448 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>神经元脚本</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside id="sidebar-rail" class="sidebar rail-shell" aria-label="流程导航">
+        <button
+          type="button"
+          id="sidebar-avatar-toggle"
+          class="sidebar-avatar"
+          aria-label="用户"
+          aria-expanded="false"
+          aria-controls="sidebar-detail-panel"
+        >
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <circle cx="10" cy="7.5" r="3"></circle>
+            <path d="M4 17c0-3 2.7-5 6-5s6 2 6 5"></path>
+          </svg>
+        </button>
+
+        <div class="sidebar-spacer"></div>
+
+        <button type="button" class="sidebar-icon rail-node rail-node-muted" aria-label="设置" title="设置">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <circle cx="10" cy="10" r="2.5"></circle>
+            <path d="M10 3v2M10 15v2M3 10h2M15 10h2M5.05 5.05l1.41 1.41M13.54 13.54l1.41 1.41M5.05 14.95l1.41-1.41M13.54 6.46l1.41-1.41"></path>
+          </svg>
+        </button>
+
+        <div id="sidebar-detail-panel" class="sidebar-detail-panel" aria-hidden="true">
+          <div class="sidebar-detail-scroll">
+            <div class="sidebar-profile-card">
+              <div class="sidebar-profile-avatar" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="10" cy="7.5" r="3"></circle>
+                  <path d="M4 17c0-3 2.7-5 6-5s6 2 6 5"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="sidebar-profile-name">创作者</div>
+                <p class="sidebar-profile-note">喜欢的句子会保存在这里，方便之后回看。</p>
+              </div>
+            </div>
+
+            <section class="sidebar-module">
+              <div class="sidebar-module-header">
+                <h3>我的收藏</h3>
+                <span id="favorite-count-badge" class="sidebar-count-badge">0</span>
+              </div>
+              <p class="sidebar-module-tip">在正文里选中句子后，点击爱心即可加入收藏。</p>
+              <div id="favorite-list" class="favorite-list"></div>
+            </section>
+          </div>
+        </div>
+      </aside>
+
+      <div class="main-col">
+        <header class="topbar">
+          <nav id="top-stage-tabs" class="step-tabs" aria-label="创作阶段">
+            <button type="button" class="step-tab stage-tab is-active" data-stage-target="basic">基本信息</button>
+            <button type="button" class="step-tab stage-tab" data-stage-target="characters">角色关系</button>
+            <button type="button" class="step-tab stage-tab" data-stage-target="outline">大纲生成</button>
+            <button type="button" class="step-tab stage-tab" data-stage-target="story">正文生成</button>
+          </nav>
+
+          <button
+            type="button"
+            id="llm-activity-toggle"
+            class="neuro-toggle"
+            aria-label="展开 Neuro 助手面板"
+            title="展开 Neuro 助手面板"
+          >
+            <span class="neuro-toggle-mark">N</span>
+          </button>
+        </header>
+
+        <div class="content-area">
+          <form id="story-form" class="page-shell">
+            <section id="stage-basic" class="page stage-panel is-current" data-stage-screen="basic">
+              <div class="scroll-area" id="scroll-0">
+                <h1 class="page-title">神经元脚本</h1>
+                <p class="page-subtitle">开始你的创作之旅</p>
+                <p class="form-hint">带 <b>（*）</b> 为必选／必填项</p>
+
+                <div class="form-section" id="field-type">
+                  <div class="form-label">故事类型 <span class="required-badge">（*）</span></div>
+                  <div class="type-chips">
+                    <div id="genre-options" class="type-chips"></div>
+                    <label class="chip custom-chip custom-chip-input" for="custom-genre">
+                      自定义：
+                      <input id="custom-genre" class="chip-input" type="text" placeholder="输入类型" />
+                    </label>
+                  </div>
+                </div>
+
+                <div class="form-section" id="field-synopsis">
+                  <label class="form-label" for="synopsis">故事梗概 <span class="required-badge">（*）</span></label>
+                  <textarea
+                    id="synopsis"
+                    class="textarea-field"
+                    rows="5"
+                    placeholder="描述你的故事核心——主角是谁，面临什么困境，追求什么目标……"
+                    required
+                  ></textarea>
+                </div>
+
+                <div class="form-section" id="field-worldview">
+                  <div class="form-label">世界观</div>
+                  <div class="worldview-grid">
+                    <div>
+                      <label class="input-label-sm" for="worldview-time">时间背景</label>
+                      <input id="worldview-time" class="input-field" type="text" placeholder="如：近未来 2087 年" />
+                    </div>
+                    <div>
+                      <label class="input-label-sm" for="worldview-physical">物理环境</label>
+                      <input id="worldview-physical" class="input-field" type="text" placeholder="如：浮空大陆，引力异常" />
+                    </div>
+                    <div>
+                      <label class="input-label-sm" for="worldview-social">社会环境</label>
+                      <input id="worldview-social" class="input-field" type="text" placeholder="如：科技与修炼并行的文明" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-section">
+                  <div class="form-label">语言风格</div>
+                  <div class="type-chips">
+                    <div id="style-options" class="type-chips"></div>
+                    <label class="chip custom-chip custom-chip-input" for="custom-style">
+                      自定义：
+                      <input id="custom-style" class="chip-input" type="text" placeholder="输入风格" />
+                    </label>
+                  </div>
+                </div>
+
+                <div class="form-section">
+                  <div class="form-label">篇幅设定</div>
+                  <div class="metrics-stack">
+                    <div class="metrics-row">
+                      <div class="char-input-group">
+                        <label class="char-input-label" for="total-words">整体篇幅 <span class="inline-required">*</span></label>
+                        <div class="metric-input-shell">
+                          <input id="total-words" class="input-field" type="number" min="1000" step="100" value="12000" required />
+                          <span class="input-unit">字</span>
+                        </div>
+                      </div>
+                      <div class="char-input-group">
+                        <label class="char-input-label" for="chapter-words">每章目标字数</label>
+                        <div class="metric-input-shell">
+                          <input id="chapter-words" class="input-field" type="number" min="500" step="100" value="2000" />
+                          <span class="input-unit">字</span>
+                        </div>
+                      </div>
+
+                      <div class="char-input-group">
+                        <div class="char-input-label">预估章节数（自动计算）</div>
+                        <div class="metric-input-shell metric-display-shell">
+                          <div id="chapter-count" class="metric-display">6 章</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="next-btn">
+                  <button type="button" id="go-to-characters" class="btn-primary primary-button">
+                    编辑角色
+                    <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M2 7h10M8 3l4 4-4 4"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section id="stage-characters" class="page stage-panel" data-stage-screen="characters">
+              <div class="character-page">
+                <div class="char-editor" id="scroll-1">
+                  <div id="character-list"></div>
+                  <button type="button" id="add-character" class="hidden-button" aria-hidden="true" tabindex="-1">
+                    新增角色
+                  </button>
+                </div>
+
+                <div class="relationship-area relation-panel" id="rel-area">
+                  <div class="rel-resize-handle" id="rel-resize-handle" title="拖拽调整面板宽度"></div>
+                  <div class="rel-label">角色关系地图 · 可连线 · 可缩放</div>
+
+                  <div id="character-graph-stage" class="graph-wrap">
+                    <div id="graph-canvas" class="graph-canvas rel-canvas">
+                      <svg id="graph-svg" class="graph-svg"></svg>
+                      <div id="graph-nodes" class="graph-nodes"></div>
+                      <div id="relation-labels" class="relation-labels"></div>
+                    </div>
+                  </div>
+
+                  <p id="relation-save-state" class="relation-save-state">
+                    编辑完故事梗概、角色卡和关系网后，请先点击“保存关系”，再使用 AI 补充。
+                  </p>
+
+                  <div class="rel-actions relation-toolbar">
+                    <button type="button" id="save-relations" class="btn-secondary ghost-button">保存关系</button>
+                    <button type="button" id="supplement-relations" class="btn-secondary btn-ai secondary-button" disabled>AI补充</button>
+                    <button type="submit" id="generate-outline" class="btn-primary primary-button">生成大纲</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section id="stage-outline" class="page stage-panel" data-stage-screen="outline">
+              <div class="outline-main" id="scroll-2">
+                <div class="outline-page-header">
+                  <div class="outline-synopsis-label">
+                    <span>故事梗概</span>
+                    <div class="outline-actions-row">
+                      <div id="outline-tools-anchor" class="outline-icons">
+                        <button type="button" id="outline-history" class="icon-btn-wrap icon-button" title="历史记录" aria-label="历史记录">
+                          <span class="icon-btn" aria-hidden="true">
+                            <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+                              <circle cx="7" cy="7" r="5"></circle>
+                              <path d="M7 4v3l2 2"></path>
+                            </svg>
+                          </span>
+                        </button>
+
+                        <button type="button" id="regenerate-outline" class="icon-btn-wrap icon-button" title="重新生成" aria-label="重新生成" disabled>
+                          <span class="icon-btn" aria-hidden="true">
+                            <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+                              <path d="M2 7a5 5 0 1 1 3.5 4.7"></path>
+                              <path d="M10 4 8 7l2 3"></path>
+                            </svg>
+                          </span>
+                        </button>
+
+                        <button type="button" id="export-outline" class="icon-btn-wrap icon-button" title="导出大纲" aria-label="导出大纲" disabled>
+                          <span class="icon-btn" aria-hidden="true">
+                            <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+                              <path d="M2 10v2h10v-2M7 2v7M4 6l3 3 3-3"></path>
+                            </svg>
+                          </span>
+                        </button>
+                      </div>
+
+                      <button type="button" id="generate-story" class="btn-primary primary-button" disabled>生成正文</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="outline-result" class="outline-result empty-state">还没有生成大纲。</div>
+              </div>
+            </section>
+
+            <section id="stage-story" class="page stage-panel" data-stage-screen="story">
+              <div class="prose-main" id="scroll-3">
+                <div class="prose-title-bar prose-title-bar-static">
+                  <div class="prose-title-info">
+                    <span class="prose-title">正文生成</span>
+                  </div>
+                  <div class="prose-actions">
+                    <button type="button" id="export-all-story" class="btn-export-main" disabled>导出全书</button>
+                  </div>
+                </div>
+                <div id="story-result" class="story-result empty-state">大纲确认后，这里会依次展示每个篇章的正文。</div>
+              </div>
+            </section>
+          </form>
+
+          <aside id="llm-activity-panel" class="neuro-panel" aria-live="polite" aria-label="Neuro 助手">
+            <div id="neuro-drag-handle" class="neuro-drag-edge"></div>
+
+            <div class="neuro-header">
+              <div class="neuro-avatar"><span>N</span></div>
+              <span id="llm-activity-title" class="neuro-name">Neuro AI</span>
+              <span id="neuro-stage-label" class="neuro-stage">基本信息</span>
+              <button type="button" id="llm-activity-close" class="neuro-close tiny-button">收起</button>
+            </div>
+
+            <div class="neuro-meta">
+              <div id="status-box" class="status-box">填写基础设定后，先生成故事大纲；若不满意，可以补充反馈并重生成。</div>
+              <div id="llm-activity-status" class="sr-only">待命</div>
+              <p id="llm-activity-summary" class="sr-only">填写基础设定后，先生成故事大纲；若不满意，可以补充反馈并重生成。</p>
+            </div>
+
+            <div id="llm-activity-actions" class="action-row llm-activity-actions hidden">
+              <button type="button" id="llm-activity-stop" class="ghost-button">停止生成</button>
+              <button type="button" id="llm-activity-resume" class="secondary-button hidden">继续本次生成</button>
+              <button type="button" id="llm-activity-discard" class="tiny-button hidden">放弃本次生成</button>
+            </div>
+
+            <ol id="llm-activity-log" class="neuro-body llm-activity-log"></ol>
+
+            <div id="neuro-input-row" class="neuro-input-row">
+              <div class="neuro-input-shell">
+                <label id="neuro-input-label" class="neuro-input-label hidden" for="outline-feedback">改进意见</label>
+                <p id="neuro-input-hint" class="neuro-input-hint hidden">首版大纲生成后，你可以在这里填写改进意见。</p>
+                <textarea
+                  id="outline-feedback"
+                  class="textarea-field textarea-compact neuro-feedback-input hidden"
+                  rows="4"
+                  placeholder="如果想调整大纲，可以在这里补充方向，例如：加强情感张力、减少支线、增加悬疑误导。"
+                ></textarea>
+                <div id="neuro-input-placeholder" class="neuro-input-placeholder">故事正在这里留下轨迹……</div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+
+    <div id="story-selection-toolbar" class="story-selection-toolbar hidden" aria-hidden="true">
+      <button type="button" id="story-selection-edit" class="sel-btn">手动编辑</button>
+      <button type="button" id="story-selection-regenerate" class="sel-btn">AI局部重写</button>
+      <button type="button" id="story-selection-favorite" class="sel-btn sel-btn-icon" aria-label="喜欢" title="喜欢">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+          <path d="M10 16.2 4.7 11.5a3.5 3.5 0 0 1 5-4.9L10 7l.3-.4a3.5 3.5 0 0 1 5 4.9L10 16.2Z"></path>
+        </svg>
+      </button>
+    </div>
+
+    <div id="favorite-toast" class="favorite-toast hidden" aria-live="polite" aria-hidden="true"></div>
+
+    <div id="neuro-guide-overlay" class="neuro-guide-overlay hidden" aria-hidden="true"></div>
+
+    <div id="story-edit-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal-card">
+        <div class="section-heading compact">
+          <div>
+            <p class="section-kicker">Selection Edit</p>
+            <h3>编辑选中文本</h3>
+          </div>
+          <button type="button" id="story-edit-close" class="tiny-button">关闭</button>
+        </div>
+        <div class="field-group">
+          <label for="story-edit-textarea">编辑内容</label>
+          <textarea id="story-edit-textarea" class="textarea-field" rows="8" placeholder="在这里修改你选中的正文。"></textarea>
+        </div>
+        <div class="action-row">
+          <button type="button" id="story-edit-save" class="primary-button">保存修改</button>
+          <button type="button" id="story-edit-cancel" class="ghost-button">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="outline-history-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal-card">
+        <div class="section-heading compact">
+          <div>
+            <p class="section-kicker">Outline History</p>
+            <h3>大纲历史记录</h3>
+          </div>
+          <button type="button" id="outline-history-close" class="tiny-button">关闭</button>
+        </div>
+        <div id="outline-history-list" class="outline-history-list"></div>
+      </div>
+    </div>
+
+    <div id="relation-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal-card">
+        <div class="section-heading compact">
+          <div>
+            <p class="section-kicker">Relation Editor</p>
+            <h3>编辑角色关系</h3>
+          </div>
+          <button type="button" id="relation-modal-close" class="tiny-button">关闭</button>
+        </div>
+        <p id="relation-direction" class="micro-tip"></p>
+        <div class="field-group">
+          <label for="relation-label-input">正向关系</label>
+          <input id="relation-label-input" class="input-field" type="text" list="relation-presets" placeholder="例如：朋友、同事、爱慕者" />
+        </div>
+        <label class="check-row">
+          <input id="relation-reverse-toggle" type="checkbox" />
+          <span>同时设定为反向关系</span>
+        </label>
+        <div id="reverse-relation-group" class="field-group hidden">
+          <label for="reverse-relation-label-input">反向关系</label>
+          <input id="reverse-relation-label-input" class="input-field" type="text" list="relation-presets" placeholder="例如：朋友、同事、子女、下属" />
+        </div>
+        <div class="action-row">
+          <button type="button" id="relation-save-button" class="primary-button">保存该条关系</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="relation-delete-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal-card modal-card-compact">
+        <div class="section-heading compact">
+          <div>
+            <p class="section-kicker">Delete Relation</p>
+            <h3>删除关系</h3>
+          </div>
+        </div>
+        <p id="relation-delete-message" class="micro-tip"></p>
+        <div class="action-row modal-confirm-actions">
+          <button type="button" id="relation-delete-confirm" class="primary-button danger-button">确认</button>
+          <button type="button" id="relation-delete-cancel" class="ghost-button">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="llm-task-pause-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal-card modal-card-compact">
+        <div class="section-heading compact">
+          <div>
+            <p class="section-kicker">LLM Task</p>
+            <h3>本次生成已暂停</h3>
+          </div>
+          <button type="button" id="llm-task-pause-close" class="tiny-button">关闭</button>
+        </div>
+        <p id="llm-task-pause-message" class="micro-tip">
+          当前 LLM 调用已经暂停。你可以先返回编辑；若选择继续，将按暂停前的输入重新发起本次生成。
+        </p>
+        <div class="action-row modal-confirm-actions">
+          <button type="button" id="llm-task-pause-resume" class="primary-button">继续本次生成</button>
+          <button type="button" id="llm-task-pause-discard" class="ghost-button">放弃本次生成</button>
+        </div>
+      </div>
+    </div>
+
+    <datalist id="relation-presets">
+      <option value="朋友"></option>
+      <option value="亲人"></option>
+      <option value="恋人"></option>
+      <option value="师生"></option>
+      <option value="同事"></option>
+      <option value="宿敌"></option>
+      <option value="盟友"></option>
+      <option value="上下级"></option>
+      <option value="爱慕者"></option>
+      <option value="母亲"></option>
+      <option value="父亲"></option>
+      <option value="子女"></option>
+    </datalist>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

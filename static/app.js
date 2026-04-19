@@ -134,8 +134,8 @@ const GRAPH = {
 };
 
 const state = {
-  genre: "科幻",
-  style: "电影感",
+  genre: "",
+  style: "",
   currentStage: "basic",
   activeCharacterId: null,
   outlineHistory: [],
@@ -160,6 +160,107 @@ const state = {
   relationDeleteRequest: null,
   characterCreationHistory: [],
 };
+
+const LEGACY_MOCK_SYNOPSIS =
+  "在被异常浮力抬起的海上大陆，私人飞行器像马车一样寻常。火山林地的年轻修机师弗林特·瓦伦丁本想守着修理铺平静度日，却被旧友塞巴斯蒂安拉去参加王国年度飞行器竞赛。赛场上，他遇见作风冷硬、身世成谜的贵族飞手西尔维斯特·格雷，又被退隐传奇技师奥利弗·费恩主动卷入训练。随着竞赛推进，四人逐渐发现这场盛会并不只是争夺荣耀，而是一场借冠军筛选继承人与清洗知情者的隐秘试炼。旧友、对手、导师与调查者在高空与阴谋中不断重组关系，最终必须决定自己究竟为自由、真相，还是权力而飞。";
+const LEGACY_MOCK_WORLDVIEW_TIME =
+  "近未来的浮海时代。蒸汽机械、轻量能核与古老飞行技术遗迹并存，飞行器已从贵族玩物变成大众交通工具。";
+const LEGACY_MOCK_WORLDVIEW_PHYSICAL =
+  "大陆被高浮力海水与灰羽火山环绕，城市像睡莲般漂浮在海面。边境常见火山林、上升乱流与浮力雾潮，王城则拥有稳定而华丽的高空航道。";
+const LEGACY_MOCK_WORLDVIEW_SOCIAL =
+  "浮岬王国仍维持君主制与议会共治的旧秩序，年度飞行器竞赛既是全民节庆，也是王权博弈的舞台。平民依赖私人飞行器通勤，飞手、技师与航讯记者拥有罕见的社会流动机会。";
+const LEGACY_MOCK_CHARACTER_IDS = [
+  "character-flint-valentine",
+  "character-sylvester-gray",
+  "character-oliver-fane",
+  "character-sebastian-hope",
+];
+const LEGACY_MOCK_CHARACTER_NAMES = [
+  "弗林特·瓦伦丁",
+  "西尔维斯特·格雷",
+  "奥利弗·费恩",
+  "塞巴斯蒂安·霍普",
+];
+const LEGACY_MOCK_RELATION_IDS = [
+  "relation-flint-sebastian-old-friends",
+  "relation-sebastian-flint-old-friends",
+  "relation-flint-sylvester-rivals",
+  "relation-sylvester-flint-rivals",
+  "relation-sylvester-oliver-surface",
+  "relation-oliver-sylvester-guarded",
+  "relation-flint-oliver-allies",
+  "relation-oliver-flint-mentor",
+  "relation-sebastian-oliver-friends",
+];
+
+function buildInitialWorkspaceSnapshot() {
+  return {
+    version: 3,
+    genre: "",
+    style: "",
+    currentStage: "basic",
+    activeCharacterId: null,
+    activeChapterNumber: null,
+    sidebarProfileOpen: false,
+    graphView: {
+      scale: 1,
+      offsetX: 0,
+      offsetY: 0,
+    },
+    outlineHistory: [],
+    characters: [],
+    relations: [],
+    savedStoryDraft: null,
+    isStorySaved: false,
+    outline: null,
+    generatedStory: null,
+    favoriteQuotes: [],
+    form: {},
+  };
+}
+
+function isLegacyMockWorkspace(snapshot) {
+  const characters = Array.isArray(snapshot?.characters) ? snapshot.characters : [];
+  const relations = Array.isArray(snapshot?.relations) ? snapshot.relations : [];
+  const form = snapshot?.form && typeof snapshot.form === "object" ? snapshot.form : {};
+
+  return String(snapshot?.genre || "").trim() === "奇幻"
+    && String(snapshot?.style || "").trim() === "幽默"
+    && String(form.synopsis || "").trim() === LEGACY_MOCK_SYNOPSIS
+    && String(form.worldviewTime || "").trim() === LEGACY_MOCK_WORLDVIEW_TIME
+    && String(form.worldviewPhysical || "").trim() === LEGACY_MOCK_WORLDVIEW_PHYSICAL
+    && String(form.worldviewSocial || "").trim() === LEGACY_MOCK_WORLDVIEW_SOCIAL
+    && characters.length === LEGACY_MOCK_CHARACTER_IDS.length
+    && LEGACY_MOCK_CHARACTER_IDS.every((id, index) => String(characters[index]?.id || "") === id)
+    && LEGACY_MOCK_CHARACTER_NAMES.every((name, index) => String(characters[index]?.name || "").trim() === name)
+    && relations.length === LEGACY_MOCK_RELATION_IDS.length
+    && LEGACY_MOCK_RELATION_IDS.every((id, index) => String(relations[index]?.id || "") === id);
+}
+
+function getRequestedStageOverride() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const requestedStage = (params.get("stage") || "").trim();
+    return Object.prototype.hasOwnProperty.call(STAGE_META, requestedStage) ? requestedStage : "";
+  } catch (error) {
+    console.warn("读取页面阶段参数失败：", error);
+    return "";
+  }
+}
+
+function clearStageOverrideFromUrl() {
+  if (!window.history?.replaceState) {
+    return;
+  }
+
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("stage");
+    window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+  } catch (error) {
+    console.warn("清理页面阶段参数失败：", error);
+  }
+}
 
 let nextCharacterColorIndex = 0;
 let graphResizeObserver = null;
@@ -692,13 +793,12 @@ function syncNeuroInputState() {
 
 function init() {
   const restoredWorkspace = loadWorkspaceSnapshot();
+  const requestedStageOverride = getRequestedStageOverride();
   const restoredGeneratedContent = Boolean(restoredWorkspace?.outline || restoredWorkspace?.generatedStory);
   if (restoredWorkspace) {
     applyWorkspaceSnapshot(restoredWorkspace);
   } else {
-    state.characters = [createCharacter(0), createCharacter(1), createCharacter(2)];
-    arrangeCharacterGraph();
-    state.activeCharacterId = state.characters[0]?.id || null;
+    applyWorkspaceSnapshot(buildInitialWorkspaceSnapshot());
   }
   renderChipGroup(elements.genreOptions, GENRE_OPTIONS, "genre");
   renderChipGroup(elements.styleOptions, STYLE_OPTIONS, "style");
@@ -810,7 +910,13 @@ function init() {
       : "填写左侧信息后，先生成故事大纲；若不满意，可以补充反馈并重生成。",
     false,
   );
-  setCurrentStage(state.currentStage || "basic", { scroll: false, keepSelection: true });
+  setCurrentStage(requestedStageOverride || state.currentStage || "basic", {
+    scroll: Boolean(requestedStageOverride),
+    keepSelection: true,
+  });
+  if (requestedStageOverride) {
+    clearStageOverrideFromUrl();
+  }
 }
 
 function bindStageNavigation() {
@@ -1929,7 +2035,21 @@ function loadWorkspaceSnapshot() {
       return null;
     }
     const snapshot = JSON.parse(raw);
-    return snapshot && typeof snapshot === "object" ? snapshot : null;
+    if (!snapshot || typeof snapshot !== "object") {
+      return null;
+    }
+
+    if (!isLegacyMockWorkspace(snapshot)) {
+      return snapshot;
+    }
+
+    const initialWorkspace = buildInitialWorkspaceSnapshot();
+    try {
+      window.localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(initialWorkspace));
+    } catch (persistError) {
+      console.warn("清理旧 mock 工作区缓存失败：", persistError);
+    }
+    return initialWorkspace;
   } catch (error) {
     console.warn("读取本地工作区缓存失败：", error);
     return null;
