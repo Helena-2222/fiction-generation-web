@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app.llm_runtime import DeepSeekClient
+from app.llm.llm_client import DeepSeekClient
 from app.models import (
     ActOutlineSection,
     AutoNamedCharacter,
@@ -27,7 +27,7 @@ from app.models import (
 )
 
 
-PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
+PROMPTS_DIR = Path(__file__).resolve().parents[1] / "llm" / "prompts"
 DEBUG_RELATIONS_PATH = Path(__file__).resolve().parents[2] / "test" / "test.txt"
 
 

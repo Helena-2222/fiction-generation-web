@@ -53,3 +53,35 @@ uvicorn app.main:app --reload
 - 每章字数为空时，后端会默认按约 `2000` 字规划
 - 章节数由 `总字数 / 每章字数` 自动向上取整
 - 当前正文生成是按章节串行调用 LLM，以保证上下文连续
+
+## 目录说明
+前端 (static/)：
+styles/tokens.css — CSS 变量（设计令牌）
+styles/base.css — 全局基础样式
+styles/components.css — 组件样式
+styles.css — 入口文件（@import 三个文件）
+src/constants.js — 所有常量（export）
+src/state.js — 全局 state 对象（export）
+src/utils.js — 纯工具函数（escapeHtml, clamp, generateId 等）
+src/api.js — HTTP 请求函数（postJson, getJson）
+app.js — 改为 ES module，顶部 import 上述模块
+
+后端 (app/)：	
+新结构	内容
+llm/llm_client.py 	DeepSeek API 客户端（从 llm_runtime.py 迁移）
+llm/llm_task_manager.py 	异步任务管理（从根目录迁移）
+llm/prompts/  	所有 prompt 模板文件（从 app/prompts/ 迁移）
+models/character.py 	CharacterCard, CharacterRelation
+models/story.py 	StoryDraftRequest, 生成响应相关模型
+models/outline.py	  大纲相关模型 + 故事生成请求
+models/task.py	  LlmTaskStatusResponse
+models/export.py	  DocxExportRequest
+models/__init__.py	  向后兼容的全量重导出
+utils/docx_export.py	  DOCX 导出工具（从根目录迁移）
+routers/outline_router.py	  /api/outline + /api/llm-tasks/outline
+routers/story_router.py 	/api/story + rewrite + task
+routers/character_router.py 	/api/relations/supplement + task
+routers/export_router.py  	/api/export/docx
+routers/task_router.py  	/api/llm-tasks/{id} 管理操作
+dependencies.py	  服务单例（story_service, llm_task_manager）
+main.py 	只做路由注册

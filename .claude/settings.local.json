@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /d/LLM_project_StoryGenerating/code/StoryGeneration_Web/app/llm/prompts)",
+      "Bash(mkdir -p /d/LLM_project_StoryGenerating/code/StoryGeneration_Web/app/models)",
+      "Bash(mkdir -p /d/LLM_project_StoryGenerating/code/StoryGeneration_Web/app/utils)",
+      "Bash(mkdir -p /d/LLM_project_StoryGenerating/code/StoryGeneration_Web/app/routers)",
+      "Bash(mkdir -p /d/LLM_project_StoryGenerating/code/StoryGeneration_Web/static/src/stores)",
+      "Bash(python -c \"from app.main import app; print\\('OK'\\)\")",
+      "Bash(grep -n \"^\\\\.[a-z\\\\-]*\\\\s*{$\\\\|^#[a-z\\\\-]*\\\\s*{$\\\\|^\\\\.[a-z]\" /d/LLM_project_StoryGenerating/code/StoryGeneration_Web/static/styles.css)",
+      "Bash(awk 'NR>=95 && NR<=115' /d/LLM_project_StoryGenerating/code/StoryGeneration_Web/static/styles.css)"
+    ]
+  }
+}

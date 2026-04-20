@@ -1,0 +1,37 @@
+:root {
+  --bg: #f7f3f0;
+  --bg-card: #ffffff;
+  --bg-panel: #ebe5df;
+  --bg-input: #eee9e4;
+  --bg-sidebar: #ebe5df;
+  --text-primary: #222222;
+  --text-secondary: #7a6f64;
+  --text-hint: #a69076;
+  --text-on-dark: #f7f3f0;
+  --accent: #5e503f;
+  --accent-hover: #4a3c2e;
+  --accent-light: #ede5da;
+  --accent-mid: #a69076;
+  --tab-active-bg: #5e503f;
+  --tab-active-text: #ffffff;
+  --border: rgba(94, 80, 63, 0.1);
+  --border-strong: rgba(94, 80, 63, 0.18);
+  --danger: #b85a46;
+  --danger-hover: #934735;
+  --success: #4f7d61;
+  --shadow-sm: 0 1px 3px rgba(94, 80, 63, 0.08), 0 0 0 0.5px rgba(94, 80, 63, 0.06);
+  --shadow-md: 0 4px 20px rgba(94, 80, 63, 0.1);
+  --shadow-lg: 0 8px 32px rgba(94, 80, 63, 0.13);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+  --font-serif: "Noto Serif SC", "Georgia", serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  --font-handwrite: "Ma Shan Zheng", "KaiTi", "STKaiti", cursive;
+  --sidebar-w: 60px;
+  --sidebar-open-w: 332px;
+  --neuro-width: 288px;
+  --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
