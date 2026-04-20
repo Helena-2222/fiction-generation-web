@@ -89,9 +89,33 @@
           <form id="story-form" class="page-shell">
             <section id="stage-basic" class="page stage-panel is-current" data-stage-screen="basic">
               <div class="scroll-area" id="scroll-0">
-                <h1 class="page-title">神经元脚本</h1>
-                <p class="page-subtitle">开始你的创作之旅</p>
-                <p class="form-hint">带 <b>（*）</b> 为必选／必填项</p>
+                <div class="stage-header stage-header-main">
+                  <div>
+                    <h1 class="page-title">神经元脚本</h1>
+                    <p class="page-subtitle page-subtitle-compact">开始你的创作之旅</p>
+                  </div>
+                </div>
+                <div class="stage-toolbar">
+                  <p class="form-hint">带 <b>（*）</b> 为必选／必填项</p>
+                  <div class="stage-icon-actions" aria-label="基本信息操作">
+                    <button type="button" id="basic-history" class="icon-btn-wrap icon-button" title="历史记录" aria-label="历史记录">
+                      <span class="icon-btn" aria-hidden="true">
+                        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+                          <circle cx="7" cy="7" r="5"></circle>
+                          <path d="M7 4v3l2 2"></path>
+                        </svg>
+                      </span>
+                    </button>
+
+                    <button type="button" id="export-basic" class="icon-btn-wrap icon-button" title="导出基本信息" aria-label="导出基本信息">
+                      <span class="icon-btn" aria-hidden="true">
+                        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+                          <path d="M2 10v2h10v-2M7 2v7M4 6l3 3 3-3"></path>
+                        </svg>
+                      </span>
+                    </button>
+                  </div>
+                </div>
 
                 <div class="form-section" id="field-type">
                   <div class="form-label">故事类型 <span class="required-badge">（*）</span></div>
@@ -187,6 +211,29 @@
             <section id="stage-characters" class="page stage-panel" data-stage-screen="characters">
               <div class="character-page">
                 <div class="char-editor" id="scroll-1">
+                  <div class="stage-header stage-header-compact">
+                    <div>
+                      <h2 class="section-stage-title">角色关系</h2>
+                    </div>
+                    <div class="stage-header-actions stage-icon-actions" aria-label="角色关系操作">
+                      <button type="button" id="characters-history" class="icon-btn-wrap icon-button" title="历史记录" aria-label="历史记录">
+                        <span class="icon-btn" aria-hidden="true">
+                          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="7" cy="7" r="5"></circle>
+                            <path d="M7 4v3l2 2"></path>
+                          </svg>
+                        </span>
+                      </button>
+
+                      <button type="button" id="export-characters" class="icon-btn-wrap icon-button" title="导出角色关系" aria-label="导出角色关系">
+                        <span class="icon-btn" aria-hidden="true">
+                          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M2 10v2h10v-2M7 2v7M4 6l3 3 3-3"></path>
+                          </svg>
+                        </span>
+                      </button>
+                    </div>
+                  </div>
                   <div id="character-list"></div>
                   <button type="button" id="add-character" class="hidden-button" aria-hidden="true" tabindex="-1">
                     新增角色
@@ -266,9 +313,14 @@
                 <div class="prose-title-bar prose-title-bar-static">
                   <div class="prose-title-info">
                     <span class="prose-title">正文生成</span>
+                    <span class="prose-chapter-sub">大纲确认后，可继续润色、局部重写与导出。</span>
                   </div>
                   <div class="prose-actions">
-                    <button type="button" id="export-all-story" class="btn-export-main" disabled>导出全书</button>
+                    <div class="prose-action-group">
+                      <button type="button" id="export-settings" class="btn-export-main" disabled>导出设定</button>
+                      <button type="button" id="export-all-story" class="btn-export-main" disabled>导出全书</button>
+                      <button type="button" id="export-everything" class="btn-export-main" disabled>导出全部</button>
+                    </div>
                   </div>
                 </div>
                 <div id="story-result" class="story-result empty-state">大纲确认后，这里会依次展示每个篇章的正文。</div>
@@ -362,6 +414,32 @@
           <button type="button" id="outline-history-close" class="tiny-button">关闭</button>
         </div>
         <div id="outline-history-list" class="outline-history-list"></div>
+      </div>
+    </div>
+
+    <div id="basic-history-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal-card">
+        <div class="section-heading compact">
+          <div>
+            <p class="section-kicker">Basic History</p>
+            <h3>基本信息历史记录</h3>
+          </div>
+          <button type="button" id="basic-history-close" class="tiny-button">关闭</button>
+        </div>
+        <div id="basic-history-list" class="outline-history-list"></div>
+      </div>
+    </div>
+
+    <div id="characters-history-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal-card">
+        <div class="section-heading compact">
+          <div>
+            <p class="section-kicker">Character History</p>
+            <h3>角色关系历史记录</h3>
+          </div>
+          <button type="button" id="characters-history-close" class="tiny-button">关闭</button>
+        </div>
+        <div id="characters-history-list" class="outline-history-list"></div>
       </div>
     </div>
 

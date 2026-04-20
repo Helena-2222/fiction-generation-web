@@ -600,10 +600,57 @@ a {
   letter-spacing: 0.02em;
 }
 
+.stage-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.stage-header-main {
+  margin-bottom: 6px;
+}
+
+.stage-header-compact {
+  margin-bottom: 22px;
+}
+
+.stage-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.stage-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.stage-toolbar .form-hint {
+  margin-bottom: 0;
+}
+
+.section-stage-title {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
 .page-subtitle {
   font-size: 13px;
   color: var(--text-secondary);
   margin-bottom: 32px;
+}
+
+.page-subtitle-compact {
+  margin-bottom: 0;
 }
 
 .form-hint {
@@ -1206,7 +1253,8 @@ button:disabled {
   gap: 20px;
 }
 
-.outline-icons {
+.outline-icons,
+.stage-icon-actions {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -1566,6 +1614,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .prose-title {
@@ -1587,6 +1636,21 @@ button:disabled {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.prose-title-bar .prose-actions {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.prose-action-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: auto;
 }
 
 .btn-icon-round {
@@ -2354,6 +2418,10 @@ button:disabled {
     padding: 30px 30px 24px;
   }
 
+  .prose-title-bar {
+    padding: 16px 32px;
+  }
+
   .outline-stage-grid,
   .outline-chapter-grid,
   .arc-tracks,
@@ -2414,6 +2482,24 @@ button:disabled {
   .content-area,
   .character-page {
     flex-direction: column;
+  }
+
+  .stage-header,
+  .stage-toolbar,
+  .prose-title-bar,
+  .story-topbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .stage-header-actions,
+  .stage-icon-actions {
+    justify-content: flex-start;
+  }
+
+  .prose-actions,
+  .prose-action-group {
+    justify-content: flex-start;
   }
 
   .page-shell {

@@ -25,6 +25,8 @@ const STAGE_META = {
 const WORKSPACE_STORAGE_KEY = "story-generation-workspace-v3";
 const STORY_GUIDE_STORAGE_KEY = "story-generation-neuro-guides-v3";
 const LLM_TASK_POLL_INTERVAL_MS = 1400;
+const HISTORY_LIMIT = 12;
+const HISTORY_DEBOUNCE_MS = 700;
 const GUIDE_TYPING_SPEED_MS = 18;
 const GUIDE_VIEWPORT_MARGIN = 18;
 const GUIDE_OUTLINE_AUTO_CLOSE_MS = 15000;
@@ -138,6 +140,8 @@ const state = {
   style: "",
   currentStage: "basic",
   activeCharacterId: null,
+  basicHistory: [],
+  characterHistory: [],
   outlineHistory: [],
   activeChapterNumber: null,
   characters: [],
@@ -195,7 +199,7 @@ const LEGACY_MOCK_RELATION_IDS = [
 
 function buildInitialWorkspaceSnapshot() {
   return {
-    version: 3,
+    version: 4,
     genre: "",
     style: "",
     currentStage: "basic",
@@ -207,6 +211,8 @@ function buildInitialWorkspaceSnapshot() {
       offsetX: 0,
       offsetY: 0,
     },
+    basicHistory: [],
+    characterHistory: [],
     outlineHistory: [],
     characters: [],
     relations: [],
@@ -266,6 +272,8 @@ let nextCharacterColorIndex = 0;
 let graphResizeObserver = null;
 let graphRenderFrame = 0;
 let favoriteToastTimer = null;
+let basicHistoryTimer = null;
+let characterHistoryTimer = null;
 const guideOverlayState = {
   activeStage: null,
   activeNoteKey: null,
@@ -342,10 +350,16 @@ const elements = {
   storyResult: document.querySelector("#story-result"),
   statusBox: document.querySelector("#status-box"),
   statusPill: document.querySelector("#status-pill"),
+  basicHistoryButton: document.querySelector("#basic-history"),
+  exportBasic: document.querySelector("#export-basic"),
+  charactersHistoryButton: document.querySelector("#characters-history"),
+  exportCharacters: document.querySelector("#export-characters"),
   exportOutline: document.querySelector("#export-outline"),
   regenerateOutline: document.querySelector("#regenerate-outline"),
   generateStory: document.querySelector("#generate-story"),
+  exportSettings: document.querySelector("#export-settings"),
   exportAllStory: document.querySelector("#export-all-story"),
+  exportEverything: document.querySelector("#export-everything"),
   outlineFeedback: document.querySelector("#outline-feedback"),
   guideOverlay: document.querySelector("#neuro-guide-overlay"),
   relationModal: document.querySelector("#relation-modal"),
@@ -386,6 +400,12 @@ const elements = {
   outlineHistoryModal: document.querySelector("#outline-history-modal"),
   outlineHistoryClose: document.querySelector("#outline-history-close"),
   outlineHistoryList: document.querySelector("#outline-history-list"),
+  basicHistoryModal: document.querySelector("#basic-history-modal"),
+  basicHistoryClose: document.querySelector("#basic-history-close"),
+  basicHistoryList: document.querySelector("#basic-history-list"),
+  charactersHistoryModal: document.querySelector("#characters-history-modal"),
+  charactersHistoryClose: document.querySelector("#characters-history-close"),
+  charactersHistoryList: document.querySelector("#characters-history-list"),
   storySelectionToolbar: document.querySelector("#story-selection-toolbar"),
   storySelectionFavorite: document.querySelector("#story-selection-favorite"),
   storySelectionEdit: document.querySelector("#story-selection-edit"),
@@ -815,16 +835,34 @@ function init() {
   elements.storyForm.addEventListener("submit", handleOutlineSubmit);
   elements.saveRelations.addEventListener("click", handleSaveRelations);
   elements.supplementRelations.addEventListener("click", handleAiRelationSupplement);
+  elements.basicHistoryButton.addEventListener("click", openBasicHistoryModal);
+  elements.exportBasic.addEventListener("click", handleBasicExport);
+  elements.charactersHistoryButton.addEventListener("click", openCharactersHistoryModal);
+  elements.exportCharacters.addEventListener("click", handleCharactersExport);
   elements.exportOutline.addEventListener("click", handleOutlineExport);
   elements.regenerateOutline.addEventListener("click", handleOutlineRegenerate);
   elements.generateStory.addEventListener("click", handleStoryGenerate);
+  elements.exportSettings.addEventListener("click", handleExportSettings);
   elements.exportAllStory.addEventListener("click", handleExportAllStory);
+  elements.exportEverything.addEventListener("click", handleExportEverything);
   elements.storyResult.addEventListener("click", handleStoryResultClick);
   elements.outlineHistory.addEventListener("click", openOutlineHistoryModal);
   elements.outlineHistoryClose.addEventListener("click", closeOutlineHistoryModal);
   elements.outlineHistoryModal.addEventListener("click", (event) => {
     if (event.target === elements.outlineHistoryModal) {
       closeOutlineHistoryModal();
+    }
+  });
+  elements.basicHistoryClose.addEventListener("click", closeBasicHistoryModal);
+  elements.basicHistoryModal.addEventListener("click", (event) => {
+    if (event.target === elements.basicHistoryModal) {
+      closeBasicHistoryModal();
+    }
+  });
+  elements.charactersHistoryClose.addEventListener("click", closeCharactersHistoryModal);
+  elements.charactersHistoryModal.addEventListener("click", (event) => {
+    if (event.target === elements.charactersHistoryModal) {
+      closeCharactersHistoryModal();
     }
   });
   elements.storySelectionFavorite.addEventListener("click", handleStorySelectionFavorite);
@@ -896,9 +934,12 @@ function init() {
   renderGraph();
   renderOutline();
   renderStory();
+  renderBasicHistory();
+  renderCharactersHistory();
   renderOutlineHistory();
   renderFavorites();
   updateRelationActionState();
+  updateSectionActionState();
   updateOutputActionState();
   syncLlmActivityPanelState();
   syncSidebarProfileState();
@@ -2070,7 +2111,7 @@ function saveWorkspaceSnapshot() {
 function buildWorkspaceSnapshot() {
   syncRelationNames();
   return {
-    version: 3,
+    version: 4,
     genre: state.genre,
     style: state.style,
     currentStage: state.currentStage,
@@ -2082,6 +2123,31 @@ function buildWorkspaceSnapshot() {
       offsetX: state.graphView.offsetX,
       offsetY: state.graphView.offsetY,
     },
+    basicHistory: state.basicHistory.map((entry) => ({
+      ...entry,
+      snapshot: entry.snapshot ? { ...entry.snapshot } : null,
+    })),
+    characterHistory: state.characterHistory.map((entry) => ({
+      ...entry,
+      snapshot: entry.snapshot
+        ? {
+            activeCharacterId: entry.snapshot.activeCharacterId,
+            characters: Array.isArray(entry.snapshot.characters)
+              ? entry.snapshot.characters.map((character) => ({
+                  ...character,
+                  graph_color: character.graph_color || null,
+                }))
+              : [],
+            relations: Array.isArray(entry.snapshot.relations)
+              ? entry.snapshot.relations.map((relation) => ({
+                  ...relation,
+                  source_anchor: cloneAnchor(relation.source_anchor),
+                  target_anchor: cloneAnchor(relation.target_anchor),
+                }))
+              : [],
+          }
+        : null,
+    })),
     outlineHistory: state.outlineHistory,
     characters: state.characters.map((character) => ({
       ...character,
@@ -2130,6 +2196,12 @@ function applyWorkspaceSnapshot(snapshot) {
     offsetY: Number(snapshot.graphView?.offsetY) || 0,
   };
   state.characterCreationHistory = [];
+  state.basicHistory = Array.isArray(snapshot.basicHistory)
+    ? snapshot.basicHistory.map((entry) => normalizeBasicHistoryEntry(entry)).filter(Boolean)
+    : [];
+  state.characterHistory = Array.isArray(snapshot.characterHistory)
+    ? snapshot.characterHistory.map((entry) => normalizeCharacterHistoryEntry(entry)).filter(Boolean)
+    : [];
   state.outlineHistory = Array.isArray(snapshot.outlineHistory)
     ? snapshot.outlineHistory.map((entry) => normalizeOutlineHistoryEntry(entry)).filter(Boolean)
     : [];
@@ -2184,6 +2256,113 @@ function applyPersistedFormValues(form = {}) {
   elements.outlineFeedback.value = typeof form.outlineFeedback === "string" ? form.outlineFeedback : "";
 }
 
+function buildBasicInfoSnapshot() {
+  return normalizeBasicInfoSnapshot({
+    genre: state.genre,
+    style: state.style,
+    customGenre: elements.customGenre.value,
+    customStyle: elements.customStyle.value,
+    synopsis: elements.synopsis.value,
+    totalWords: elements.totalWords.value,
+    chapterWords: elements.chapterWords.value,
+    worldviewTime: elements.worldviewTime.value,
+    worldviewPhysical: elements.worldviewPhysical.value,
+    worldviewSocial: elements.worldviewSocial.value,
+  });
+}
+
+function normalizeBasicInfoSnapshot(snapshot = {}) {
+  return {
+    genre: typeof snapshot.genre === "string" ? snapshot.genre : "",
+    style: typeof snapshot.style === "string" ? snapshot.style : "",
+    customGenre: typeof snapshot.customGenre === "string" ? snapshot.customGenre : "",
+    customStyle: typeof snapshot.customStyle === "string" ? snapshot.customStyle : "",
+    synopsis: typeof snapshot.synopsis === "string" ? snapshot.synopsis : "",
+    totalWords: typeof snapshot.totalWords === "string"
+      ? snapshot.totalWords
+      : snapshot.totalWords == null ? "" : String(snapshot.totalWords),
+    chapterWords: typeof snapshot.chapterWords === "string"
+      ? snapshot.chapterWords
+      : snapshot.chapterWords == null ? "" : String(snapshot.chapterWords),
+    worldviewTime: typeof snapshot.worldviewTime === "string" ? snapshot.worldviewTime : "",
+    worldviewPhysical: typeof snapshot.worldviewPhysical === "string" ? snapshot.worldviewPhysical : "",
+    worldviewSocial: typeof snapshot.worldviewSocial === "string" ? snapshot.worldviewSocial : "",
+  };
+}
+
+function buildCharacterHistorySnapshot() {
+  syncRelationNames();
+  return {
+    activeCharacterId: state.activeCharacterId,
+    characters: state.characters.map((character) => ({
+      ...character,
+      graph_color: character.graph_color || null,
+    })),
+    relations: state.relations.map((relation) => ({
+      ...relation,
+      source_anchor: cloneAnchor(relation.source_anchor),
+      target_anchor: cloneAnchor(relation.target_anchor),
+    })),
+  };
+}
+
+function normalizeBasicHistoryEntry(entry) {
+  if (!entry || typeof entry !== "object" || !entry.snapshot) {
+    return null;
+  }
+
+  return {
+    id: entry.id || generateId("basic-history"),
+    createdAt: entry.createdAt || new Date().toISOString(),
+    type: entry.type || "基本信息版本",
+    snapshot: normalizeBasicInfoSnapshot(entry.snapshot),
+  };
+}
+
+function normalizeCharacterHistoryEntry(entry) {
+  if (!entry || typeof entry !== "object" || !entry.snapshot) {
+    return null;
+  }
+
+  const snapshot = entry.snapshot;
+  const persistedCharacters = Array.isArray(snapshot.characters) ? snapshot.characters : [];
+  const characters = persistedCharacters.map((character, index) =>
+    normalizePersistedCharacter(character, index, Math.max(persistedCharacters.length, 1)));
+  const relations = Array.isArray(snapshot.relations)
+    ? snapshot.relations
+      .map((relation) => {
+        const label = normalizeRelationLabel(relation?.label);
+        if (!relation?.source_id || !relation?.target_id || !label || relation.source_id === relation.target_id) {
+          return null;
+        }
+        return {
+          id: relation.id || generateId("relation"),
+          source_id: relation.source_id,
+          target_id: relation.target_id,
+          label,
+          source_name: relation.source_name || "",
+          target_name: relation.target_name || "",
+          source_anchor: cloneAnchor(relation.source_anchor),
+          target_anchor: cloneAnchor(relation.target_anchor),
+          bidirectional: Boolean(relation.bidirectional),
+          relation_source: relation.relation_source || "user",
+        };
+      })
+      .filter(Boolean)
+    : [];
+
+  return {
+    id: entry.id || generateId("characters-history"),
+    createdAt: entry.createdAt || new Date().toISOString(),
+    type: entry.type || "角色关系版本",
+    snapshot: {
+      activeCharacterId: typeof snapshot.activeCharacterId === "string" ? snapshot.activeCharacterId : null,
+      characters,
+      relations,
+    },
+  };
+}
+
 function normalizePersistedCharacter(character, index, total) {
   const fallbackPosition = getCharacterGraphPosition(index, Math.max(total, 1));
   const colorIndex = Number.isInteger(character?.graph_color_index) ? character.graph_color_index : index;
@@ -2220,20 +2399,37 @@ function bindStoryDraftInputs() {
     elements.worldviewTime,
     elements.worldviewPhysical,
     elements.worldviewSocial,
-    elements.outlineFeedback,
   ].forEach((control) => {
     control.addEventListener("input", () => {
       markStoryDraftDirty();
+      queueBasicHistorySnapshot("编辑基本信息");
       maybeCompleteBasicInfoGuide();
     });
   });
+
+  elements.outlineFeedback.addEventListener("input", () => {
+    markStoryDraftDirty();
+  });
 }
 
-function markStoryDraftDirty() {
+function markStoryDraftDirty({ clearGeneratedContent = false } = {}) {
   state.isStorySaved = false;
   state.savedStoryDraft = null;
+  if (clearGeneratedContent) {
+    clearGeneratedContentState();
+  }
   updateRelationActionState();
+  updateOutputActionState();
   saveWorkspaceSnapshot();
+}
+
+function clearGeneratedContentState() {
+  state.outline = null;
+  state.generatedStory = null;
+  state.activeChapterNumber = null;
+  if (elements.outlineFeedback) {
+    elements.outlineFeedback.value = "";
+  }
 }
 
 function updateRelationActionState() {
@@ -2251,13 +2447,26 @@ function updateRelationActionState() {
   }
 }
 
+function updateSectionActionState() {
+  if (elements.basicHistoryButton) {
+    elements.basicHistoryButton.disabled = !state.basicHistory.length;
+  }
+  if (elements.charactersHistoryButton) {
+    elements.charactersHistoryButton.disabled = !state.characterHistory.length;
+  }
+}
+
 function updateOutputActionState() {
   const outlineTaskRunning = llmTaskController.currentTask?.kind === "outline"
     && llmTaskController.currentTask?.status === "running";
-  elements.regenerateOutline.disabled = outlineTaskRunning || !state.outline;
-  elements.generateStory.disabled = outlineTaskRunning || !state.outline;
+  const storyTaskRunning = llmTaskController.currentTask?.kind === "story"
+    && llmTaskController.currentTask?.status === "running";
+  elements.regenerateOutline.disabled = outlineTaskRunning || storyTaskRunning || !state.outline;
+  elements.generateStory.disabled = outlineTaskRunning || storyTaskRunning || !state.outline;
   elements.exportOutline.disabled = !state.outline;
+  elements.exportSettings.disabled = !state.outline;
   elements.exportAllStory.disabled = !state.generatedStory;
+  elements.exportEverything.disabled = !state.generatedStory;
   if (elements.outlineHistory) {
     elements.outlineHistory.disabled = !state.outlineHistory.length;
   }
@@ -2478,8 +2687,8 @@ function ensureNoBlockingLlmTask() {
   }
 
   const message = llmTaskController.currentTask?.status === "paused"
-    ? "当前有一项已暂停的 LLM 任务，请先在 AI 运行面板中继续或放弃本次生成。"
-    : "当前已有 LLM 任务正在运行，请等待完成，或先点击“停止生成”。";
+    ? "当前有一项已暂停的生成任务，请先在 AI 运行面板中继续或放弃本次生成。"
+    : "当前已有生成任务正在运行，请等待完成，或先点击“停止生成”。";
   openLlmActivityPanel();
   setStatus(message, false, true);
   return false;
@@ -2514,8 +2723,8 @@ async function pollCurrentLlmTask() {
     finalizeCurrentLlmTask();
     closeLlmTaskPauseModal();
     task.restoreUi();
-    setStatus(error.message || "获取 LLM 任务状态失败。", false, true);
-    finishLlmActivityRun(error.message || "获取 LLM 任务状态失败。", "error");
+    setStatus(error.message || "获取生成任务状态失败。", false, true);
+    finishLlmActivityRun(error.message || "获取生成任务状态失败。", "error");
   } finally {
     llmTaskController.pollInFlight = false;
   }
@@ -2626,8 +2835,8 @@ async function handlePauseCurrentLlmTask() {
   } catch (error) {
     task.actionPending = false;
     updateLlmTaskActionState();
-    setStatus(error.message || "暂停 LLM 任务失败。", false, true);
-    appendLlmActivityStep("暂停失败", error.message || "暂停 LLM 任务失败。", "error");
+    setStatus(error.message || "暂停生成任务失败。", false, true);
+    appendLlmActivityStep("暂停失败", error.message || "暂停生成任务失败。", "error");
   }
 }
 
@@ -2786,6 +2995,7 @@ function renderChipGroup(container, options, key) {
       state[key] = option;
       renderChipGroup(container, options, key);
       markStoryDraftDirty();
+      queueBasicHistorySnapshot(key === "genre" ? "切换故事类型" : "切换语言风格");
       maybeCompleteBasicInfoGuide();
     });
     container.appendChild(button);
@@ -2797,6 +3007,286 @@ function updateChapterEstimate() {
   const chapterWords = Number(elements.chapterWords.value) || 2000;
   const count = Math.max(1, Math.ceil(totalWords / (chapterWords || 1)));
   elements.chapterCount.textContent = `${count} 章`;
+}
+
+function queueBasicHistorySnapshot(type = "编辑基本信息") {
+  window.clearTimeout(basicHistoryTimer);
+  basicHistoryTimer = window.setTimeout(() => {
+    pushBasicHistoryEntry(type);
+  }, HISTORY_DEBOUNCE_MS);
+}
+
+function queueCharacterHistorySnapshot(type = "编辑角色关系") {
+  window.clearTimeout(characterHistoryTimer);
+  characterHistoryTimer = window.setTimeout(() => {
+    pushCharacterHistoryEntry(type);
+  }, HISTORY_DEBOUNCE_MS);
+}
+
+function pushBasicHistoryEntry(type = "基本信息版本", { force = false } = {}) {
+  const snapshot = buildBasicInfoSnapshot();
+  if (!force && isSameHistorySnapshot(state.basicHistory[0]?.snapshot, snapshot)) {
+    return;
+  }
+
+  state.basicHistory = [
+    {
+      id: generateId("basic-history"),
+      createdAt: new Date().toISOString(),
+      type,
+      snapshot,
+    },
+    ...state.basicHistory,
+  ].slice(0, HISTORY_LIMIT);
+  renderBasicHistory();
+  updateSectionActionState();
+  saveWorkspaceSnapshot();
+}
+
+function pushCharacterHistoryEntry(type = "角色关系版本", { force = false } = {}) {
+  const snapshot = buildCharacterHistorySnapshot();
+  if (!force && isSameHistorySnapshot(state.characterHistory[0]?.snapshot, snapshot)) {
+    return;
+  }
+
+  state.characterHistory = [
+    {
+      id: generateId("characters-history"),
+      createdAt: new Date().toISOString(),
+      type,
+      snapshot,
+    },
+    ...state.characterHistory,
+  ].slice(0, HISTORY_LIMIT);
+  renderCharactersHistory();
+  updateSectionActionState();
+  saveWorkspaceSnapshot();
+}
+
+function isSameHistorySnapshot(left, right) {
+  try {
+    return JSON.stringify(left || null) === JSON.stringify(right || null);
+  } catch (error) {
+    return false;
+  }
+}
+
+function truncateText(value, maxLength = 36) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+}
+
+function getBasicTypeLabel(snapshot) {
+  return String(snapshot?.customGenre || "").trim() || String(snapshot?.genre || "").trim() || "未设置";
+}
+
+function getBasicStyleLabel(snapshot) {
+  return String(snapshot?.customStyle || "").trim() || String(snapshot?.style || "").trim() || "未设置";
+}
+
+function buildBasicHistoryPreview(snapshot) {
+  return [
+    `类型：${getBasicTypeLabel(snapshot)}`,
+    `风格：${getBasicStyleLabel(snapshot)}`,
+    `梗概：${truncateText(snapshot?.synopsis, 40) || "未填写"}`,
+  ].join("｜");
+}
+
+function buildCharactersHistoryPreview(snapshot) {
+  const characters = Array.isArray(snapshot?.characters) ? snapshot.characters : [];
+  const relations = Array.isArray(snapshot?.relations) ? snapshot.relations : [];
+  const names = characters
+    .map((character) => String(character?.name || "").trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join("、");
+  return `${characters.length} 名角色｜${relations.length} 条关系${names ? `｜${names}` : ""}`;
+}
+
+function renderBasicHistory() {
+  if (!elements.basicHistoryList) {
+    return;
+  }
+
+  if (!state.basicHistory.length) {
+    elements.basicHistoryList.innerHTML = `<div class="outline-history-entry"><p>还没有基本信息历史记录。你每次修改并停顿片刻后，这里都会自动保存一个版本。</p></div>`;
+    updateSectionActionState();
+    return;
+  }
+
+  elements.basicHistoryList.innerHTML = state.basicHistory
+    .map((entry, index) => `
+      <article class="outline-history-entry">
+        <div class="outline-history-entry-header">
+          <strong>${escapeHtml(entry.type || `基本信息版本 ${index + 1}`)}</strong>
+          <span>${escapeHtml(formatHistoryTime(entry.createdAt))}</span>
+        </div>
+        <p>${escapeHtml(buildBasicHistoryPreview(entry.snapshot))}</p>
+        <div class="action-row">
+          <button type="button" class="ghost-button" data-basic-history-restore="${entry.id}">恢复为当前版本</button>
+          <button type="button" class="ghost-button" data-basic-history-export="${entry.id}">导出这一版</button>
+        </div>
+      </article>
+    `)
+    .join("");
+
+  elements.basicHistoryList.querySelectorAll("[data-basic-history-restore]").forEach((button) => {
+    button.addEventListener("click", () => {
+      restoreBasicHistoryEntry(button.dataset.basicHistoryRestore);
+    });
+  });
+  elements.basicHistoryList.querySelectorAll("[data-basic-history-export]").forEach((button) => {
+    button.addEventListener("click", () => {
+      void exportBasicHistoryEntry(button.dataset.basicHistoryExport);
+    });
+  });
+
+  updateSectionActionState();
+}
+
+function renderCharactersHistory() {
+  if (!elements.charactersHistoryList) {
+    return;
+  }
+
+  if (!state.characterHistory.length) {
+    elements.charactersHistoryList.innerHTML = `<div class="outline-history-entry"><p>还没有角色关系历史记录。角色档案或关系网发生变化后，这里会自动保存一个版本。</p></div>`;
+    updateSectionActionState();
+    return;
+  }
+
+  elements.charactersHistoryList.innerHTML = state.characterHistory
+    .map((entry, index) => `
+      <article class="outline-history-entry">
+        <div class="outline-history-entry-header">
+          <strong>${escapeHtml(entry.type || `角色关系版本 ${index + 1}`)}</strong>
+          <span>${escapeHtml(formatHistoryTime(entry.createdAt))}</span>
+        </div>
+        <p>${escapeHtml(buildCharactersHistoryPreview(entry.snapshot))}</p>
+        <div class="action-row">
+          <button type="button" class="ghost-button" data-characters-history-restore="${entry.id}">恢复为当前版本</button>
+          <button type="button" class="ghost-button" data-characters-history-export="${entry.id}">导出这一版</button>
+        </div>
+      </article>
+    `)
+    .join("");
+
+  elements.charactersHistoryList.querySelectorAll("[data-characters-history-restore]").forEach((button) => {
+    button.addEventListener("click", () => {
+      restoreCharacterHistoryEntry(button.dataset.charactersHistoryRestore);
+    });
+  });
+  elements.charactersHistoryList.querySelectorAll("[data-characters-history-export]").forEach((button) => {
+    button.addEventListener("click", () => {
+      void exportCharacterHistoryEntry(button.dataset.charactersHistoryExport);
+    });
+  });
+
+  updateSectionActionState();
+}
+
+function openBasicHistoryModal() {
+  window.clearTimeout(basicHistoryTimer);
+  pushBasicHistoryEntry("最近修改");
+  renderBasicHistory();
+  elements.basicHistoryModal.classList.remove("hidden");
+  elements.basicHistoryModal.setAttribute("aria-hidden", "false");
+}
+
+function closeBasicHistoryModal() {
+  elements.basicHistoryModal.classList.add("hidden");
+  elements.basicHistoryModal.setAttribute("aria-hidden", "true");
+}
+
+function openCharactersHistoryModal() {
+  window.clearTimeout(characterHistoryTimer);
+  pushCharacterHistoryEntry("最近修改");
+  renderCharactersHistory();
+  elements.charactersHistoryModal.classList.remove("hidden");
+  elements.charactersHistoryModal.setAttribute("aria-hidden", "false");
+}
+
+function closeCharactersHistoryModal() {
+  elements.charactersHistoryModal.classList.add("hidden");
+  elements.charactersHistoryModal.setAttribute("aria-hidden", "true");
+}
+
+function applyBasicInfoSnapshot(snapshot) {
+  const normalized = normalizeBasicInfoSnapshot(snapshot);
+  state.genre = normalized.genre;
+  state.style = normalized.style;
+  elements.customGenre.value = normalized.customGenre;
+  elements.customStyle.value = normalized.customStyle;
+  elements.synopsis.value = normalized.synopsis;
+  elements.totalWords.value = normalized.totalWords || "12000";
+  elements.chapterWords.value = normalized.chapterWords;
+  elements.worldviewTime.value = normalized.worldviewTime;
+  elements.worldviewPhysical.value = normalized.worldviewPhysical;
+  elements.worldviewSocial.value = normalized.worldviewSocial;
+  renderChipGroup(elements.genreOptions, GENRE_OPTIONS, "genre");
+  renderChipGroup(elements.styleOptions, STYLE_OPTIONS, "style");
+  updateChapterEstimate();
+}
+
+function restoreBasicHistoryEntry(entryId) {
+  const entry = state.basicHistory.find((item) => item.id === entryId);
+  if (!entry) {
+    return;
+  }
+
+  window.clearTimeout(basicHistoryTimer);
+  applyBasicInfoSnapshot(entry.snapshot);
+  markStoryDraftDirty({ clearGeneratedContent: true });
+  renderOutline();
+  renderStory();
+  closeBasicHistoryModal();
+  setStatus("已恢复历史基本信息版本。由于设定已变更，当前大纲和正文已清空。", false);
+  setCurrentStage("basic", { showGuide: false });
+}
+
+function applyCharacterHistorySnapshot(snapshot) {
+  const historySnapshot = snapshot && typeof snapshot === "object" ? snapshot : {};
+  const persistedCharacters = Array.isArray(historySnapshot.characters) ? historySnapshot.characters : [];
+  state.characters = persistedCharacters.length
+    ? persistedCharacters.map((character, index) =>
+      normalizePersistedCharacter(character, index, Math.max(persistedCharacters.length, 1)))
+    : [createCharacter(0), createCharacter(1), createCharacter(2)];
+  arrangeCharacterGraph();
+  nextCharacterColorIndex = state.characters.reduce((maxIndex, character, index) => {
+    const candidate = Number.isInteger(character.graph_color_index) ? character.graph_color_index + 1 : index + 1;
+    return Math.max(maxIndex, candidate);
+  }, 0);
+  state.activeCharacterId = typeof historySnapshot.activeCharacterId === "string"
+    && state.characters.some((character) => character.id === historySnapshot.activeCharacterId)
+    ? historySnapshot.activeCharacterId
+    : state.characters[0]?.id || null;
+  state.relations = Array.isArray(historySnapshot.relations)
+    ? historySnapshot.relations
+      .map((relation) => normalizeIncomingRelation(relation, relation?.relation_source || "user"))
+      .filter(Boolean)
+    : [];
+  syncRelationNames();
+  renderCharacters();
+  renderGraph();
+}
+
+function restoreCharacterHistoryEntry(entryId) {
+  const entry = state.characterHistory.find((item) => item.id === entryId);
+  if (!entry) {
+    return;
+  }
+
+  window.clearTimeout(characterHistoryTimer);
+  applyCharacterHistorySnapshot(entry.snapshot);
+  markStoryDraftDirty({ clearGeneratedContent: true });
+  renderOutline();
+  renderStory();
+  closeCharactersHistoryModal();
+  setStatus("已恢复历史角色关系版本。由于设定已变更，当前大纲和正文已清空。", false);
+  setCurrentStage("characters", { showGuide: false });
 }
 
 function renderCharacters() {
@@ -2900,6 +3390,7 @@ function renderCharacters() {
       }
       renderGraph();
       markStoryDraftDirty();
+      queueCharacterHistorySnapshot(fieldConfig.key === "name" ? "编辑角色姓名" : "编辑角色档案");
     });
 
     wrapper.append(header, control);
@@ -2948,6 +3439,7 @@ function addCharacter() {
   renderCharacters();
   renderGraph();
   markStoryDraftDirty();
+  queueCharacterHistorySnapshot("新增角色");
 }
 
 function removeCharacter(characterId) {
@@ -2973,6 +3465,7 @@ function removeCharacter(characterId) {
   renderCharacters();
   renderGraph();
   markStoryDraftDirty();
+  queueCharacterHistorySnapshot("删除角色");
 }
 
 function setupGraphInteractions() {
@@ -3622,6 +4115,7 @@ function saveRelationModal() {
   renderGraph();
   closeRelationModal();
   markStoryDraftDirty();
+  queueCharacterHistorySnapshot("编辑角色关系");
   setStatus("单条关系已更新，请点击“保存关系”同步整张关系网。", false);
 }
 
@@ -3672,6 +4166,7 @@ function deleteDirectionalRelation(sourceId, targetId, silent = false) {
   renderGraph();
   if (!silent && before !== state.relations.length) {
     markStoryDraftDirty();
+    queueCharacterHistorySnapshot("删除角色关系");
     setStatus("角色关系已删除，请重新保存关系网。", false);
   }
 }
@@ -3681,6 +4176,7 @@ function deleteRelationPair(pairKey, silent = false) {
   renderGraph();
   if (!silent) {
     markStoryDraftDirty();
+    queueCharacterHistorySnapshot("删除角色关系");
     setStatus("角色关系已删除，请重新保存关系网。", false);
   }
 }
@@ -3763,6 +4259,7 @@ function applyServerStoryDraft(story) {
   syncRelationNames();
   renderCharacters();
   renderGraph();
+  pushCharacterHistoryEntry("同步角色设定");
 
   if (state.isStorySaved) {
     state.savedStoryDraft = buildStoryPayload();
@@ -3794,6 +4291,15 @@ function disableOutlineTaskActions() {
 
 function restoreOutlineTaskActions() {
   elements.generateOutline.disabled = false;
+  updateOutputActionState();
+}
+
+function disableStoryTaskActions() {
+  elements.generateStory.disabled = true;
+  elements.regenerateOutline.disabled = true;
+}
+
+function restoreStoryTaskActions() {
   updateOutputActionState();
 }
 
@@ -3880,6 +4386,7 @@ async function handleAiRelationSupplement() {
         state.isStorySaved = true;
         updateRelationActionState();
         saveWorkspaceSnapshot();
+        pushCharacterHistoryEntry(mergedCount ? "AI补充角色关系" : "同步角色关系", { force: mergedCount > 0 });
         setStatus(
           mergedCount
             ? `AI 已补充 ${mergedCount} 条新关系，并同步到当前关系网。`
@@ -4205,29 +4712,40 @@ async function handleStoryGenerate() {
     buildStoryWaitingMessages(state.outline?.chapter_count || state.outline?.chapters?.length || 1),
   );
   setBusyState("正在依次生成章节正文，这一步可能需要一些时间...");
-  elements.generateStory.disabled = true;
-  elements.regenerateOutline.disabled = true;
+  disableStoryTaskActions();
 
   try {
-    const story = await postJson("/api/story", {
+    await createManagedLlmTask("/api/llm-tasks/story", {
       story: buildStoryPayload(),
       outline: state.outline,
+    }, {
+      busyMessage: "正在依次生成章节正文，这一步可能需要一些时间...",
+      runningSummary: "Neuro AI 正在逐章创作正文，这一步可能会持续一段时间。",
+      waitingMessages: buildStoryWaitingMessages(state.outline?.chapter_count || state.outline?.chapters?.length || 1),
+      pausedSummary: "正文生成已暂停。你可以先返回调整梗概、关系或大纲；若继续，将按暂停前的输入重新生成本次正文。",
+      discardSummary: "本次正文生成已放弃，你可以调整后重新发起。",
+      discardStatusMessage: "本次正文生成已放弃。你可以继续编辑并重新生成正文。",
+      restoreUi: restoreStoryTaskActions,
+      onCompleted: (response) => {
+        const storyPayload = response?.chapters ? response : response?.story || response;
+        state.generatedStory = normalizeGeneratedStory(storyPayload, state.outline?.title || "");
+        state.activeChapterNumber = state.generatedStory?.chapters?.[0]?.chapter_number || null;
+        appendLlmActivityStep("解析正文结果", "正在校验章节列表、摘要和正文内容。");
+        appendLlmActivityStep("渲染章节内容", "正在把生成结果写入正文展示区。");
+        renderStory();
+        saveWorkspaceSnapshot();
+        setCurrentStage("story", { showGuide: false });
+        setStatus("全文生成完成。你可以继续修改设定后重新走一次流程。", false);
+        finishLlmActivityRun("正文已生成完成，现在可以导出单章或全部正文。");
+        unlockStoryGuide();
+      },
     });
-    state.generatedStory = normalizeGeneratedStory(story, state.outline?.title || "");
-    state.activeChapterNumber = state.generatedStory?.chapters?.[0]?.chapter_number || null;
-    appendLlmActivityStep("解析正文结果", "正在校验章节列表、摘要和正文内容。");
-    appendLlmActivityStep("渲染章节内容", "正在把生成结果写入正文展示区。");
-    renderStory();
-    saveWorkspaceSnapshot();
-    setCurrentStage("story", { showGuide: false });
-    setStatus("全文生成完成。你可以继续修改设定后重新走一次流程。", false);
-    finishLlmActivityRun("正文已生成完成，现在可以导出单章或全部正文。");
-    unlockStoryGuide();
   } catch (error) {
     setStatus(error.message || "正文生成失败。", false, true);
     finishLlmActivityRun(error.message || "正文生成失败。", "error");
+    restoreStoryTaskActions();
   } finally {
-    updateOutputActionState();
+    restoreStoryTaskActions();
   }
 }
 
@@ -4336,6 +4854,88 @@ async function handleOutlineExport() {
   }
 }
 
+async function handleBasicExport() {
+  try {
+    await downloadDocxFile(
+      `${buildExportBaseName()}-基本信息_神经元脚本.docx`,
+      resolveCurrentWorkTitle(),
+      buildBasicInfoExportText(),
+    );
+    setStatus("基本信息已导出为 Word 文档。", false);
+  } catch (error) {
+    setStatus(error.message || "基本信息导出失败。", false, true);
+  }
+}
+
+async function exportBasicHistoryEntry(entryId) {
+  const entry = state.basicHistory.find((item) => item.id === entryId);
+  if (!entry) {
+    return;
+  }
+
+  try {
+    await downloadDocxFile(
+      `${buildExportBaseName()}-${sanitizeFilename(entry.type || "基本信息历史")}_神经元脚本.docx`,
+      resolveCurrentWorkTitle(),
+      buildBasicInfoExportText(entry.snapshot),
+    );
+    setStatus("已导出这版基本信息。", false);
+  } catch (error) {
+    setStatus(error.message || "基本信息历史导出失败。", false, true);
+  }
+}
+
+async function handleCharactersExport() {
+  try {
+    await downloadDocxFile(
+      `${buildExportBaseName()}-角色关系_神经元脚本.docx`,
+      resolveCurrentWorkTitle(),
+      buildCharactersExportText(),
+    );
+    setStatus("角色关系已导出为 Word 文档。", false);
+  } catch (error) {
+    setStatus(error.message || "角色关系导出失败。", false, true);
+  }
+}
+
+async function exportCharacterHistoryEntry(entryId) {
+  const entry = state.characterHistory.find((item) => item.id === entryId);
+  if (!entry) {
+    return;
+  }
+
+  try {
+    await downloadDocxFile(
+      `${buildExportBaseName()}-${sanitizeFilename(entry.type || "角色关系历史")}_神经元脚本.docx`,
+      resolveCurrentWorkTitle(),
+      buildCharactersExportText(entry.snapshot),
+    );
+    setStatus("已导出这版角色关系。", false);
+  } catch (error) {
+    setStatus(error.message || "角色关系历史导出失败。", false, true);
+  }
+}
+
+async function handleExportSettings() {
+  if (!state.outline) {
+    return;
+  }
+  if (!saveActStructureEdits(true)) {
+    return;
+  }
+
+  try {
+    await downloadDocxFile(
+      `${buildExportBaseName()}-导出设定_神经元脚本.docx`,
+      resolveCurrentWorkTitle(),
+      buildSettingsExportText(),
+    );
+    setStatus("三步设定已导出为 Word 文档。", false);
+  } catch (error) {
+    setStatus(error.message || "导出设定失败。", false, true);
+  }
+}
+
 async function handleExportAllStory() {
   if (!state.generatedStory) {
     return;
@@ -4353,6 +4953,26 @@ async function handleExportAllStory() {
   }
 }
 
+async function handleExportEverything() {
+  if (!state.generatedStory) {
+    return;
+  }
+  if (!saveActStructureEdits(true)) {
+    return;
+  }
+
+  try {
+    await downloadDocxFile(
+      `${buildExportBaseName()}-导出全部_神经元脚本.docx`,
+      resolveCurrentWorkTitle(),
+      buildEverythingExportText(),
+    );
+    setStatus("全部设定和正文已导出为 Word 文档。", false);
+  } catch (error) {
+    setStatus(error.message || "导出全部失败。", false, true);
+  }
+}
+
 function handleStoryResultClick(event) {
   const nextChapterButton = event.target.closest("[data-next-chapter]");
   if (nextChapterButton) {
@@ -4360,6 +4980,7 @@ function handleStoryResultClick(event) {
     if (Number.isFinite(chapterNumber)) {
       state.activeChapterNumber = chapterNumber;
       renderStory();
+      scrollStoryReaderToTop();
       saveWorkspaceSnapshot();
     }
     return;
@@ -4371,6 +4992,7 @@ function handleStoryResultClick(event) {
     if (Number.isFinite(chapterNumber)) {
       state.activeChapterNumber = chapterNumber;
       renderStory();
+      scrollStoryReaderToTop();
       saveWorkspaceSnapshot();
     }
     return;
@@ -4482,8 +5104,105 @@ function buildAllStoryExportText() {
   ].join("\n");
 }
 
+function buildBasicInfoExportText(snapshot = buildBasicInfoSnapshot()) {
+  const basic = normalizeBasicInfoSnapshot(snapshot);
+  const totalWords = Number(basic.totalWords) || 0;
+  const chapterWords = Number(basic.chapterWords) || 0;
+  const estimatedChapterCount = totalWords > 0
+    ? Math.max(1, Math.ceil(totalWords / (chapterWords || 2000)))
+    : 0;
+
+  return [
+    "基本信息",
+    `故事类型：${getBasicTypeLabel(basic)}`,
+    `语言风格：${getBasicStyleLabel(basic)}`,
+    `故事梗概：${basic.synopsis || "未填写"}`,
+    `整体篇幅：${basic.totalWords || "未填写"}${basic.totalWords ? " 字" : ""}`,
+    `每章目标字数：${basic.chapterWords || "未填写"}${basic.chapterWords ? " 字" : ""}`,
+    `预估章节数：${estimatedChapterCount || "未计算"}`,
+    "",
+    "世界观：",
+    `时间背景：${basic.worldviewTime || "未填写"}`,
+    `物理环境：${basic.worldviewPhysical || "未填写"}`,
+    `社会环境：${basic.worldviewSocial || "未填写"}`,
+  ].join("\n");
+}
+
+function buildCharacterFieldLines(character, index) {
+  return [
+    `角色 ${index + 1}：${character.name || "未命名角色"}`,
+    `姓名：${character.name || "未填写"}`,
+    `性别：${character.gender || "未填写"}`,
+    `年龄：${character.age || "未填写"}`,
+    `国籍/种族：${character.nationality || "未填写"}`,
+    `身份/职业：${character.occupation || "未填写"}`,
+    `性格：${character.personality || "未填写"}`,
+    `核心动机：${character.core_motivation || "未填写"}`,
+    `内在冲突：${character.inner_conflict || "未填写"}`,
+    `强项：${character.strengths || "未填写"}`,
+    `弱点：${character.weaknesses || "未填写"}`,
+    `人物弧光：${character.character_arc || "未填写"}`,
+    `外在特征：${character.appearance || "未填写"}`,
+    `说话风格：${character.speaking_style || "未填写"}`,
+    `价值观：${character.values || "未填写"}`,
+  ].join("\n");
+}
+
+function buildCharactersExportText(snapshot = buildCharacterHistorySnapshot()) {
+  const historySnapshot = snapshot && typeof snapshot === "object" ? snapshot : {};
+  const characters = Array.isArray(historySnapshot.characters) ? historySnapshot.characters : [];
+  const relations = Array.isArray(historySnapshot.relations) ? historySnapshot.relations : [];
+  const characterNameMap = new Map(
+    characters.map((character) => [character.id, String(character?.name || "").trim() || "未命名角色"]),
+  );
+
+  return [
+    "角色关系",
+    `角色数量：${characters.length}`,
+    `关系数量：${relations.length}`,
+    "",
+    "角色档案：",
+    ...(characters.length
+      ? characters.map((character, index) => buildCharacterFieldLines(character, index))
+      : ["还没有角色档案。"]),
+    "",
+    "角色关系网：",
+    ...(relations.length
+      ? relations.map((relation, index) => {
+        const sourceName = relation.source_name || characterNameMap.get(relation.source_id) || "未命名角色";
+        const targetName = relation.target_name || characterNameMap.get(relation.target_id) || "未命名角色";
+        const relationSource = relation.relation_source === "ai" ? "AI补充" : "手动设定";
+        return `${index + 1}. ${sourceName} → ${targetName}：${relation.label}（${relationSource}）`;
+      })
+      : ["还没有角色关系。"]),
+  ].join("\n\n");
+}
+
+function buildSettingsExportText() {
+  return [
+    `作品：${resolveCurrentWorkTitle()}`,
+    buildBasicInfoExportText(),
+    buildCharactersExportText(),
+    `大纲生成\n${buildOutlineExportText()}`,
+  ].join("\n\n" + "=".repeat(24) + "\n\n");
+}
+
+function buildEverythingExportText() {
+  return [
+    buildSettingsExportText(),
+    `正文生成\n${buildAllStoryExportText()}`,
+  ].join("\n\n" + "=".repeat(24) + "\n\n");
+}
+
+function resolveCurrentWorkTitle() {
+  return state.generatedStory?.title
+    || state.outline?.title
+    || truncateText(elements.synopsis?.value, 24)
+    || "未命名作品";
+}
+
 function buildExportBaseName() {
-  return sanitizeFilename(state.generatedStory?.title || state.outline?.title || "未命名作品");
+  return sanitizeFilename(resolveCurrentWorkTitle());
 }
 
 function sanitizeFilename(value) {
@@ -4869,6 +5588,23 @@ function renderStory() {
   closeStorySelectionToolbar({ preserveSelection: false });
 }
 
+function scrollStoryReaderToTop() {
+  window.requestAnimationFrame(() => {
+    [
+      document.querySelector("#stage-story .prose-main"),
+      document.querySelector("#stage-story .prose-scroll-area"),
+    ]
+      .filter(Boolean)
+      .forEach((container) => {
+        if (typeof container.scrollTo === "function") {
+          container.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
+        container.scrollTop = 0;
+      });
+  });
+}
+
 function buildChapterContentHtml(content) {
   const normalized = String(content || "").trim();
   if (!normalized) {
@@ -5153,6 +5889,8 @@ function handleGlobalKeyDown(event) {
 
   closeStorySelectionToolbar({ preserveSelection: false });
   closeStoryEditModal();
+  closeBasicHistoryModal();
+  closeCharactersHistoryModal();
   closeOutlineHistoryModal();
 }
 

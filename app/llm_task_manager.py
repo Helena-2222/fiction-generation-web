@@ -10,11 +10,12 @@ from app.models import (
     LlmTaskStatusResponse,
     OutlineGenerationRequest,
     RelationSupplementRequest,
+    StoryGenerationRequest,
 )
 from app.services.story_service import StoryService
 
 
-TaskKind = Literal["outline", "relations_supplement"]
+TaskKind = Literal["outline", "relations_supplement", "story"]
 TaskStatus = Literal["running", "paused", "completed", "failed", "discarded"]
 
 
@@ -47,6 +48,12 @@ class LlmTaskManager:
         request: RelationSupplementRequest,
     ) -> LlmTaskStatusResponse:
         return self._create_task("relations_supplement", request.model_dump())
+
+    async def create_story_task(
+        self,
+        request: StoryGenerationRequest,
+    ) -> LlmTaskStatusResponse:
+        return self._create_task("story", request.model_dump())
 
     def get_task(self, task_id: str) -> LlmTaskStatusResponse:
         task = self._require_task(task_id)
@@ -107,9 +114,12 @@ class LlmTaskManager:
             if task.kind == "outline":
                 request = OutlineGenerationRequest.model_validate(task.payload)
                 result = await self._story_service.generate_outline(request)
-            else:
+            elif task.kind == "relations_supplement":
                 request = RelationSupplementRequest.model_validate(task.payload)
                 result = await self._story_service.supplement_relations(request.story)
+            else:
+                request = StoryGenerationRequest.model_validate(task.payload)
+                result = await self._story_service.generate_story(request)
         except asyncio.CancelledError:
             task.updated_at = self._now()
             task.worker = None
@@ -143,7 +153,7 @@ class LlmTaskManager:
     def _require_task(self, task_id: str) -> ManagedLlmTask:
         task = self._tasks.get(task_id)
         if task is None:
-            raise KeyError("未找到对应的 LLM 任务。")
+            raise KeyError("未找到对应的生成任务。")
         return task
 
     @staticmethod

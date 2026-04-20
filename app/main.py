@@ -125,6 +125,15 @@ async def create_relation_supplement_task(request: RelationSupplementRequest) ->
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@app.post("/api/llm-tasks/story")
+async def create_story_task(request: StoryGenerationRequest) -> dict:
+    try:
+        response: LlmTaskStatusResponse = await llm_task_manager.create_story_task(request)
+        return response.model_dump()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @app.get("/api/llm-tasks/{task_id}")
 async def get_llm_task(task_id: str) -> dict:
     try:
