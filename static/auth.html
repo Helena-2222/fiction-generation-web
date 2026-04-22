@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>登录 | 神经元脚本</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600&family=Noto+Serif+SC:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/auth.css" />
+  </head>
+  <body>
+    <div class="auth-root">
+      <div class="auth-deco-circle auth-deco-circle-1" aria-hidden="true"></div>
+      <div class="auth-deco-circle auth-deco-circle-2" aria-hidden="true"></div>
+
+      <a class="auth-brand" href="/">神经元<span>脚本</span></a>
+
+      <main class="auth-card" aria-label="登录与注册">
+        <section id="auth-view-guest">
+          <div class="auth-header">
+            <h1 id="auth-title" class="auth-title">欢迎回来</h1>
+            <p id="auth-subtitle" class="auth-subtitle">登录后即可继续你的创作工作台与收藏内容。</p>
+          </div>
+
+          <div class="auth-tabs" aria-label="登录模式">
+            <button id="auth-mode-login" class="auth-tab active" type="button">登录</button>
+            <button id="auth-mode-register" class="auth-tab" type="button">注册</button>
+          </div>
+
+          <div class="auth-method-switch" aria-label="登录方式">
+            <button id="auth-method-email" class="auth-method-btn active" type="button">
+              <span class="field-icon" aria-hidden="true">
+                <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <rect x="3" y="5" width="14" height="11" rx="2"></rect>
+                  <path d="M3 7l7 5 7-5"></path>
+                </svg>
+              </span>
+              邮箱
+            </button>
+            <button id="auth-method-phone" class="auth-method-btn" type="button">
+              <span class="field-icon" aria-hidden="true">
+                <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <rect x="6" y="2" width="8" height="16" rx="2"></rect>
+                  <circle cx="10" cy="16" r="0.8" fill="currentColor"></circle>
+                </svg>
+              </span>
+              手机号
+            </button>
+          </div>
+
+          <form id="auth-form" class="auth-form" novalidate>
+            <div id="auth-field-nickname" class="auth-field hidden">
+              <label class="auth-label" for="auth-nickname">昵称</label>
+              <div class="auth-input-wrap">
+                <span class="field-icon" aria-hidden="true">
+                  <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="10" cy="7" r="3"></circle>
+                    <path d="M4 17c0-3 2.7-5 6-5s6 2 6 5"></path>
+                  </svg>
+                </span>
+                <input id="auth-nickname" class="auth-input" type="text" placeholder="你希望我怎么称呼你？" />
+              </div>
+            </div>
+
+            <div id="auth-field-email" class="auth-field">
+              <label class="auth-label" for="auth-email">邮箱</label>
+              <div class="auth-input-wrap">
+                <span class="field-icon" aria-hidden="true">
+                  <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="5" width="14" height="11" rx="2"></rect>
+                    <path d="M3 7l7 5 7-5"></path>
+                  </svg>
+                </span>
+                <input id="auth-email" class="auth-input" type="email" placeholder="your@email.com" autocomplete="email" />
+              </div>
+            </div>
+
+            <div id="auth-field-password" class="auth-field">
+              <label class="auth-label" for="auth-password">密码</label>
+              <div class="auth-input-wrap">
+                <span class="field-icon" aria-hidden="true">
+                  <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="5" y="9" width="10" height="8" rx="2"></rect>
+                    <path d="M7 9V6a3 3 0 016 0v3"></path>
+                  </svg>
+                </span>
+                <input id="auth-password" class="auth-input" type="password" placeholder="输入密码" autocomplete="current-password" />
+              </div>
+            </div>
+
+            <div id="auth-field-phone" class="auth-field hidden">
+              <label class="auth-label" for="auth-phone">手机号</label>
+              <div class="auth-input-wrap">
+                <span class="phone-prefix">+86</span>
+                <input id="auth-phone" class="auth-input with-prefix" type="tel" inputmode="numeric" maxlength="11" placeholder="13800000000" />
+              </div>
+            </div>
+
+            <div id="auth-field-sms" class="auth-field hidden">
+              <label class="auth-label" for="auth-sms-code">验证码</label>
+              <div class="sms-row">
+                <div class="auth-input-wrap" style="flex: 1;">
+                  <span class="field-icon" aria-hidden="true">
+                    <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <rect x="5" y="9" width="10" height="8" rx="2"></rect>
+                      <path d="M7 9V6a3 3 0 016 0v3"></path>
+                    </svg>
+                  </span>
+                  <input id="auth-sms-code" class="auth-input" type="text" inputmode="numeric" maxlength="6" placeholder="6 位验证码" />
+                </div>
+                <button id="auth-send-sms" class="sms-btn" type="button">获取验证码</button>
+              </div>
+            </div>
+
+            <div id="auth-message" class="auth-message hidden" aria-live="polite"></div>
+
+            <button id="auth-submit" class="auth-submit" type="submit">登录</button>
+
+            <div id="auth-password-reset-row" class="auth-inline-action">
+              <button id="auth-password-reset" type="button">忘记密码？</button>
+            </div>
+          </form>
+
+          <div class="auth-footer">
+            <span id="auth-footer-text">还没有账号？</span>
+            <button id="auth-footer-switch" type="button">立即注册</button>
+          </div>
+        </section>
+
+        <section id="auth-view-user" class="auth-logged-in hidden">
+          <div id="auth-user-initial" class="auth-avatar-circle">创</div>
+          <h2 id="auth-user-name" class="auth-user-name">欢迎回来</h2>
+          <p id="auth-user-email" class="auth-user-email">已登录账户</p>
+          <p class="auth-user-note">已检测到登录状态，你可以直接进入创作工作台继续写作。</p>
+
+          <div class="auth-btn-group">
+            <a id="auth-continue" class="auth-submit auth-link-button" href="/create?stage=basic">继续创作</a>
+            <a class="auth-btn-outline auth-link-button" href="/">返回首页</a>
+            <button id="auth-logout" class="auth-btn-danger" type="button">退出登录</button>
+          </div>
+        </section>
+      </main>
+
+      <div class="auth-deco-text">神经元脚本 · 人机协同创作</div>
+    </div>
+
+    <script src="/vendor/supabase.js"></script>
+    <script type="module" src="/static/auth.js"></script>
+  </body>
+</html>

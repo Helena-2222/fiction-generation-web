@@ -56,6 +56,17 @@
   color: var(--accent);
 }
 
+.sidebar-avatar.is-authenticated {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.sidebar-avatar-initial {
+  line-height: 1;
+}
+
 .sidebar-icon {
   width: 36px;
   height: 36px;
@@ -152,6 +163,13 @@
   height: 20px;
 }
 
+.sidebar-profile-avatar.has-text {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .sidebar-profile-name {
   font-size: 15px;
   font-weight: 600;
@@ -164,6 +182,25 @@
   font-size: 12px;
   line-height: 1.7;
   color: var(--text-secondary);
+}
+
+.sidebar-profile-email {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-hint);
+  word-break: break-all;
+}
+
+.sidebar-auth-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.sidebar-auth-link {
+  width: 100%;
+  justify-content: center;
+  text-decoration: none;
 }
 
 .sidebar-module {

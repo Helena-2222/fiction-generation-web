@@ -2,6 +2,7 @@ import { GENRE_OPTIONS, STYLE_OPTIONS, CHARACTER_DOSSIER_FIELDS, STAGE_ORDER, ST
 import { state } from './src/state.js';
 import { generateId, normalizeFavoriteQuote, formatFavoriteTime, formatHistoryTime, sanitizeFilename, escapeHtml, clamp } from './src/utils.js';
 import { postJson, getJson } from './src/api.js';
+import { DEFAULT_NEXT_PATH, buildAuthUrl, getCurrentUser, getUserContact, getUserDisplayName, getUserInitial, requireAuth, signInAsGuest, signOut, subscribeToAuthChanges } from './src/auth-client.js';
 
 function buildInitialWorkspaceSnapshot() {
   return {
@@ -57,6 +58,16 @@ function getRequestedStageOverride() {
   } catch (error) {
     console.warn("读取页面阶段参数失败：", error);
     return "";
+  }
+}
+
+function isGuestCreateEntryRequested() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return (params.get("guest") || "").trim() === "1";
+  } catch (error) {
+    console.warn("读取游客进入参数失败：", error);
+    return false;
   }
 }
 
@@ -118,11 +129,58 @@ const llmTaskController = {
   pollTimer: null,
   pollInFlight: false,
 };
+const DEFAULT_SIDEBAR_AVATAR_ICON = `
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+    <circle cx="10" cy="7.5" r="3"></circle>
+    <path d="M4 17c0-3 2.7-5 6-5s6 2 6 5"></path>
+  </svg>
+`;
+let authStateCleanup = null;
+let currentAuthUserId = "";
+let guideEnabledForSession = false;
+let guestEntryRequestedForSession = false;
+let createAuthRedirectPending = false;
+let createLogoutInProgress = false;
+let createAuthRecoveryRunId = 0;
+
+function setCurrentAuthUser(user) {
+  currentAuthUserId = String(user?.id || "").trim();
+}
+
+function waitForDelay(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function getScopedStorageKey(baseKey) {
+  const normalizedBaseKey = String(baseKey || "").trim();
+  if (!normalizedBaseKey || !currentAuthUserId) {
+    return "";
+  }
+  return `${normalizedBaseKey}:${currentAuthUserId}`;
+}
+
+function initializeGuideSessionState() {
+  const progress = loadSeenGuides();
+  guideEnabledForSession = !progress.onboarding_seen_once;
+  if (!guideEnabledForSession) {
+    return;
+  }
+
+  progress.onboarding_seen_once = true;
+  saveSeenGuides(progress);
+}
 
 const elements = {
   sidebar: document.querySelector("#sidebar-rail"),
   sidebarAvatarToggle: document.querySelector("#sidebar-avatar-toggle"),
   sidebarDetailPanel: document.querySelector("#sidebar-detail-panel"),
+  sidebarProfileAvatar: document.querySelector("#sidebar-profile-avatar"),
+  sidebarProfileName: document.querySelector("#sidebar-profile-name"),
+  sidebarProfileNote: document.querySelector("#sidebar-profile-note"),
+  sidebarProfileEmail: document.querySelector("#sidebar-profile-email"),
+  sidebarLogoutButton: document.querySelector("#sidebar-logout-button"),
   favoriteList: document.querySelector("#favorite-list"),
   favoriteCountBadge: document.querySelector("#favorite-count-badge"),
   stageSections: Array.from(document.querySelectorAll("[data-stage-screen]")),
@@ -593,7 +651,256 @@ function syncNeuroInputState() {
   elements.outlineFeedback.disabled = !hasOutline;
 }
 
-function init() {
+function getCurrentCreatePath() {
+  return `${window.location.pathname}${window.location.search}${window.location.hash}` || DEFAULT_NEXT_PATH;
+}
+
+function restoreSidebarAuthUi() {
+  if (elements.sidebarAvatarToggle) {
+    elements.sidebarAvatarToggle.classList.remove("is-authenticated");
+    elements.sidebarAvatarToggle.innerHTML = DEFAULT_SIDEBAR_AVATAR_ICON;
+    elements.sidebarAvatarToggle.setAttribute("aria-label", "用户");
+    elements.sidebarAvatarToggle.removeAttribute("title");
+  }
+
+  if (elements.sidebarProfileAvatar) {
+    elements.sidebarProfileAvatar.classList.remove("has-text");
+    elements.sidebarProfileAvatar.innerHTML = DEFAULT_SIDEBAR_AVATAR_ICON;
+  }
+
+  if (elements.sidebarProfileName) {
+    elements.sidebarProfileName.textContent = "创作者";
+  }
+
+  if (elements.sidebarProfileNote) {
+    elements.sidebarProfileNote.textContent = "登录后可以在这里查看账户状态与收藏内容。";
+  }
+
+  if (elements.sidebarProfileEmail) {
+    elements.sidebarProfileEmail.textContent = "";
+  }
+
+  if (elements.sidebarLogoutButton) {
+    elements.sidebarLogoutButton.disabled = false;
+    elements.sidebarLogoutButton.textContent = "退出登录";
+  }
+}
+
+function clearGuestCreateEntryFromUrl() {
+  if (!window.history?.replaceState) {
+    return;
+  }
+
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("guest");
+    window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+  } catch (error) {
+    console.warn("清理游客进入参数失败：", error);
+  }
+}
+
+function renderSidebarAuthUi(user) {
+  if (!user) {
+    restoreSidebarAuthUi();
+    return;
+  }
+
+  const displayName = getUserDisplayName(user);
+  const initial = getUserInitial(user);
+  const contact = getUserContact(user);
+
+  if (elements.sidebarAvatarToggle) {
+    elements.sidebarAvatarToggle.classList.add("is-authenticated");
+    elements.sidebarAvatarToggle.innerHTML = `<span class="sidebar-avatar-initial">${escapeHtml(initial)}</span>`;
+    elements.sidebarAvatarToggle.setAttribute("aria-label", `${displayName} 的账户`);
+    elements.sidebarAvatarToggle.setAttribute("title", displayName);
+  }
+
+  if (elements.sidebarProfileAvatar) {
+    elements.sidebarProfileAvatar.classList.add("has-text");
+    elements.sidebarProfileAvatar.textContent = initial;
+  }
+
+  if (elements.sidebarProfileName) {
+    elements.sidebarProfileName.textContent = displayName;
+  }
+
+  if (elements.sidebarProfileNote) {
+    elements.sidebarProfileNote.textContent = "已登录，继续在这里管理收藏并推进你的故事。";
+  }
+
+  if (elements.sidebarProfileEmail) {
+    elements.sidebarProfileEmail.textContent = contact;
+  }
+
+  if (elements.sidebarLogoutButton) {
+    elements.sidebarLogoutButton.disabled = false;
+    elements.sidebarLogoutButton.textContent = "退出登录";
+  }
+}
+
+async function handleSidebarLogout() {
+  createLogoutInProgress = true;
+  if (elements.sidebarLogoutButton) {
+    elements.sidebarLogoutButton.disabled = true;
+    elements.sidebarLogoutButton.textContent = "退出中...";
+  }
+
+  try {
+    await signOut();
+  } catch (error) {
+    createLogoutInProgress = false;
+    console.error("Failed to sign out", error);
+    if (elements.sidebarLogoutButton) {
+      elements.sidebarLogoutButton.disabled = false;
+      elements.sidebarLogoutButton.textContent = "退出登录";
+    }
+    setStatus("退出登录失败，请稍后重试。", false, true);
+    return;
+  }
+
+  createAuthRedirectPending = true;
+  window.location.replace(buildAuthUrl(DEFAULT_NEXT_PATH));
+}
+
+async function resolveGuestCreateUser() {
+  try {
+    const guestUser = await signInAsGuest({ nickname: "游客" });
+    if (guestUser) {
+      return guestUser;
+    }
+  } catch (error) {
+    console.warn("Guest sign-in attempt failed", error);
+  }
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const currentUser = await getCurrentUser().catch(() => null);
+    if (currentUser) {
+      return currentUser;
+    }
+    await waitForDelay(120 + attempt * 80);
+  }
+
+  return null;
+}
+
+async function handleCreateAuthStateChange(event, session) {
+  const recoveryRunId = ++createAuthRecoveryRunId;
+
+  if (session?.user) {
+    createAuthRedirectPending = false;
+    setCurrentAuthUser(session.user);
+    renderSidebarAuthUi(session.user);
+    return;
+  }
+
+  if (createLogoutInProgress) {
+    return;
+  }
+
+  const recoveredUser = await getCurrentUser().catch(() => null);
+  if (recoveryRunId !== createAuthRecoveryRunId) {
+    return;
+  }
+  if (recoveredUser) {
+    createAuthRedirectPending = false;
+    setCurrentAuthUser(recoveredUser);
+    renderSidebarAuthUi(recoveredUser);
+    return;
+  }
+
+  if (guestEntryRequestedForSession) {
+    const guestUser = await resolveGuestCreateUser();
+    if (recoveryRunId !== createAuthRecoveryRunId) {
+      return;
+    }
+    if (guestUser) {
+      createAuthRedirectPending = false;
+      setCurrentAuthUser(guestUser);
+      renderSidebarAuthUi(guestUser);
+      return;
+    }
+
+    console.warn("Guest session could not be restored on create page", event);
+    setStatus("游客会话初始化失败，请刷新后重试。", false, true);
+    return;
+  }
+
+  if (!createAuthRedirectPending) {
+    createAuthRedirectPending = true;
+    window.location.replace(buildAuthUrl(getCurrentCreatePath()));
+  }
+}
+
+async function bootstrapCreateAuth() {
+  restoreSidebarAuthUi();
+  guestEntryRequestedForSession = isGuestCreateEntryRequested();
+  createAuthRedirectPending = false;
+  createLogoutInProgress = false;
+  let user = await getCurrentUser();
+
+  if (!user && guestEntryRequestedForSession) {
+    user = await resolveGuestCreateUser();
+  }
+
+  if (!user) {
+    if (guestEntryRequestedForSession) {
+      throw new Error("游客登录暂时不可用，请确认 Supabase 已开启匿名登录并刷新页面后重试。");
+    }
+    user = await requireAuth({ nextPath: getCurrentCreatePath() });
+  }
+
+  if (!user) {
+    return false;
+  }
+
+  if (guestEntryRequestedForSession) {
+    clearGuestCreateEntryFromUrl();
+  }
+
+  setCurrentAuthUser(user);
+  renderSidebarAuthUi(user);
+  if (elements.sidebarLogoutButton) {
+    elements.sidebarLogoutButton.removeEventListener("click", handleSidebarLogout);
+    elements.sidebarLogoutButton.addEventListener("click", handleSidebarLogout);
+  }
+
+  if (typeof authStateCleanup === "function") {
+    authStateCleanup();
+  }
+  authStateCleanup = await subscribeToAuthChanges((event, session) => {
+    void handleCreateAuthStateChange(event, session);
+  });
+
+  return true;
+}
+
+function renderCreateAuthError(error) {
+  const loginUrl = buildAuthUrl(DEFAULT_NEXT_PATH);
+  const message = escapeHtml(error?.message || "登录模块初始化失败，请刷新页面后重试。");
+  document.body.innerHTML = `
+    <main style="min-height:100vh;display:grid;place-items:center;padding:24px;background:#f7f3f0;color:#2f261d;font-family:'Noto Serif SC',serif;">
+      <section style="max-width:560px;padding:32px;border:1px solid rgba(94,80,63,0.16);border-radius:20px;background:#fffdf9;box-shadow:0 20px 60px rgba(94,80,63,0.12);">
+        <p style="margin:0 0 12px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#8a7458;">Authentication</p>
+        <h1 style="margin:0 0 12px;font-size:32px;line-height:1.2;">身份服务暂时不可用</h1>
+        <p style="margin:0;color:#6b5b4b;line-height:1.8;">${message}</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:24px;">
+          <a href="${loginUrl}" style="display:inline-flex;align-items:center;justify-content:center;padding:12px 18px;border-radius:999px;background:#5e503f;color:#fff;text-decoration:none;">前往登录页</a>
+          <a href="/" style="display:inline-flex;align-items:center;justify-content:center;padding:12px 18px;border-radius:999px;border:1px solid rgba(94,80,63,0.16);background:#fff;color:#2f261d;text-decoration:none;">返回首页</a>
+        </div>
+      </section>
+    </main>
+  `;
+}
+
+async function init() {
+  const isAuthenticated = await bootstrapCreateAuth();
+  if (!isAuthenticated) {
+    return;
+  }
+
+  initializeGuideSessionState();
   const restoredWorkspace = loadWorkspaceSnapshot();
   const requestedStageOverride = getRequestedStageOverride();
   const restoredGeneratedContent = Boolean(restoredWorkspace?.outline || restoredWorkspace?.generatedStory);
@@ -1134,6 +1441,7 @@ function maybeShowStageGuide(stage = state.currentStage, previousStage = null) {
 
 function getDefaultGuideProgress() {
   return {
+    onboarding_seen_once: false,
     intro_completed: false,
     basic_flow_completed: false,
     basic_info_completed: false,
@@ -1153,6 +1461,10 @@ function getDefaultGuideProgress() {
 }
 
 function syncGuideProgressForStage(previousStage, nextStage) {
+  if (!guideEnabledForSession) {
+    return;
+  }
+
   const progress = loadSeenGuides();
   let changed = false;
 
@@ -1204,6 +1516,13 @@ function syncGuideProgressForStage(previousStage, nextStage) {
 }
 
 function syncTutorialGuidance(force = false) {
+  if (!guideEnabledForSession) {
+    clearGuidePanelMode();
+    stopGuideTyping();
+    clearGuideOverlay();
+    return;
+  }
+
   const progress = loadSeenGuides();
   const activeGuide = getActiveGuideState(progress);
 
@@ -1681,6 +2000,10 @@ function isGuideBasicInfoReady() {
 }
 
 function maybeCompleteBasicInfoGuide() {
+  if (!guideEnabledForSession) {
+    return;
+  }
+
   const progress = loadSeenGuides();
   if (progress.basic_info_completed || !progress.basic_flow_completed || !isGuideBasicInfoReady()) {
     return;
@@ -1692,6 +2015,10 @@ function maybeCompleteBasicInfoGuide() {
 }
 
 function unlockCharactersAiGuide() {
+  if (!guideEnabledForSession) {
+    return;
+  }
+
   const progress = loadSeenGuides();
   let changed = false;
 
@@ -1720,6 +2047,10 @@ function unlockCharactersAiGuide() {
 }
 
 function unlockOutlineToolsGuide() {
+  if (!guideEnabledForSession) {
+    return;
+  }
+
   const progress = loadSeenGuides();
   if (progress.outline_tools_unlocked) {
     return;
@@ -1731,6 +2062,10 @@ function unlockOutlineToolsGuide() {
 }
 
 function unlockStoryGuide() {
+  if (!guideEnabledForSession) {
+    return;
+  }
+
   const progress = loadSeenGuides();
   if (progress.story_unlocked) {
     return;
@@ -1759,6 +2094,10 @@ function isGuideDismissTarget(target) {
 }
 
 function handleGuidePointerDown(event) {
+  if (!guideEnabledForSession) {
+    return false;
+  }
+
   const target = event.target instanceof Element ? event.target : null;
   if (!target) {
     return false;
@@ -1816,7 +2155,12 @@ function handleGuidePointerDown(event) {
 
 function loadSeenGuides() {
   try {
-    const raw = window.localStorage.getItem(STORY_GUIDE_STORAGE_KEY);
+    const storageKey = getScopedStorageKey(STORY_GUIDE_STORAGE_KEY);
+    if (!storageKey) {
+      return getDefaultGuideProgress();
+    }
+
+    const raw = window.localStorage.getItem(storageKey);
     if (!raw) {
       return getDefaultGuideProgress();
     }
@@ -1832,8 +2176,13 @@ function loadSeenGuides() {
 
 function saveSeenGuides(guides) {
   try {
+    const storageKey = getScopedStorageKey(STORY_GUIDE_STORAGE_KEY);
+    if (!storageKey) {
+      return;
+    }
+
     window.localStorage.setItem(
-      STORY_GUIDE_STORAGE_KEY,
+      storageKey,
       JSON.stringify({ ...getDefaultGuideProgress(), ...(guides || {}) }),
     );
   } catch (error) {
@@ -5860,4 +6209,7 @@ function setStatus(message, keepBusy = false, isError = false) {
 
 
 
-init();
+init().catch((error) => {
+  console.error("Failed to initialize create page", error);
+  renderCreateAuthError(error);
+});

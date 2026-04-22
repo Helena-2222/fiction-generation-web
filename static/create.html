@@ -43,16 +43,22 @@
         <div id="sidebar-detail-panel" class="sidebar-detail-panel" aria-hidden="true">
           <div class="sidebar-detail-scroll">
             <div class="sidebar-profile-card">
-              <div class="sidebar-profile-avatar" aria-hidden="true">
+              <div id="sidebar-profile-avatar" class="sidebar-profile-avatar" aria-hidden="true">
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
                   <circle cx="10" cy="7.5" r="3"></circle>
                   <path d="M4 17c0-3 2.7-5 6-5s6 2 6 5"></path>
                 </svg>
               </div>
               <div>
-                <div class="sidebar-profile-name">创作者</div>
-                <p class="sidebar-profile-note">喜欢的句子会保存在这里，方便之后回看。</p>
+                <div id="sidebar-profile-name" class="sidebar-profile-name">创作者</div>
+                <p id="sidebar-profile-note" class="sidebar-profile-note">喜欢的句子会保存在这里，方便之后回看。</p>
+                <p id="sidebar-profile-email" class="sidebar-profile-email"></p>
               </div>
+            </div>
+
+            <div class="sidebar-auth-actions" aria-label="账户操作">
+              <a href="/" class="ghost-button sidebar-auth-link">返回首页</a>
+              <button type="button" id="sidebar-logout-button" class="ghost-button sidebar-auth-link">退出登录</button>
             </div>
 
             <section class="sidebar-module">
@@ -523,6 +529,7 @@
       <option value="子女"></option>
     </datalist>
 
+    <script src="/vendor/supabase.js"></script>
     <script type="module" src="/static/app.js"></script>
   </body>
 </html>
