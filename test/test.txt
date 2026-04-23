@@ -1,135 +1,266 @@
 {
   "trigger": "ai_supplement_relations",
-  "generated_at": "2026-04-20T16:34:21",
+  "generated_at": "2026-04-23T23:46:37",
   "counts": {
-    "all_relations": 4,
-    "user_relations": 0,
-    "ai_relations": 4,
-    "latest_ai_added_relations": 4
+    "all_relations": 12,
+    "user_relations": 7,
+    "ai_relations": 5,
+    "latest_ai_added_relations": 1
   },
-  "user_relations": [],
+  "user_relations": [
+    {
+      "id": "relation-7d462d99-31b4-4743-b348-ee92eb663b45",
+      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "target_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "label": "朋友",
+      "source_name": "塞巴斯蒂安.霍普",
+      "target_name": "奥利弗.费恩",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-d19a23fb-01af-4a3c-a84c-4e27aff02169",
+      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "label": "朋友",
+      "source_name": "奥利弗.费恩",
+      "target_name": "塞巴斯蒂安.霍普",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-85f18053-df82-4188-b175-314041cee0a3",
+      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "label": "旧友",
+      "source_name": "弗林特.瓦伦丁",
+      "target_name": "塞巴斯蒂安.霍普",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-a217afb8-7c62-47ff-993d-58aa38690b52",
+      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "label": "旧友",
+      "source_name": "塞巴斯蒂安.霍普",
+      "target_name": "弗林特.瓦伦丁",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-3173cb03-7867-41c5-82f5-ee70cba92c6d",
+      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "target_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "label": "师徒",
+      "source_name": "弗林特.瓦伦丁",
+      "target_name": "奥利弗.费恩",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-8ab5e80b-e41e-4e12-88d9-f2c44e7b4f3b",
+      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "label": "师徒",
+      "source_name": "奥利弗.费恩",
+      "target_name": "弗林特.瓦伦丁",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-11f66506-2deb-420a-b191-b6635aa04d0f",
+      "source_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "target_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "label": "朋友",
+      "source_name": "西尔维斯特",
+      "target_name": "奥利弗.费恩",
+      "bidirectional": false,
+      "relation_source": "user"
+    }
+  ],
   "ai_relations": [
     {
-      "id": "relation-ai-character-52407320-d5d4-410a-9ab8-e14aee3fe6bc-character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc",
-      "source_id": "character-52407320-d5d4-410a-9ab8-e14aee3fe6bc",
-      "target_id": "character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc",
-      "label": "盟友",
-      "source_name": "角色1",
-      "target_name": "角色2",
-      "bidirectional": true,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc-character-52407320-d5d4-410a-9ab8-e14aee3fe6bc",
-      "source_id": "character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc",
-      "target_id": "character-52407320-d5d4-410a-9ab8-e14aee3fe6bc",
-      "label": "盟友",
-      "source_name": "角色2",
-      "target_name": "角色1",
-      "bidirectional": true,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-52407320-d5d4-410a-9ab8-e14aee3fe6bc-character-3e29ab55-1033-465a-a534-c3ca74851e98",
-      "source_id": "character-52407320-d5d4-410a-9ab8-e14aee3fe6bc",
-      "target_id": "character-3e29ab55-1033-465a-a534-c3ca74851e98",
-      "label": "暗中提防",
-      "source_name": "角色1",
-      "target_name": "角色3",
+      "id": "relation-ai-character-d53a1633-aeac-47f6-ab1d-9914a1917d2a-character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "label": "利益同盟",
+      "source_name": "塞巴斯蒂安.霍普",
+      "target_name": "西尔维斯特",
       "bidirectional": false,
       "relation_source": "ai"
     },
     {
-      "id": "relation-ai-character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc-character-3e29ab55-1033-465a-a534-c3ca74851e98",
-      "source_id": "character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc",
-      "target_id": "character-3e29ab55-1033-465a-a534-c3ca74851e98",
-      "label": "利益同盟",
-      "source_name": "角色2",
-      "target_name": "角色3",
+      "id": "relation-ai-character-12f1610f-f1f2-4012-a127-520da47f508d-character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "source_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "label": "暗中利用",
+      "source_name": "西尔维斯特",
+      "target_name": "塞巴斯蒂安.霍普",
+      "bidirectional": false,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-12f1610f-f1f2-4012-a127-520da47f508d-character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "source_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "label": "暗中提防",
+      "source_name": "西尔维斯特",
+      "target_name": "弗林特.瓦伦丁",
+      "bidirectional": false,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923-character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "label": "怀疑",
+      "source_name": "弗林特.瓦伦丁",
+      "target_name": "西尔维斯特",
+      "bidirectional": false,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-1d7f7d04-2c34-4661-85e8-136737e4b84e-character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "label": "被利用",
+      "source_name": "奥利弗.费恩",
+      "target_name": "西尔维斯特",
       "bidirectional": false,
       "relation_source": "ai"
     }
   ],
   "latest_ai_added_relations": [
     {
-      "id": "relation-ai-character-52407320-d5d4-410a-9ab8-e14aee3fe6bc-character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc",
-      "source_id": "character-52407320-d5d4-410a-9ab8-e14aee3fe6bc",
-      "target_id": "character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc",
-      "label": "盟友",
-      "source_name": "角色1",
-      "target_name": "角色2",
-      "bidirectional": true,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc-character-52407320-d5d4-410a-9ab8-e14aee3fe6bc",
-      "source_id": "character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc",
-      "target_id": "character-52407320-d5d4-410a-9ab8-e14aee3fe6bc",
-      "label": "盟友",
-      "source_name": "角色2",
-      "target_name": "角色1",
-      "bidirectional": true,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-52407320-d5d4-410a-9ab8-e14aee3fe6bc-character-3e29ab55-1033-465a-a534-c3ca74851e98",
-      "source_id": "character-52407320-d5d4-410a-9ab8-e14aee3fe6bc",
-      "target_id": "character-3e29ab55-1033-465a-a534-c3ca74851e98",
-      "label": "暗中提防",
-      "source_name": "角色1",
-      "target_name": "角色3",
-      "bidirectional": false,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc-character-3e29ab55-1033-465a-a534-c3ca74851e98",
-      "source_id": "character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc",
-      "target_id": "character-3e29ab55-1033-465a-a534-c3ca74851e98",
-      "label": "利益同盟",
-      "source_name": "角色2",
-      "target_name": "角色3",
+      "id": "relation-ai-character-1d7f7d04-2c34-4661-85e8-136737e4b84e-character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "label": "被利用",
+      "source_name": "奥利弗.费恩",
+      "target_name": "西尔维斯特",
       "bidirectional": false,
       "relation_source": "ai"
     }
   ],
   "all_relations": [
     {
-      "id": "relation-ai-character-52407320-d5d4-410a-9ab8-e14aee3fe6bc-character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc",
-      "source_id": "character-52407320-d5d4-410a-9ab8-e14aee3fe6bc",
-      "target_id": "character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc",
-      "label": "盟友",
-      "source_name": "角色1",
-      "target_name": "角色2",
+      "id": "relation-7d462d99-31b4-4743-b348-ee92eb663b45",
+      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "target_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "label": "朋友",
+      "source_name": "塞巴斯蒂安.霍普",
+      "target_name": "奥利弗.费恩",
       "bidirectional": true,
-      "relation_source": "ai"
+      "relation_source": "user"
     },
     {
-      "id": "relation-ai-character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc-character-52407320-d5d4-410a-9ab8-e14aee3fe6bc",
-      "source_id": "character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc",
-      "target_id": "character-52407320-d5d4-410a-9ab8-e14aee3fe6bc",
-      "label": "盟友",
-      "source_name": "角色2",
-      "target_name": "角色1",
+      "id": "relation-d19a23fb-01af-4a3c-a84c-4e27aff02169",
+      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "label": "朋友",
+      "source_name": "奥利弗.费恩",
+      "target_name": "塞巴斯蒂安.霍普",
       "bidirectional": true,
-      "relation_source": "ai"
+      "relation_source": "user"
     },
     {
-      "id": "relation-ai-character-52407320-d5d4-410a-9ab8-e14aee3fe6bc-character-3e29ab55-1033-465a-a534-c3ca74851e98",
-      "source_id": "character-52407320-d5d4-410a-9ab8-e14aee3fe6bc",
-      "target_id": "character-3e29ab55-1033-465a-a534-c3ca74851e98",
-      "label": "暗中提防",
-      "source_name": "角色1",
-      "target_name": "角色3",
+      "id": "relation-85f18053-df82-4188-b175-314041cee0a3",
+      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "label": "旧友",
+      "source_name": "弗林特.瓦伦丁",
+      "target_name": "塞巴斯蒂安.霍普",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-a217afb8-7c62-47ff-993d-58aa38690b52",
+      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "label": "旧友",
+      "source_name": "塞巴斯蒂安.霍普",
+      "target_name": "弗林特.瓦伦丁",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-ai-character-d53a1633-aeac-47f6-ab1d-9914a1917d2a-character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "label": "利益同盟",
+      "source_name": "塞巴斯蒂安.霍普",
+      "target_name": "西尔维斯特",
       "bidirectional": false,
       "relation_source": "ai"
     },
     {
-      "id": "relation-ai-character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc-character-3e29ab55-1033-465a-a534-c3ca74851e98",
-      "source_id": "character-3af43db6-39ad-4b6e-9d83-cb27b0ff29bc",
-      "target_id": "character-3e29ab55-1033-465a-a534-c3ca74851e98",
-      "label": "利益同盟",
-      "source_name": "角色2",
-      "target_name": "角色3",
+      "id": "relation-ai-character-12f1610f-f1f2-4012-a127-520da47f508d-character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "source_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "label": "暗中利用",
+      "source_name": "西尔维斯特",
+      "target_name": "塞巴斯蒂安.霍普",
+      "bidirectional": false,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-3173cb03-7867-41c5-82f5-ee70cba92c6d",
+      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "target_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "label": "师徒",
+      "source_name": "弗林特.瓦伦丁",
+      "target_name": "奥利弗.费恩",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-8ab5e80b-e41e-4e12-88d9-f2c44e7b4f3b",
+      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "label": "师徒",
+      "source_name": "奥利弗.费恩",
+      "target_name": "弗林特.瓦伦丁",
+      "bidirectional": true,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-11f66506-2deb-420a-b191-b6635aa04d0f",
+      "source_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "target_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "label": "朋友",
+      "source_name": "西尔维斯特",
+      "target_name": "奥利弗.费恩",
+      "bidirectional": false,
+      "relation_source": "user"
+    },
+    {
+      "id": "relation-ai-character-12f1610f-f1f2-4012-a127-520da47f508d-character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "source_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "label": "暗中提防",
+      "source_name": "西尔维斯特",
+      "target_name": "弗林特.瓦伦丁",
+      "bidirectional": false,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923-character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
+      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "label": "怀疑",
+      "source_name": "弗林特.瓦伦丁",
+      "target_name": "西尔维斯特",
+      "bidirectional": false,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-1d7f7d04-2c34-4661-85e8-136737e4b84e-character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "label": "被利用",
+      "source_name": "奥利弗.费恩",
+      "target_name": "西尔维斯特",
       "bidirectional": false,
       "relation_source": "ai"
     }

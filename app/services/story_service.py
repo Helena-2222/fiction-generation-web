@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypedDict
 
 from app.llm.llm_client import DeepSeekClient
 from app.models import (
@@ -29,6 +29,14 @@ from app.models import (
 
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "llm" / "prompts"
 DEBUG_RELATIONS_PATH = Path(__file__).resolve().parents[2] / "test" / "test.txt"
+
+
+class StageContext(TypedDict):
+    stage: str
+    content: str
+    start_chapter: int
+    end_chapter: int
+    chapter_range: str
 
 
 @lru_cache(maxsize=None)
@@ -880,7 +888,8 @@ class StoryService:
 
             if not include_relation_ids and relation.bidirectional:
                 reverse_key = (relation.target_id, relation.source_id, label, True)
-                pair_key = tuple(sorted((relation.source_id, relation.target_id))) + (label,)
+                left_id, right_id = sorted((relation.source_id, relation.target_id))
+                pair_key: tuple[str, str, str] = (left_id, right_id, label)
                 if reverse_key in relation_keys:
                     if pair_key in compacted_bidirectional_pairs:
                         continue
@@ -1104,7 +1113,7 @@ class StoryService:
 
         return normalized
 
-    def _get_stage_context(self, outline: GeneratedOutline, chapter_number: int) -> Dict[str, object]:
+    def _get_stage_context(self, outline: GeneratedOutline, chapter_number: int) -> StageContext:
         for section in outline.act_structure:
             start, end = self._extract_range_numbers(section)
             if start <= chapter_number <= end:
