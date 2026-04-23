@@ -5608,6 +5608,7 @@ function renderStory() {
         >
           <div class="chapter-block-header story-chapter-header">
             <div>
+              <div class="chapter-label-en">Chapter ${activeChapter.chapter_number}</div>
               <div class="chapter-block-title">第${activeChapter.chapter_number}章 · ${escapeHtml(activeChapter.title)}</div>
             </div>
             <button type="button" class="btn-export" data-export-chapter="${activeChapter.chapter_number}">导出本章</button>

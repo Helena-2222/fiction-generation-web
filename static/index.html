@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>神经元脚本 · Neuron Script — AI 小说创作伙伴</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
 :root {
@@ -19,8 +19,8 @@
   --accent-warm: #C8A87A;
   --white: #FDFCF9;
   --border: rgba(94,80,63,0.12);
-  --serif: 'Noto Serif SC', 'Instrument Serif', serif;
-  --sans: 'DM Sans', system-ui, sans-serif;
+  --serif: 'Source Han Serif SC', 'Noto Serif SC', 'Source Han Serif CN', 'Songti SC', 'STSong', 'SimSun', serif;
+  --sans: var(--serif);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -50,9 +50,9 @@ nav {
   position: fixed;
   top: 0; left: 0; right: 0;
   z-index: 100;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   padding: 20px 48px;
   background: rgba(235,229,223,0.85);
   backdrop-filter: blur(16px);
@@ -65,6 +65,7 @@ nav {
   font-weight: 500;
   letter-spacing: 0.04em;
   color: var(--ink);
+  justify-self: start;
 }
 .nav-logo span { color: var(--accent); }
 
@@ -72,6 +73,7 @@ nav {
   display: flex;
   align-items: center;
   gap: 32px;
+  justify-self: center;
 }
 .nav-links a {
   font-size: 13px;
@@ -86,6 +88,7 @@ nav {
   display: flex;
   align-items: center;
   gap: 12px;
+  justify-self: end;
 }
 
 .nav-guest-cta,
@@ -198,15 +201,20 @@ nav {
 }
 
 .btn-hero {
-  padding: 14px 32px;
+  min-width: 160px;
+  min-height: 48px;
+  padding: 0 32px;
   background: var(--accent);
   color: #fff;
   border-radius: 999px;
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 500;
   text-decoration: none;
   transition: all 0.25s;
   font-family: var(--sans);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   box-shadow: 0 8px 24px rgba(94,80,63,0.25);
 }
 .btn-hero:hover { background: #4A3C2E; transform: translateY(-2px); box-shadow: 0 12px 32px rgba(94,80,63,0.3); }
@@ -218,14 +226,19 @@ nav {
 }
 
 .btn-ghost {
-  padding: 14px 28px;
+  min-width: 168px;
+  min-height: 48px;
+  padding: 0 28px;
   border: 0.5px solid rgba(94,80,63,0.3);
   border-radius: 999px;
-  font-size: 15px;
+  font-size: 18px;
   color: var(--ink-soft);
   text-decoration: none;
   transition: all 0.25s;
   font-family: var(--sans);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .btn-ghost:hover { border-color: var(--accent); color: var(--accent); background: rgba(94,80,63,0.04); }
 
@@ -1000,15 +1013,19 @@ nav {
 }
 
 .btn-cta-white {
-  padding: 16px 40px;
+  min-width: 220px;
+  min-height: 48px;
+  padding: 0 40px;
   background: #fff;
   color: var(--accent);
   border-radius: 999px;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   text-decoration: none;
   transition: all 0.25s;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
   box-shadow: 0 12px 40px rgba(0,0,0,0.15);
   font-family: var(--sans);
@@ -1090,12 +1107,88 @@ footer {
 }
 .hscroll-name { font-size: 11px; color: var(--ink-hint); font-weight: 500; }
 
+/* ── LANDING OVERRIDES ── */
+body,
+button,
+input,
+textarea,
+select,
+a {
+  font-family: var(--serif);
+}
+
+.hero-title em,
+.pain-title em,
+.section-title em,
+.feature-title em,
+.cta-title em {
+  font-style: normal;
+  color: var(--accent);
+}
+
+.pain-section .pain-title em,
+.neuro-section .pain-title em,
+.cta-title em {
+  color: var(--accent-warm);
+}
+
+.nav-links a,
+.nav-guest-cta,
+.nav-cta,
+.hero-eyebrow,
+.hero-scroll-hint,
+.m-tab,
+.m-section-label,
+.m-subtitle,
+.m-chip,
+.m-textarea,
+.m-field-label,
+.m-field-val,
+.m-neuro-avatar,
+.m-neuro-name,
+.m-neuro-tag,
+.m-bubble,
+.m-neuro-input-box,
+.pain-eyebrow,
+.section-eyebrow,
+.step-body,
+.feature-label,
+.feature-pill,
+.fv-tab,
+.fv-fl,
+.fv-fv,
+.fv-rel-graph,
+.fv-arc-label,
+.fv-chip-sm,
+.fv-arc-text,
+.fv-synopsis,
+.fv-prose-content,
+.fv-tbtn,
+.fv-fav-title,
+.fv-fav-date,
+.fv-fav-item,
+.neuro-chat-avatar,
+.neuro-chat-status,
+.nchat-bubble,
+.nchat-input-box,
+.quote-attr,
+.hscroll-quote,
+.hscroll-name {
+  font-size: 14px;
+}
+
 @keyframes scrollLeft {
   0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
 }
 
 /* ── RESPONSIVE ── */
+@media (max-width: 1200px) {
+  nav { padding: 18px 32px; }
+  .hero-mockup { width: min(1000px, 92vw); }
+  .feature-row { gap: 56px; }
+}
+
 @media (max-width: 900px) {
   nav { padding: 16px 24px; }
   .nav-links { display: none; }
@@ -1152,8 +1245,8 @@ footer {
       data-guest-login
       data-next-path="/create?stage=basic"
       data-busy-label="正在进入创作台..."
-    >免费开始创作</a>
-    <a href="#how" class="btn-ghost">了解如何运作 →</a>
+    >免费创作</a>
+    <a href="#how" class="btn-ghost">了解如何创作</a>
   </div>
 
   <!-- MOCKUP -->
@@ -1345,7 +1438,7 @@ footer {
             <ellipse cx="80" cy="62" rx="14" ry="8" fill="white" stroke="#7898C8" stroke-width="1"/>
             <text x="80" y="65" text-anchor="middle" font-size="7" fill="#1A3A7A">陈默</text>
           </svg>
-          <div style="font-size:8px;color:#A69076;text-align:center;">角色关系图</div>
+          <div style="font-size:14px;color:#A69076;text-align:center;">角色关系图</div>
         </div>
       </div>
     </div>
@@ -1369,21 +1462,21 @@ footer {
           <div class="fv-arc-row">
             <div class="fv-arc">
               <div class="fv-arc-label">开端</div>
-              <div class="fv-arc-chips"><div class="fv-chip-sm">第1章</div><div style="font-size:8px;color:#A69076;">—</div><div class="fv-chip-sm">第2章</div></div>
+              <div class="fv-arc-chips"><div class="fv-chip-sm">第1章</div><div style="font-size:14px;color:#A69076;">—</div><div class="fv-chip-sm">第2章</div></div>
               <div class="fv-arc-text">奥利弗飞行器故障，弗林特被迫出山，与塞巴斯蒂安重逢，西尔维斯特以合作名义介入，四人关系暗流涌动。</div>
             </div>
             <div class="fv-arc">
               <div class="fv-arc-label">发展</div>
-              <div class="fv-arc-chips"><div class="fv-chip-sm">第3章</div><div style="font-size:8px;color:#A69076;">—</div><div class="fv-chip-sm">第5章</div></div>
+              <div class="fv-arc-chips"><div class="fv-chip-sm">第3章</div><div style="font-size:14px;color:#A69076;">—</div><div class="fv-chip-sm">第5章</div></div>
               <div class="fv-arc-text">火山探险中发现故障线索，奥利弗与塞巴斯蒂安因西尔维斯特挑拨产生分歧，人物微变化显现。</div>
             </div>
             <div class="fv-arc loading">
               <div class="fv-arc-label">高潮</div>
-              <div class="fv-arc-chips"><div class="fv-chip-sm">第6章</div><div style="font-size:8px;color:#A69076;">—</div><div class="fv-chip-sm">第8章</div></div>
+              <div class="fv-arc-chips"><div class="fv-chip-sm">第6章</div><div style="font-size:14px;color:#A69076;">—</div><div class="fv-chip-sm">第8章</div></div>
             </div>
             <div class="fv-arc loading">
               <div class="fv-arc-label">结局</div>
-              <div class="fv-arc-chips"><div class="fv-chip-sm">第9章</div><div style="font-size:8px;color:#A69076;">—</div><div class="fv-chip-sm">第10章</div></div>
+              <div class="fv-arc-chips"><div class="fv-chip-sm">第9章</div><div style="font-size:14px;color:#A69076;">—</div><div class="fv-chip-sm">第10章</div></div>
             </div>
           </div>
         </div>
@@ -1439,7 +1532,7 @@ footer {
             <div class="fv-fav-title">我的收藏</div>
             <div class="fv-fav-count">5</div>
           </div>
-          <div style="font-size:10px;color:#A69076;padding:4px 0;">在正文里选中句子后，点击爱心即可加入收藏。</div>
+          <div style="font-size:14px;color:#A69076;padding:4px 0;">在正文里选中句子后，点击爱心即可加入收藏。</div>
           <div class="fv-fav-item"><div class="fv-fav-date">04/19</div>"飞行器像喝醉的海鸥，在空中画了个不规则的弧线。"</div>
           <div class="fv-fav-item"><div class="fv-fav-date">04/19</div>"海水像巨大的蓝色果冻，托着整片城市大陆轻轻摇晃。"</div>
           <div class="fv-fav-item"><div class="fv-fav-date">04/19</div>"那花叫'夜语兰'，只在月光下开放，据说它的低语能揭示隐藏的真相。"</div>
@@ -1461,20 +1554,20 @@ footer {
       <p class="section-sub reveal" style="color:rgba(255,255,255,0.5);margin-bottom:40px;">不是一个冷冰冰的写作工具，而是一个了解你创作意图的 AI 伙伴。在每个创作环节，Neuro 都会主动提供专业引导、实时建议和灵感激发。</p>
       <div class="steps-grid" style="grid-template-columns:1fr 1fr;gap:16px;">
         <div style="background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.1);border-radius:16px;padding:20px;">
-          <div style="font-size:13px;font-weight:500;color:#fff;margin-bottom:6px;">实时引导</div>
-          <div style="font-size:12px;color:rgba(255,255,255,0.45);line-height:1.65;">每个步骤都有专属建议，不让你陷入空白焦虑</div>
+          <div style="font-size:14px;font-weight:500;color:#fff;margin-bottom:6px;">实时引导</div>
+          <div style="font-size:14px;color:rgba(255,255,255,0.45);line-height:1.65;">每个步骤都有专属建议，不让你陷入空白焦虑</div>
         </div>
         <div style="background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.1);border-radius:16px;padding:20px;">
-          <div style="font-size:13px;font-weight:500;color:#fff;margin-bottom:6px;">改进建议</div>
-          <div style="font-size:12px;color:rgba(255,255,255,0.45);line-height:1.65;">可以告诉 Neuro 你对大纲的想法，AI 重新生成</div>
+          <div style="font-size:14px;font-weight:500;color:#fff;margin-bottom:6px;">改进建议</div>
+          <div style="font-size:14px;color:rgba(255,255,255,0.45);line-height:1.65;">可以告诉 Neuro 你对大纲的想法，AI 重新生成</div>
         </div>
         <div style="background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.1);border-radius:16px;padding:20px;">
-          <div style="font-size:13px;font-weight:500;color:#fff;margin-bottom:6px;">随时对话</div>
-          <div style="font-size:12px;color:rgba(255,255,255,0.45);line-height:1.65;">问创作问题，聊故事思路，Neuro 随时响应</div>
+          <div style="font-size:14px;font-weight:500;color:#fff;margin-bottom:6px;">随时对话</div>
+          <div style="font-size:14px;color:rgba(255,255,255,0.45);line-height:1.65;">问创作问题，聊故事思路，Neuro 随时响应</div>
         </div>
         <div style="background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.1);border-radius:16px;padding:20px;">
-          <div style="font-size:13px;font-weight:500;color:#fff;margin-bottom:6px;">灵活收起</div>
-          <div style="font-size:12px;color:rgba(255,255,255,0.45);line-height:1.65;">专注创作时可收起面板，需要时随时呼出</div>
+          <div style="font-size:14px;font-weight:500;color:#fff;margin-bottom:6px;">灵活收起</div>
+          <div style="font-size:14px;color:rgba(255,255,255,0.45);line-height:1.65;">专注创作时可收起面板，需要时随时呼出</div>
         </div>
       </div>
     </div>
@@ -1494,15 +1587,15 @@ footer {
       <div class="nchat-bubble">
         <b>正在推进各章节生成</b>
         <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
-          <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:rgba(255,255,255,0.5);">
+          <div style="display:flex;align-items:center;gap:8px;font-size:14px;color:rgba(255,255,255,0.5);">
             <div style="width:5px;height:5px;border-radius:50%;background:#5DCE8A;"></div>
             正在推进前段章节 — 预计共处理 6 章
           </div>
-          <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:rgba(255,255,255,0.5);">
+          <div style="display:flex;align-items:center;gap:8px;font-size:14px;color:rgba(255,255,255,0.5);">
             <div style="width:5px;height:5px;border-radius:50%;background:#C8A87A;"></div>
             正在衔接人物弧光与关系变化
           </div>
-          <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:rgba(255,255,255,0.35);">
+          <div style="display:flex;align-items:center;gap:8px;font-size:14px;color:rgba(255,255,255,0.35);">
             <div style="width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,0.2);"></div>
             正在整理章节连续性
           </div>
