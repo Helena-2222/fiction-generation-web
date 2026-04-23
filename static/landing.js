@@ -1,3 +1,5 @@
+import { signInAsGuest } from "./src/auth-client.js";
+
 const guestEntryButtons = Array.from(document.querySelectorAll("[data-guest-login]"));
 
 let activeGuestButton = null;
@@ -32,15 +34,6 @@ function setGuestLoginState(button, pending) {
     : button.dataset.originalLabel;
 }
 
-function getFallbackNextPath(button) {
-  const nextPath = String(button?.dataset?.nextPath || "").trim();
-  return nextPath || "/create?stage=basic&guest=1";
-}
-
-function startGuestLogin(nextPath) {
-  window.location.replace(nextPath);
-}
-
 async function handleGuestEntryClick(event) {
   if (!isPlainPrimaryClick(event)) {
     return;
@@ -57,17 +50,16 @@ async function handleGuestEntryClick(event) {
     return;
   }
 
-  const nextPath = getFallbackNextPath(button);
   guestLoginPending = true;
   setGuestLoginState(button, true);
 
   try {
-    startGuestLogin(nextPath);
+    await signInAsGuest({ nickname: "游客" });
+    window.location.replace("/create?stage=basic");
   } catch (error) {
-    console.warn("Guest entry navigation failed.", error);
+    console.error("游客登录失败。", error);
     guestLoginPending = false;
     setGuestLoginState(activeGuestButton, false);
-    window.location.replace(nextPath);
   }
 }
 

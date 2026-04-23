@@ -1,8 +1,8 @@
-import { GENRE_OPTIONS, STYLE_OPTIONS, CHARACTER_DOSSIER_FIELDS, STAGE_ORDER, STAGE_META, WORKSPACE_STORAGE_KEY, STORY_GUIDE_STORAGE_KEY, LLM_TASK_POLL_INTERVAL_MS, HISTORY_LIMIT, HISTORY_DEBOUNCE_MS, GUIDE_TYPING_SPEED_MS, GUIDE_VIEWPORT_MARGIN, GUIDE_OUTLINE_AUTO_CLOSE_MS, GUIDE_PANEL_PRIMARY_MESSAGE, GUIDE_PANEL_PROMPT_MESSAGE, GUIDE_NOTES, GRAPH, LEGACY_MOCK_SYNOPSIS, LEGACY_MOCK_WORLDVIEW_TIME, LEGACY_MOCK_WORLDVIEW_PHYSICAL, LEGACY_MOCK_WORLDVIEW_SOCIAL, LEGACY_MOCK_CHARACTER_IDS, LEGACY_MOCK_CHARACTER_NAMES, LEGACY_MOCK_RELATION_IDS } from './src/constants.js';
+﻿import { GENRE_OPTIONS, STYLE_OPTIONS, CHARACTER_DOSSIER_FIELDS, STAGE_ORDER, STAGE_META, WORKSPACE_STORAGE_KEY, STORY_GUIDE_STORAGE_KEY, LLM_TASK_POLL_INTERVAL_MS, HISTORY_LIMIT, HISTORY_DEBOUNCE_MS, GUIDE_TYPING_SPEED_MS, GUIDE_VIEWPORT_MARGIN, GUIDE_OUTLINE_AUTO_CLOSE_MS, GUIDE_PANEL_PRIMARY_MESSAGE, GUIDE_PANEL_PROMPT_MESSAGE, GUIDE_NOTES, GRAPH, LEGACY_MOCK_SYNOPSIS, LEGACY_MOCK_WORLDVIEW_TIME, LEGACY_MOCK_WORLDVIEW_PHYSICAL, LEGACY_MOCK_WORLDVIEW_SOCIAL, LEGACY_MOCK_CHARACTER_IDS, LEGACY_MOCK_CHARACTER_NAMES, LEGACY_MOCK_RELATION_IDS } from './src/constants.js';
 import { state } from './src/state.js';
 import { generateId, normalizeFavoriteQuote, formatFavoriteTime, formatHistoryTime, sanitizeFilename, escapeHtml, clamp } from './src/utils.js';
 import { postJson, getJson } from './src/api.js';
-import { DEFAULT_NEXT_PATH, buildAuthUrl, getCurrentUser, getUserContact, getUserDisplayName, getUserInitial, requireAuth, signInAsGuest, signOut, subscribeToAuthChanges } from './src/auth-client.js';
+import { DEFAULT_NEXT_PATH, buildAuthUrl, getCurrentUser, getUserContact, getUserDisplayName, getUserInitial, isAnonymousUser, requireAuth, signOut, subscribeToAuthChanges } from './src/auth-client.js';
 
 function buildInitialWorkspaceSnapshot() {
   return {
@@ -58,16 +58,6 @@ function getRequestedStageOverride() {
   } catch (error) {
     console.warn("读取页面阶段参数失败：", error);
     return "";
-  }
-}
-
-function isGuestCreateEntryRequested() {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    return (params.get("guest") || "").trim() === "1";
-  } catch (error) {
-    console.warn("读取游客进入参数失败：", error);
-    return false;
   }
 }
 
@@ -138,7 +128,6 @@ const DEFAULT_SIDEBAR_AVATAR_ICON = `
 let authStateCleanup = null;
 let currentAuthUserId = "";
 let guideEnabledForSession = false;
-let guestEntryRequestedForSession = false;
 let createAuthRedirectPending = false;
 let createLogoutInProgress = false;
 let createAuthRecoveryRunId = 0;
@@ -681,22 +670,10 @@ function restoreSidebarAuthUi() {
   }
 
   if (elements.sidebarLogoutButton) {
-    elements.sidebarLogoutButton.disabled = false;
+    elements.sidebarLogoutButton.disabled = true;
+    elements.sidebarLogoutButton.classList.add("hidden");
+    elements.sidebarLogoutButton.setAttribute("aria-hidden", "true");
     elements.sidebarLogoutButton.textContent = "退出登录";
-  }
-}
-
-function clearGuestCreateEntryFromUrl() {
-  if (!window.history?.replaceState) {
-    return;
-  }
-
-  try {
-    const url = new URL(window.location.href);
-    url.searchParams.delete("guest");
-    window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
-  } catch (error) {
-    console.warn("清理游客进入参数失败：", error);
   }
 }
 
@@ -727,15 +704,18 @@ function renderSidebarAuthUi(user) {
   }
 
   if (elements.sidebarProfileNote) {
-    elements.sidebarProfileNote.textContent = "已登录，继续在这里管理收藏并推进你的故事。";
+    elements.sidebarProfileNote.textContent = "登录账号，体验完整功能，保存创作进度。";
   }
 
   if (elements.sidebarProfileEmail) {
     elements.sidebarProfileEmail.textContent = contact;
   }
 
+  const shouldShowLogout = !isAnonymousUser(user);
   if (elements.sidebarLogoutButton) {
-    elements.sidebarLogoutButton.disabled = false;
+    elements.sidebarLogoutButton.disabled = !shouldShowLogout;
+    elements.sidebarLogoutButton.classList.toggle("hidden", !shouldShowLogout);
+    elements.sidebarLogoutButton.setAttribute("aria-hidden", shouldShowLogout ? "false" : "true");
     elements.sidebarLogoutButton.textContent = "退出登录";
   }
 }
@@ -761,28 +741,7 @@ async function handleSidebarLogout() {
   }
 
   createAuthRedirectPending = true;
-  window.location.replace(buildAuthUrl(DEFAULT_NEXT_PATH));
-}
-
-async function resolveGuestCreateUser() {
-  try {
-    const guestUser = await signInAsGuest({ nickname: "游客" });
-    if (guestUser) {
-      return guestUser;
-    }
-  } catch (error) {
-    console.warn("Guest sign-in attempt failed", error);
-  }
-
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const currentUser = await getCurrentUser().catch(() => null);
-    if (currentUser) {
-      return currentUser;
-    }
-    await waitForDelay(120 + attempt * 80);
-  }
-
-  return null;
+  window.location.replace("/");
 }
 
 async function handleCreateAuthStateChange(event, session) {
@@ -810,23 +769,6 @@ async function handleCreateAuthStateChange(event, session) {
     return;
   }
 
-  if (guestEntryRequestedForSession) {
-    const guestUser = await resolveGuestCreateUser();
-    if (recoveryRunId !== createAuthRecoveryRunId) {
-      return;
-    }
-    if (guestUser) {
-      createAuthRedirectPending = false;
-      setCurrentAuthUser(guestUser);
-      renderSidebarAuthUi(guestUser);
-      return;
-    }
-
-    console.warn("Guest session could not be restored on create page", event);
-    setStatus("游客会话初始化失败，请刷新后重试。", false, true);
-    return;
-  }
-
   if (!createAuthRedirectPending) {
     createAuthRedirectPending = true;
     window.location.replace(buildAuthUrl(getCurrentCreatePath()));
@@ -835,28 +777,16 @@ async function handleCreateAuthStateChange(event, session) {
 
 async function bootstrapCreateAuth() {
   restoreSidebarAuthUi();
-  guestEntryRequestedForSession = isGuestCreateEntryRequested();
   createAuthRedirectPending = false;
   createLogoutInProgress = false;
   let user = await getCurrentUser();
 
-  if (!user && guestEntryRequestedForSession) {
-    user = await resolveGuestCreateUser();
-  }
-
   if (!user) {
-    if (guestEntryRequestedForSession) {
-      throw new Error("游客登录暂时不可用，请确认 Supabase 已开启匿名登录并刷新页面后重试。");
-    }
     user = await requireAuth({ nextPath: getCurrentCreatePath() });
   }
 
   if (!user) {
     return false;
-  }
-
-  if (guestEntryRequestedForSession) {
-    clearGuestCreateEntryFromUrl();
   }
 
   setCurrentAuthUser(user);

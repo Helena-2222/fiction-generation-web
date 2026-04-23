@@ -198,8 +198,11 @@
 }
 
 .sidebar-auth-link {
+  display: inline-flex;
+  align-items: center;
   width: 100%;
   justify-content: center;
+  text-align: center;
   text-decoration: none;
 }
 
