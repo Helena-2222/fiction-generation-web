@@ -1,4 +1,4 @@
-import { signInAsGuest } from "./src/auth-client.js";
+import { getCurrentSession, isAnonymousUser } from "./src/auth-client.js";
 
 const guestEntryButtons = Array.from(document.querySelectorAll("[data-guest-login]"));
 
@@ -54,12 +54,14 @@ async function handleGuestEntryClick(event) {
   setGuestLoginState(button, true);
 
   try {
-    await signInAsGuest({ nickname: "游客" });
-    window.location.replace("/create?stage=basic");
+    const session = await getCurrentSession().catch(() => null);
+    const user = session?.user ?? null;
+    window.location.href = user && !isAnonymousUser(user)
+      ? "/create"
+      : "/create?guest=true";
   } catch (error) {
-    console.error("游客登录失败。", error);
-    guestLoginPending = false;
-    setGuestLoginState(activeGuestButton, false);
+    console.error("游客登录跳转失败。", error);
+    window.location.href = "/create?guest=true";
   }
 }
 

@@ -1,5 +1,6 @@
 ﻿import { GENRE_OPTIONS, STYLE_OPTIONS, CHARACTER_DOSSIER_FIELDS, STAGE_ORDER, STAGE_META, WORKSPACE_STORAGE_KEY, STORY_GUIDE_STORAGE_KEY, LLM_TASK_POLL_INTERVAL_MS, HISTORY_LIMIT, HISTORY_DEBOUNCE_MS, GUIDE_TYPING_SPEED_MS, GUIDE_VIEWPORT_MARGIN, GUIDE_OUTLINE_AUTO_CLOSE_MS, GUIDE_PANEL_PRIMARY_MESSAGE, GUIDE_PANEL_PROMPT_MESSAGE, GUIDE_NOTES, GRAPH, LEGACY_MOCK_SYNOPSIS, LEGACY_MOCK_WORLDVIEW_TIME, LEGACY_MOCK_WORLDVIEW_PHYSICAL, LEGACY_MOCK_WORLDVIEW_SOCIAL, LEGACY_MOCK_CHARACTER_IDS, LEGACY_MOCK_CHARACTER_NAMES, LEGACY_MOCK_RELATION_IDS } from './src/constants.js';
 import { state } from './src/state.js';
+import { GUEST_WORKSPACE_STORAGE_KEY } from './src/constants.js';
 import { generateId, normalizeFavoriteQuote, formatFavoriteTime, formatHistoryTime, sanitizeFilename, escapeHtml, clamp } from './src/utils.js';
 import { postJson, getJson } from './src/api.js';
 import { DEFAULT_NEXT_PATH, buildAuthUrl, getCurrentUser, getUserContact, getUserDisplayName, getUserInitial, isAnonymousUser, requireAuth, signOut, subscribeToAuthChanges } from './src/auth-client.js';
@@ -131,6 +132,8 @@ let guideEnabledForSession = false;
 let createAuthRedirectPending = false;
 let createLogoutInProgress = false;
 let createAuthRecoveryRunId = 0;
+let createGuestMode = false;
+let guestWorkspaceRecoveredForSession = false;
 
 function setCurrentAuthUser(user) {
   currentAuthUserId = String(user?.id || "").trim();
@@ -148,6 +151,20 @@ function getScopedStorageKey(baseKey) {
     return "";
   }
   return `${normalizedBaseKey}:${currentAuthUserId}`;
+}
+
+function isGuestCreateRequest() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("guest") === "true";
+  } catch (error) {
+    console.warn("读取游客模式参数失败：", error);
+    return false;
+  }
+}
+
+function getWorkspaceStorageKey() {
+  return createGuestMode ? GUEST_WORKSPACE_STORAGE_KEY : WORKSPACE_STORAGE_KEY;
 }
 
 function initializeGuideSessionState() {
@@ -677,6 +694,39 @@ function restoreSidebarAuthUi() {
   }
 }
 
+function renderGuestSidebarUi() {
+  if (elements.sidebarAvatarToggle) {
+    elements.sidebarAvatarToggle.classList.add("is-authenticated");
+    elements.sidebarAvatarToggle.innerHTML = '<span class="sidebar-avatar-initial">游</span>';
+    elements.sidebarAvatarToggle.setAttribute("aria-label", "游客模式");
+    elements.sidebarAvatarToggle.setAttribute("title", "游客模式");
+  }
+
+  if (elements.sidebarProfileAvatar) {
+    elements.sidebarProfileAvatar.classList.add("has-text");
+    elements.sidebarProfileAvatar.textContent = "游";
+  }
+
+  if (elements.sidebarProfileName) {
+    elements.sidebarProfileName.textContent = "游客模式";
+  }
+
+  if (elements.sidebarProfileNote) {
+    elements.sidebarProfileNote.textContent = "当前内容只保存在这个浏览器的 localStorage 中，登录后可继续迁移。";
+  }
+
+  if (elements.sidebarProfileEmail) {
+    elements.sidebarProfileEmail.textContent = "未登录";
+  }
+
+  if (elements.sidebarLogoutButton) {
+    elements.sidebarLogoutButton.disabled = true;
+    elements.sidebarLogoutButton.classList.add("hidden");
+    elements.sidebarLogoutButton.setAttribute("aria-hidden", "true");
+    elements.sidebarLogoutButton.textContent = "退出登录";
+  }
+}
+
 function renderSidebarAuthUi(user) {
   if (!user) {
     restoreSidebarAuthUi();
@@ -777,8 +827,21 @@ async function handleCreateAuthStateChange(event, session) {
 
 async function bootstrapCreateAuth() {
   restoreSidebarAuthUi();
+  createGuestMode = isGuestCreateRequest();
+  guestWorkspaceRecoveredForSession = false;
   createAuthRedirectPending = false;
   createLogoutInProgress = false;
+
+  if (createGuestMode) {
+    setCurrentAuthUser(null);
+    renderGuestSidebarUi();
+    if (typeof authStateCleanup === "function") {
+      authStateCleanup();
+      authStateCleanup = null;
+    }
+    return true;
+  }
+
   let user = await getCurrentUser();
 
   if (!user) {
@@ -964,12 +1027,19 @@ async function init() {
   syncSidebarProfileState();
   syncStageMarkers();
   syncResponsiveLayout();
-  setStatus(
-    restoredGeneratedContent
-      ? "已恢复上次填写内容与已生成结果，可以继续编辑、导出或生成。"
-      : "填写左侧信息后，先生成故事大纲；若不满意，可以补充反馈并重生成。",
-    false,
-  );
+  let initialStatusMessage = restoredGeneratedContent
+    ? "已恢复上次填写内容与已生成结果，可以继续编辑、导出或生成。"
+    : "填写左侧信息后，先生成故事大纲；若不满意，可以补充反馈并重生成。";
+
+  if (createGuestMode) {
+    initialStatusMessage = restoredGeneratedContent
+      ? "已恢复游客模式下的本地内容，当前数据只保存在这个浏览器中。"
+      : "当前为游客模式，创作内容会保存在这个浏览器的 localStorage 中。";
+  } else if (guestWorkspaceRecoveredForSession) {
+    initialStatusMessage = "已恢复你在游客模式下保存在本地的内容，现在可以继续以当前账号编辑。";
+  }
+
+  setStatus(initialStatusMessage, false);
   setCurrentStage(requestedStageOverride || state.currentStage || "basic", {
     scroll: Boolean(requestedStageOverride),
     keepSelection: true,
@@ -2122,13 +2192,33 @@ function saveSeenGuides(guides) {
 
 function loadWorkspaceSnapshot() {
   try {
-    const raw = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
+    const storageKey = getWorkspaceStorageKey();
+    let raw = window.localStorage.getItem(storageKey);
+    guestWorkspaceRecoveredForSession = false;
+
+    if (!raw && !createGuestMode) {
+      const guestRaw = window.localStorage.getItem(GUEST_WORKSPACE_STORAGE_KEY);
+      if (guestRaw) {
+        raw = guestRaw;
+        guestWorkspaceRecoveredForSession = true;
+      }
+    }
+
     if (!raw) {
       return null;
     }
     const snapshot = JSON.parse(raw);
     if (!snapshot || typeof snapshot !== "object") {
+      guestWorkspaceRecoveredForSession = false;
       return null;
+    }
+
+    if (guestWorkspaceRecoveredForSession && !createGuestMode) {
+      try {
+        window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
+      } catch (persistError) {
+        console.warn("迁移游客工作区缓存失败：", persistError);
+      }
     }
 
     if (!isLegacyMockWorkspace(snapshot)) {
@@ -2137,12 +2227,13 @@ function loadWorkspaceSnapshot() {
 
     const initialWorkspace = buildInitialWorkspaceSnapshot();
     try {
-      window.localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(initialWorkspace));
+      window.localStorage.setItem(storageKey, JSON.stringify(initialWorkspace));
     } catch (persistError) {
       console.warn("清理旧 mock 工作区缓存失败：", persistError);
     }
     return initialWorkspace;
   } catch (error) {
+    guestWorkspaceRecoveredForSession = false;
     console.warn("读取本地工作区缓存失败：", error);
     return null;
   }
@@ -2151,7 +2242,7 @@ function loadWorkspaceSnapshot() {
 function saveWorkspaceSnapshot() {
   try {
     window.localStorage.setItem(
-      WORKSPACE_STORAGE_KEY,
+      getWorkspaceStorageKey(),
       JSON.stringify(buildWorkspaceSnapshot()),
     );
   } catch (error) {

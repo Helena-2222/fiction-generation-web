@@ -23,6 +23,7 @@ export const STAGE_META = {
   story: { index: 3, label: "正文生成" },
 };
 export const WORKSPACE_STORAGE_KEY = "story-generation-workspace-v3";
+export const GUEST_WORKSPACE_STORAGE_KEY = "guest_novel";
 export const STORY_GUIDE_STORAGE_KEY = "story-generation-neuro-guides-v3";
 export const LLM_TASK_POLL_INTERVAL_MS = 1400;
 export const HISTORY_LIMIT = 12;
