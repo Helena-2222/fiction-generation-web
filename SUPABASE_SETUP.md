@@ -6,11 +6,11 @@
 # 1. 安装依赖
 npm install @supabase/supabase-js
 
-# 2. 创建环境变量文件（Vite 项目）
-touch .env.local
+# 2. 创建环境变量文件（若已执行过该命令则无需重复执行）
+copy .env.example .env
 ```
 
-在 `.env.local` 中填入（从 Supabase 控制台 → Settings → API 获取）：
+在 `.env` 中填入（从 Supabase 控制台 → Settings → API 获取）：
 ```
 VITE_SUPABASE_URL=https://你的项目ID.supabase.co
 VITE_SUPABASE_ANON_KEY=你的anon公钥

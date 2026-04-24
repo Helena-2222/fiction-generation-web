@@ -116,8 +116,8 @@ VITE_SUPABASE_ANON_KEY=your_supabase_publishable_key
 
 说明：
 
-- `DEEPSEEK_API_KEY` 为必填，否则无法调用模型
-- `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY` 为可选
+- `DEEPSEEK_API_KEY` 请先在deepseek官网创建API KEY，然后在.env中填入你的API KEY。创建deepseek API KEY具体方法参见https://api-docs.deepseek.com/zh-cn/api/deepseek-api
+- `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY` 为supabase数据库密钥，从 Supabase 官网控制台 → Settings → API 获取，数据库具体配置方法详见本项目SUPABASE_SETUP.md 。配置数据库后方可启用用户管理功能。
 - 未配置 Supabase 时，登录相关能力不会完整启用
 
 ### 3. 启动服务
