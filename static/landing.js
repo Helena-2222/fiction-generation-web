@@ -1,5 +1,3 @@
-import { getCurrentSession, isAnonymousUser } from "./src/auth-client.js";
-
 const guestEntryButtons = Array.from(document.querySelectorAll("[data-guest-login]"));
 
 let activeGuestButton = null;
@@ -30,11 +28,16 @@ function setGuestLoginState(button, pending) {
   }
 
   button.textContent = pending
-    ? String(button.dataset.busyLabel || "正在进入...").trim()
+    ? String(button.dataset.busyLabel || "游客进入中...").trim()
     : button.dataset.originalLabel;
 }
 
-async function handleGuestEntryClick(event) {
+function getGuestEntryHref(button) {
+  const href = String(button?.getAttribute("href") || "").trim();
+  return href || "/create?guest=true";
+}
+
+function handleGuestEntryClick(event) {
   if (!isPlainPrimaryClick(event)) {
     return;
   }
@@ -52,17 +55,7 @@ async function handleGuestEntryClick(event) {
 
   guestLoginPending = true;
   setGuestLoginState(button, true);
-
-  try {
-    const session = await getCurrentSession().catch(() => null);
-    const user = session?.user ?? null;
-    window.location.href = user && !isAnonymousUser(user)
-      ? "/create"
-      : "/create?guest=true";
-  } catch (error) {
-    console.error("游客登录跳转失败。", error);
-    window.location.href = "/create?guest=true";
-  }
+  window.location.href = getGuestEntryHref(button);
 }
 
 guestEntryButtons.forEach((button) => {

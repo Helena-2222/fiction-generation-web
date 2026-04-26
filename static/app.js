@@ -134,6 +134,7 @@ let createLogoutInProgress = false;
 let createAuthRecoveryRunId = 0;
 let createGuestMode = false;
 let guestWorkspaceRecoveredForSession = false;
+const GUEST_GUIDE_STORAGE_SCOPE = "guest-browser";
 
 function setCurrentAuthUser(user) {
   currentAuthUserId = String(user?.id || "").trim();
@@ -145,12 +146,21 @@ function waitForDelay(ms) {
   });
 }
 
-function getScopedStorageKey(baseKey) {
+function getScopedStorageKey(baseKey, scope) {
   const normalizedBaseKey = String(baseKey || "").trim();
-  if (!normalizedBaseKey || !currentAuthUserId) {
+  const normalizedScope = String(scope || "").trim();
+  if (!normalizedBaseKey || !normalizedScope) {
     return "";
   }
-  return `${normalizedBaseKey}:${currentAuthUserId}`;
+  return `${normalizedBaseKey}:${normalizedScope}`;
+}
+
+function getGuideStorageKey() {
+  if (createGuestMode) {
+    return getScopedStorageKey(STORY_GUIDE_STORAGE_KEY, GUEST_GUIDE_STORAGE_SCOPE);
+  }
+
+  return getScopedStorageKey(STORY_GUIDE_STORAGE_KEY, currentAuthUserId);
 }
 
 function isGuestCreateRequest() {
@@ -2155,7 +2165,7 @@ function handleGuidePointerDown(event) {
 
 function loadSeenGuides() {
   try {
-    const storageKey = getScopedStorageKey(STORY_GUIDE_STORAGE_KEY);
+    const storageKey = getGuideStorageKey();
     if (!storageKey) {
       return getDefaultGuideProgress();
     }
@@ -2176,7 +2186,7 @@ function loadSeenGuides() {
 
 function saveSeenGuides(guides) {
   try {
-    const storageKey = getScopedStorageKey(STORY_GUIDE_STORAGE_KEY);
+    const storageKey = getGuideStorageKey();
     if (!storageKey) {
       return;
     }
