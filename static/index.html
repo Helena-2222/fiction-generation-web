@@ -242,29 +242,6 @@ nav {
 }
 .btn-ghost:hover { border-color: var(--accent); color: var(--accent); background: rgba(94,80,63,0.04); }
 
-.hero-scroll-hint {
-  position: absolute;
-  bottom: 36px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  color: var(--ink-hint);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  animation: fadeUp 1s ease 0.6s both;
-}
-.scroll-line {
-  width: 1px;
-  height: 40px;
-  background: linear-gradient(to bottom, var(--accent-light), transparent);
-  animation: scrollPulse 2s ease-in-out infinite;
-}
-@keyframes scrollPulse { 0%,100% { opacity:0.4; transform: scaleY(1); } 50% { opacity:1; transform: scaleY(1.2); } }
-
 /* ── PRODUCT MOCKUP ── */
 .hero-mockup {
   margin-top: 72px;
@@ -336,7 +313,11 @@ nav {
 .m-icon.active { background: var(--accent); }
 .m-icon.active svg { color: #fff; }
 
-.m-main { padding: 24px 32px; overflow: hidden; }
+.m-main {
+  padding: 24px 32px;
+  overflow: hidden;
+  text-align: left;
+}
 
 .m-section-label {
   font-size: 9px;
@@ -397,6 +378,7 @@ nav {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  text-align: left;
 }
 
 .m-neuro-head {
@@ -431,6 +413,7 @@ nav {
   font-size: 10.5px;
   color: var(--ink-soft);
   line-height: 1.65;
+  text-align: left;
 }
 .m-bubble b { color: var(--ink); font-weight: 500; }
 
@@ -450,6 +433,7 @@ nav {
   padding: 5px 10px;
   font-size: 10px;
   color: var(--ink-hint);
+  text-align: left;
 }
 .m-neuro-send {
   width: 24px; height: 24px;
@@ -1136,7 +1120,6 @@ a {
 .nav-guest-cta,
 .nav-cta,
 .hero-eyebrow,
-.hero-scroll-hint,
 .m-tab,
 .m-section-label,
 .m-subtitle,
@@ -1253,9 +1236,6 @@ a {
   <div class="hero-mockup">
     <div class="mockup-frame">
       <div class="mockup-bar">
-        <div class="mockup-dot"></div>
-        <div class="mockup-dot"></div>
-        <div class="mockup-dot"></div>
         <div class="mockup-tabs">
           <div class="m-tab active">基本信息</div>
           <div class="m-tab">角色关系</div>
@@ -1314,10 +1294,6 @@ a {
     </div>
   </div>
 
-  <div class="hero-scroll-hint">
-    <div class="scroll-line"></div>
-    <span>向下探索</span>
-  </div>
 </section>
 
 <!-- PAIN POINTS -->
