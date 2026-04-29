@@ -37,6 +37,82 @@ VITE_SUPABASE_ANON_KEY=你的anon公钥
 
 ## 三、数据库 SQL（在 Supabase SQL Editor 中执行）
 
+如果你的项目之前已经按本文档建过 `profiles`、`novels`、`saved_sentences`，不要重复执行整段初始化 SQL。
+这种情况下，请直接执行下面这段“增量迁移 SQL”，只补登录用户工作区同步需要的 `user_workspaces`：
+
+```sql
+-- 登录用户的工作区快照（跨浏览器同步收藏、历史记录和创作进度）
+CREATE TABLE IF NOT EXISTS public.user_workspaces (
+  user_id             UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  workspace_snapshot  JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at          TIMESTAMPTZ DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.user_workspaces ENABLE ROW LEVEL SECURITY;
+
+GRANT USAGE ON SCHEMA public TO authenticated;
+
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON TABLE public.user_workspaces
+  TO authenticated;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'user_workspaces'
+      AND policyname = 'user_workspaces: 用户只能读写自己的工作区'
+  ) THEN
+    CREATE POLICY "user_workspaces: 用户只能读写自己的工作区"
+      ON public.user_workspaces FOR ALL
+      USING (auth.uid() = user_id)
+      WITH CHECK (auth.uid() = user_id);
+  END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_user_workspace_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS set_user_workspaces_updated_at ON public.user_workspaces;
+
+CREATE TRIGGER set_user_workspaces_updated_at
+  BEFORE UPDATE ON public.user_workspaces
+  FOR EACH ROW EXECUTE FUNCTION public.handle_user_workspace_updated_at();
+
+NOTIFY pgrst, 'reload schema';
+```
+
+如果页面仍提示“账号工作区同步失败”，先在 SQL Editor 里执行下面的检查：
+
+```sql
+SELECT to_regclass('public.user_workspaces') AS workspace_table;
+```
+
+返回值应为 `user_workspaces`。如果是 `NULL`，说明迁移没有成功执行；如果表存在但仍失败，重点检查上面的 `GRANT` 权限和 RLS 策略是否存在且已启用。
+
+如果你已经创建了表，但页面提示 `permission denied for table user_workspaces`，可以单独执行下面这段权限修复 SQL：
+
+```sql
+GRANT USAGE ON SCHEMA public TO authenticated;
+
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON TABLE public.user_workspaces
+  TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
+```
+
+如果你是在一个全新的 Supabase 项目里从零初始化，再执行下面这段完整 SQL。
+
 ```sql
 -- 用户扩展信息表（补充 auth.users 的字段）
 CREATE TABLE public.profiles (
@@ -72,10 +148,25 @@ CREATE TABLE public.saved_sentences (
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 登录用户的工作区快照（跨浏览器同步收藏、历史记录和创作进度）
+CREATE TABLE public.user_workspaces (
+  user_id             UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  workspace_snapshot  JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at          TIMESTAMPTZ DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- 行级别安全策略（Row Level Security）—— 用户只能看/改自己的数据
 ALTER TABLE public.profiles         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.novels           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.saved_sentences  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_workspaces  ENABLE ROW LEVEL SECURITY;
+
+GRANT USAGE ON SCHEMA public TO authenticated;
+
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON TABLE public.user_workspaces
+  TO authenticated;
 
 -- profiles 策略
 CREATE POLICY "profiles: 用户只能读写自己的数据"
@@ -94,6 +185,27 @@ CREATE POLICY "sentences: 用户只能读写自己的收藏"
   ON public.saved_sentences FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
+
+-- user_workspaces 策略
+CREATE POLICY "user_workspaces: 用户只能读写自己的工作区"
+  ON public.user_workspaces FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- 工作区更新时间自动刷新
+CREATE OR REPLACE FUNCTION public.handle_user_workspace_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER set_user_workspaces_updated_at
+  BEFORE UPDATE ON public.user_workspaces
+  FOR EACH ROW EXECUTE FUNCTION public.handle_user_workspace_updated_at();
+
+NOTIFY pgrst, 'reload schema';
 
 -- 新用户注册时自动创建 profile（数据库触发器）
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -242,9 +354,48 @@ const fetchFavorites = async () => {
     .order('created_at', { ascending: false });
   return data;
 };
+
+// 保存当前登录用户的工作区
+const saveWorkspace = async (workspaceSnapshot) => {
+  const { data, error } = await supabase
+    .from('user_workspaces')
+    .upsert({
+      user_id: user.id,
+      workspace_snapshot: workspaceSnapshot,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' })
+    .select('updated_at')
+    .single();
+  return { data, error };
+};
+
+// 读取当前登录用户的工作区
+const fetchWorkspace = async () => {
+  const { data, error } = await supabase
+    .from('user_workspaces')
+    .select('workspace_snapshot, updated_at')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (error) {
+    return { data: null, error };
+  }
+
+  return {
+    data: data?.workspace_snapshot
+      ? {
+          ...data.workspace_snapshot,
+          updatedAt: data.workspace_snapshot.updatedAt || data.updated_at,
+        }
+      : null,
+    error: null,
+  };
+};
 ```
 
 ---
+
+> 游客模式下的历史记录和收藏仍建议保存在浏览器本地；`user_workspaces` 仅用于登录用户的账号级同步。
 
 ## 七、侧边栏头像区域改造（与现有代码集成）
 

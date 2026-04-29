@@ -370,6 +370,21 @@
                   rows="4"
                   placeholder="如果想调整大纲，可以在这里补充方向，例如：加强情感张力、减少支线、增加悬疑误导。"
                 ></textarea>
+                <div id="story-regenerate-composer" class="neuro-chat-composer hidden" aria-hidden="true">
+                  <div class="neuro-chat-bubble neuro-chat-bubble-assistant">
+                    <span id="story-regenerate-prompt">请告诉我这一章想怎么改，也可以直接发送空建议，我会按章节细纲重新生成。</span>
+                  </div>
+                  <textarea
+                    id="story-regenerate-feedback"
+                    class="textarea-field textarea-compact neuro-feedback-input"
+                    rows="4"
+                    placeholder="例如：让冲突更强、减少铺垫、加强某个角色的心理变化。也可以留空。"
+                  ></textarea>
+                  <div class="neuro-chat-actions">
+                    <button type="button" id="story-regenerate-send" class="primary-button">发送建议</button>
+                    <button type="button" id="story-regenerate-cancel" class="ghost-button">取消</button>
+                  </div>
+                </div>
                 <div id="neuro-input-placeholder" class="neuro-input-placeholder">故事正在这里留下轨迹……</div>
               </div>
             </div>

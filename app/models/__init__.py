@@ -16,6 +16,7 @@ from app.models.outline import (
     OutlineGenerationRequest,
     OutlineGenerationResponse,
     StoryGenerationRequest,
+    StoryChapterRegenerationRequest,
     StorySelectionRewriteRequest,
 )
 from app.models.task import LlmTaskStatusResponse
@@ -37,6 +38,7 @@ __all__ = [
     "OutlineGenerationRequest",
     "OutlineGenerationResponse",
     "StoryGenerationRequest",
+    "StoryChapterRegenerationRequest",
     "StorySelectionRewriteRequest",
     "LlmTaskStatusResponse",
     "DocxExportRequest",

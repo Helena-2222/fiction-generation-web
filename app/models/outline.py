@@ -61,6 +61,14 @@ class StoryGenerationRequest(BaseModel):
     outline: GeneratedOutline
 
 
+class StoryChapterRegenerationRequest(BaseModel):
+    story: StoryDraftRequest
+    outline: GeneratedOutline
+    chapter_number: int = Field(..., ge=1)
+    feedback: str = ""
+    current_chapters: List[GeneratedChapter] = Field(default_factory=list)
+
+
 class StorySelectionRewriteRequest(BaseModel):
     story: StoryDraftRequest
     outline: GeneratedOutline
@@ -82,6 +90,7 @@ __all__ = [
     "OutlineGenerationRequest",
     "OutlineGenerationResponse",
     "StoryGenerationRequest",
+    "StoryChapterRegenerationRequest",
     "StorySelectionRewriteRequest",
     "GeneratedChapter",
     "StoryGenerationResponse",

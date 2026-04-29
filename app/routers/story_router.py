@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.models import (
     LlmTaskStatusResponse,
+    StoryChapterRegenerationRequest,
     StoryGenerationRequest,
     StorySelectionRewriteRequest,
     StorySelectionRewriteResponse,
@@ -22,11 +23,31 @@ async def generate_story(request: StoryGenerationRequest) -> dict:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@router.post("/api/story/regenerate-chapter")
+async def regenerate_story_chapter(request: StoryChapterRegenerationRequest) -> dict:
+    from app.dependencies import story_service
+    try:
+        chapter = await story_service.regenerate_story_chapter(request)
+        return chapter.model_dump()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @router.post("/api/story/rewrite-selection")
 async def rewrite_story_selection(request: StorySelectionRewriteRequest) -> dict:
     from app.dependencies import story_service
     try:
         response: StorySelectionRewriteResponse = await story_service.rewrite_story_selection(request)
+        return response.model_dump()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/api/llm-tasks/story/chapter")
+async def create_story_chapter_task(request: StoryChapterRegenerationRequest) -> dict:
+    from app.dependencies import llm_task_manager
+    try:
+        response: LlmTaskStatusResponse = await llm_task_manager.create_story_chapter_task(request)
         return response.model_dump()
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(exc)) from exc

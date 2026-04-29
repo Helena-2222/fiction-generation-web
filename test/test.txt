@@ -1,236 +1,346 @@
 {
   "trigger": "ai_supplement_relations",
-  "generated_at": "2026-04-24T04:11:26",
+  "generated_at": "2026-04-29T22:17:22",
   "counts": {
-    "all_relations": 11,
-    "user_relations": 7,
-    "ai_relations": 4,
-    "latest_ai_added_relations": 0
+    "all_relations": 13,
+    "user_relations": 0,
+    "ai_relations": 13,
+    "latest_ai_added_relations": 7
   },
-  "user_relations": [
-    {
-      "id": "relation-3173cb03-7867-41c5-82f5-ee70cba92c6d",
-      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
-      "target_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
-      "label": "师徒",
-      "source_name": "弗林特.瓦伦丁",
-      "target_name": "奥利弗.费恩",
-      "bidirectional": true,
-      "relation_source": "user"
-    },
-    {
-      "id": "relation-8ab5e80b-e41e-4e12-88d9-f2c44e7b4f3b",
-      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
-      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
-      "label": "师徒",
-      "source_name": "奥利弗.费恩",
-      "target_name": "弗林特.瓦伦丁",
-      "bidirectional": true,
-      "relation_source": "user"
-    },
-    {
-      "id": "relation-eef2ff1c-dcaa-48cf-a371-b4288c8d5d83",
-      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
-      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
-      "label": "利益同盟",
-      "source_name": "塞巴斯蒂安.霍普",
-      "target_name": "西尔维斯特",
-      "bidirectional": true,
-      "relation_source": "user"
-    },
-    {
-      "id": "relation-366b5621-aa54-4ba9-bf4a-5ceec0dce75d",
-      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
-      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
-      "label": "旧友",
-      "source_name": "弗林特.瓦伦丁",
-      "target_name": "塞巴斯蒂安.霍普",
-      "bidirectional": true,
-      "relation_source": "user"
-    },
-    {
-      "id": "relation-d0407755-1ca9-4721-8f01-24820176253b",
-      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
-      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
-      "label": "旧友",
-      "source_name": "塞巴斯蒂安.霍普",
-      "target_name": "弗林特.瓦伦丁",
-      "bidirectional": true,
-      "relation_source": "user"
-    },
-    {
-      "id": "relation-85bf4076-c777-49a3-b5fa-18c9f76ba811",
-      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
-      "target_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
-      "label": "朋友",
-      "source_name": "塞巴斯蒂安.霍普",
-      "target_name": "奥利弗.费恩",
-      "bidirectional": true,
-      "relation_source": "user"
-    },
-    {
-      "id": "relation-d9fcde4b-0549-43a5-9d84-899688238c31",
-      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
-      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
-      "label": "师生",
-      "source_name": "奥利弗.费恩",
-      "target_name": "塞巴斯蒂安.霍普",
-      "bidirectional": true,
-      "relation_source": "user"
-    }
-  ],
+  "user_relations": [],
   "ai_relations": [
     {
-      "id": "relation-ai-character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923-character-12f1610f-f1f2-4012-a127-520da47f508d",
-      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
-      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
-      "label": "暗中提防",
-      "source_name": "弗林特.瓦伦丁",
-      "target_name": "西尔维斯特",
+      "id": "relation-ai-character-a6873263-cb07-4c10-83d6-a3cfcd924474-character-5407db7a-b3a9-4299-a3c0-b70f18777404",
+      "source_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "target_id": "character-5407db7a-b3a9-4299-a3c0-b70f18777404",
+      "label": "师徒",
+      "source_name": "陈构",
+      "target_name": "梁继",
       "bidirectional": false,
       "relation_source": "ai"
     },
     {
-      "id": "relation-ai-character-12f1610f-f1f2-4012-a127-520da47f508d-character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
-      "source_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
-      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
-      "label": "暗中提防",
-      "source_name": "西尔维斯特",
-      "target_name": "弗林特.瓦伦丁",
-      "bidirectional": false,
+      "id": "relation-ai-character-5407db7a-b3a9-4299-a3c0-b70f18777404-character-fbd0e21d-2c1c-42aa-8a31-0d388c4da6f2",
+      "source_id": "character-5407db7a-b3a9-4299-a3c0-b70f18777404",
+      "target_id": "character-fbd0e21d-2c1c-42aa-8a31-0d388c4da6f2",
+      "label": "同门",
+      "source_name": "梁继",
+      "target_name": "宋序",
+      "bidirectional": true,
       "relation_source": "ai"
     },
     {
-      "id": "relation-ai-character-1d7f7d04-2c34-4661-85e8-136737e4b84e-character-12f1610f-f1f2-4012-a127-520da47f508d",
-      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
-      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "id": "relation-ai-character-a6873263-cb07-4c10-83d6-a3cfcd924474-character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
+      "source_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "target_id": "character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
+      "label": "旧友",
+      "source_name": "陈构",
+      "target_name": "杜引",
+      "bidirectional": true,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-f8f89324-9a7a-4f03-bb87-66343dfa2068-character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "source_id": "character-f8f89324-9a7a-4f03-bb87-66343dfa2068",
+      "target_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
       "label": "竞争对手",
-      "source_name": "奥利弗.费恩",
-      "target_name": "西尔维斯特",
+      "source_name": "章易",
+      "target_name": "陈构",
+      "bidirectional": true,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-a6873263-cb07-4c10-83d6-a3cfcd924474-character-f8f89324-9a7a-4f03-bb87-66343dfa2068",
+      "source_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "target_id": "character-f8f89324-9a7a-4f03-bb87-66343dfa2068",
+      "label": "竞争对手",
+      "source_name": "陈构",
+      "target_name": "章易",
+      "bidirectional": true,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-5407db7a-b3a9-4299-a3c0-b70f18777404-character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
+      "source_id": "character-5407db7a-b3a9-4299-a3c0-b70f18777404",
+      "target_id": "character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
+      "label": "同门",
+      "source_name": "梁继",
+      "target_name": "杜引",
+      "bidirectional": true,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-a6873263-cb07-4c10-83d6-a3cfcd924474-character-fbd0e21d-2c1c-42aa-8a31-0d388c4da6f2",
+      "source_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "target_id": "character-fbd0e21d-2c1c-42aa-8a31-0d388c4da6f2",
+      "label": "长辈",
+      "source_name": "陈构",
+      "target_name": "宋序",
       "bidirectional": false,
       "relation_source": "ai"
     },
     {
-      "id": "relation-ai-character-12f1610f-f1f2-4012-a127-520da47f508d-character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
-      "source_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
-      "target_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
-      "label": "竞争对手",
-      "source_name": "西尔维斯特",
-      "target_name": "奥利弗.费恩",
+      "id": "relation-ai-character-fbd0e21d-2c1c-42aa-8a31-0d388c4da6f2-character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "source_id": "character-fbd0e21d-2c1c-42aa-8a31-0d388c4da6f2",
+      "target_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "label": "晚辈",
+      "source_name": "宋序",
+      "target_name": "陈构",
       "bidirectional": false,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec-character-f8f89324-9a7a-4f03-bb87-66343dfa2068",
+      "source_id": "character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
+      "target_id": "character-f8f89324-9a7a-4f03-bb87-66343dfa2068",
+      "label": "旧识",
+      "source_name": "杜引",
+      "target_name": "章易",
+      "bidirectional": true,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-f8f89324-9a7a-4f03-bb87-66343dfa2068-character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
+      "source_id": "character-f8f89324-9a7a-4f03-bb87-66343dfa2068",
+      "target_id": "character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
+      "label": "旧识",
+      "source_name": "章易",
+      "target_name": "杜引",
+      "bidirectional": true,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-4fd27030-78b8-4145-af1a-0f678545dc09-character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "source_id": "character-4fd27030-78b8-4145-af1a-0f678545dc09",
+      "target_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "label": "仰慕",
+      "source_name": "角色6",
+      "target_name": "陈构",
+      "bidirectional": false,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-4fd27030-78b8-4145-af1a-0f678545dc09-character-5407db7a-b3a9-4299-a3c0-b70f18777404",
+      "source_id": "character-4fd27030-78b8-4145-af1a-0f678545dc09",
+      "target_id": "character-5407db7a-b3a9-4299-a3c0-b70f18777404",
+      "label": "同僚",
+      "source_name": "角色6",
+      "target_name": "梁继",
+      "bidirectional": true,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-5407db7a-b3a9-4299-a3c0-b70f18777404-character-4fd27030-78b8-4145-af1a-0f678545dc09",
+      "source_id": "character-5407db7a-b3a9-4299-a3c0-b70f18777404",
+      "target_id": "character-4fd27030-78b8-4145-af1a-0f678545dc09",
+      "label": "同僚",
+      "source_name": "梁继",
+      "target_name": "角色6",
+      "bidirectional": true,
       "relation_source": "ai"
     }
   ],
-  "latest_ai_added_relations": [],
+  "latest_ai_added_relations": [
+    {
+      "id": "relation-ai-character-a6873263-cb07-4c10-83d6-a3cfcd924474-character-fbd0e21d-2c1c-42aa-8a31-0d388c4da6f2",
+      "source_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "target_id": "character-fbd0e21d-2c1c-42aa-8a31-0d388c4da6f2",
+      "label": "长辈",
+      "source_name": "陈构",
+      "target_name": "宋序",
+      "bidirectional": false,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-fbd0e21d-2c1c-42aa-8a31-0d388c4da6f2-character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "source_id": "character-fbd0e21d-2c1c-42aa-8a31-0d388c4da6f2",
+      "target_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "label": "晚辈",
+      "source_name": "宋序",
+      "target_name": "陈构",
+      "bidirectional": false,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec-character-f8f89324-9a7a-4f03-bb87-66343dfa2068",
+      "source_id": "character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
+      "target_id": "character-f8f89324-9a7a-4f03-bb87-66343dfa2068",
+      "label": "旧识",
+      "source_name": "杜引",
+      "target_name": "章易",
+      "bidirectional": true,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-f8f89324-9a7a-4f03-bb87-66343dfa2068-character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
+      "source_id": "character-f8f89324-9a7a-4f03-bb87-66343dfa2068",
+      "target_id": "character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
+      "label": "旧识",
+      "source_name": "章易",
+      "target_name": "杜引",
+      "bidirectional": true,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-4fd27030-78b8-4145-af1a-0f678545dc09-character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "source_id": "character-4fd27030-78b8-4145-af1a-0f678545dc09",
+      "target_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "label": "仰慕",
+      "source_name": "角色6",
+      "target_name": "陈构",
+      "bidirectional": false,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-4fd27030-78b8-4145-af1a-0f678545dc09-character-5407db7a-b3a9-4299-a3c0-b70f18777404",
+      "source_id": "character-4fd27030-78b8-4145-af1a-0f678545dc09",
+      "target_id": "character-5407db7a-b3a9-4299-a3c0-b70f18777404",
+      "label": "同僚",
+      "source_name": "角色6",
+      "target_name": "梁继",
+      "bidirectional": true,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-5407db7a-b3a9-4299-a3c0-b70f18777404-character-4fd27030-78b8-4145-af1a-0f678545dc09",
+      "source_id": "character-5407db7a-b3a9-4299-a3c0-b70f18777404",
+      "target_id": "character-4fd27030-78b8-4145-af1a-0f678545dc09",
+      "label": "同僚",
+      "source_name": "梁继",
+      "target_name": "角色6",
+      "bidirectional": true,
+      "relation_source": "ai"
+    }
+  ],
   "all_relations": [
     {
-      "id": "relation-3173cb03-7867-41c5-82f5-ee70cba92c6d",
-      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
-      "target_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
+      "id": "relation-ai-character-a6873263-cb07-4c10-83d6-a3cfcd924474-character-5407db7a-b3a9-4299-a3c0-b70f18777404",
+      "source_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "target_id": "character-5407db7a-b3a9-4299-a3c0-b70f18777404",
       "label": "师徒",
-      "source_name": "弗林特.瓦伦丁",
-      "target_name": "奥利弗.费恩",
-      "bidirectional": true,
-      "relation_source": "user"
+      "source_name": "陈构",
+      "target_name": "梁继",
+      "bidirectional": false,
+      "relation_source": "ai"
     },
     {
-      "id": "relation-8ab5e80b-e41e-4e12-88d9-f2c44e7b4f3b",
-      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
-      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
-      "label": "师徒",
-      "source_name": "奥利弗.费恩",
-      "target_name": "弗林特.瓦伦丁",
+      "id": "relation-ai-character-5407db7a-b3a9-4299-a3c0-b70f18777404-character-fbd0e21d-2c1c-42aa-8a31-0d388c4da6f2",
+      "source_id": "character-5407db7a-b3a9-4299-a3c0-b70f18777404",
+      "target_id": "character-fbd0e21d-2c1c-42aa-8a31-0d388c4da6f2",
+      "label": "同门",
+      "source_name": "梁继",
+      "target_name": "宋序",
       "bidirectional": true,
-      "relation_source": "user"
+      "relation_source": "ai"
     },
     {
-      "id": "relation-eef2ff1c-dcaa-48cf-a371-b4288c8d5d83",
-      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
-      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
-      "label": "利益同盟",
-      "source_name": "塞巴斯蒂安.霍普",
-      "target_name": "西尔维斯特",
-      "bidirectional": true,
-      "relation_source": "user"
-    },
-    {
-      "id": "relation-366b5621-aa54-4ba9-bf4a-5ceec0dce75d",
-      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
-      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
+      "id": "relation-ai-character-a6873263-cb07-4c10-83d6-a3cfcd924474-character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
+      "source_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "target_id": "character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
       "label": "旧友",
-      "source_name": "弗林特.瓦伦丁",
-      "target_name": "塞巴斯蒂安.霍普",
+      "source_name": "陈构",
+      "target_name": "杜引",
       "bidirectional": true,
-      "relation_source": "user"
-    },
-    {
-      "id": "relation-d0407755-1ca9-4721-8f01-24820176253b",
-      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
-      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
-      "label": "旧友",
-      "source_name": "塞巴斯蒂安.霍普",
-      "target_name": "弗林特.瓦伦丁",
-      "bidirectional": true,
-      "relation_source": "user"
-    },
-    {
-      "id": "relation-85bf4076-c777-49a3-b5fa-18c9f76ba811",
-      "source_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
-      "target_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
-      "label": "朋友",
-      "source_name": "塞巴斯蒂安.霍普",
-      "target_name": "奥利弗.费恩",
-      "bidirectional": true,
-      "relation_source": "user"
-    },
-    {
-      "id": "relation-d9fcde4b-0549-43a5-9d84-899688238c31",
-      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
-      "target_id": "character-d53a1633-aeac-47f6-ab1d-9914a1917d2a",
-      "label": "师生",
-      "source_name": "奥利弗.费恩",
-      "target_name": "塞巴斯蒂安.霍普",
-      "bidirectional": true,
-      "relation_source": "user"
-    },
-    {
-      "id": "relation-ai-character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923-character-12f1610f-f1f2-4012-a127-520da47f508d",
-      "source_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
-      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
-      "label": "暗中提防",
-      "source_name": "弗林特.瓦伦丁",
-      "target_name": "西尔维斯特",
-      "bidirectional": false,
       "relation_source": "ai"
     },
     {
-      "id": "relation-ai-character-12f1610f-f1f2-4012-a127-520da47f508d-character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
-      "source_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
-      "target_id": "character-03bcd5d4-0fde-4862-9d24-d2d6ba3a5923",
-      "label": "暗中提防",
-      "source_name": "西尔维斯特",
-      "target_name": "弗林特.瓦伦丁",
-      "bidirectional": false,
-      "relation_source": "ai"
-    },
-    {
-      "id": "relation-ai-character-1d7f7d04-2c34-4661-85e8-136737e4b84e-character-12f1610f-f1f2-4012-a127-520da47f508d",
-      "source_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
-      "target_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
+      "id": "relation-ai-character-f8f89324-9a7a-4f03-bb87-66343dfa2068-character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "source_id": "character-f8f89324-9a7a-4f03-bb87-66343dfa2068",
+      "target_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
       "label": "竞争对手",
-      "source_name": "奥利弗.费恩",
-      "target_name": "西尔维斯特",
+      "source_name": "章易",
+      "target_name": "陈构",
+      "bidirectional": true,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-a6873263-cb07-4c10-83d6-a3cfcd924474-character-f8f89324-9a7a-4f03-bb87-66343dfa2068",
+      "source_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "target_id": "character-f8f89324-9a7a-4f03-bb87-66343dfa2068",
+      "label": "竞争对手",
+      "source_name": "陈构",
+      "target_name": "章易",
+      "bidirectional": true,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-5407db7a-b3a9-4299-a3c0-b70f18777404-character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
+      "source_id": "character-5407db7a-b3a9-4299-a3c0-b70f18777404",
+      "target_id": "character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
+      "label": "同门",
+      "source_name": "梁继",
+      "target_name": "杜引",
+      "bidirectional": true,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-a6873263-cb07-4c10-83d6-a3cfcd924474-character-fbd0e21d-2c1c-42aa-8a31-0d388c4da6f2",
+      "source_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "target_id": "character-fbd0e21d-2c1c-42aa-8a31-0d388c4da6f2",
+      "label": "长辈",
+      "source_name": "陈构",
+      "target_name": "宋序",
       "bidirectional": false,
       "relation_source": "ai"
     },
     {
-      "id": "relation-ai-character-12f1610f-f1f2-4012-a127-520da47f508d-character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
-      "source_id": "character-12f1610f-f1f2-4012-a127-520da47f508d",
-      "target_id": "character-1d7f7d04-2c34-4661-85e8-136737e4b84e",
-      "label": "竞争对手",
-      "source_name": "西尔维斯特",
-      "target_name": "奥利弗.费恩",
+      "id": "relation-ai-character-fbd0e21d-2c1c-42aa-8a31-0d388c4da6f2-character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "source_id": "character-fbd0e21d-2c1c-42aa-8a31-0d388c4da6f2",
+      "target_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "label": "晚辈",
+      "source_name": "宋序",
+      "target_name": "陈构",
       "bidirectional": false,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec-character-f8f89324-9a7a-4f03-bb87-66343dfa2068",
+      "source_id": "character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
+      "target_id": "character-f8f89324-9a7a-4f03-bb87-66343dfa2068",
+      "label": "旧识",
+      "source_name": "杜引",
+      "target_name": "章易",
+      "bidirectional": true,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-f8f89324-9a7a-4f03-bb87-66343dfa2068-character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
+      "source_id": "character-f8f89324-9a7a-4f03-bb87-66343dfa2068",
+      "target_id": "character-ef6f3d4e-6494-4f93-9c8c-de7e513d32ec",
+      "label": "旧识",
+      "source_name": "章易",
+      "target_name": "杜引",
+      "bidirectional": true,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-4fd27030-78b8-4145-af1a-0f678545dc09-character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "source_id": "character-4fd27030-78b8-4145-af1a-0f678545dc09",
+      "target_id": "character-a6873263-cb07-4c10-83d6-a3cfcd924474",
+      "label": "仰慕",
+      "source_name": "角色6",
+      "target_name": "陈构",
+      "bidirectional": false,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-4fd27030-78b8-4145-af1a-0f678545dc09-character-5407db7a-b3a9-4299-a3c0-b70f18777404",
+      "source_id": "character-4fd27030-78b8-4145-af1a-0f678545dc09",
+      "target_id": "character-5407db7a-b3a9-4299-a3c0-b70f18777404",
+      "label": "同僚",
+      "source_name": "角色6",
+      "target_name": "梁继",
+      "bidirectional": true,
+      "relation_source": "ai"
+    },
+    {
+      "id": "relation-ai-character-5407db7a-b3a9-4299-a3c0-b70f18777404-character-4fd27030-78b8-4145-af1a-0f678545dc09",
+      "source_id": "character-5407db7a-b3a9-4299-a3c0-b70f18777404",
+      "target_id": "character-4fd27030-78b8-4145-af1a-0f678545dc09",
+      "label": "同僚",
+      "source_name": "梁继",
+      "target_name": "角色6",
+      "bidirectional": true,
       "relation_source": "ai"
     }
   ]

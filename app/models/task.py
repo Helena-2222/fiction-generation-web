@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 class LlmTaskStatusResponse(BaseModel):
     task_id: str
-    kind: Literal["outline", "relations_supplement", "story"]
+    kind: Literal["outline", "relations_supplement", "story", "story_chapter"]
     status: Literal["running", "paused", "completed", "failed", "discarded"]
     created_at: str
     updated_at: str

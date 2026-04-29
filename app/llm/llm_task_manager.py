@@ -10,12 +10,13 @@ from app.models import (
     LlmTaskStatusResponse,
     OutlineGenerationRequest,
     RelationSupplementRequest,
+    StoryChapterRegenerationRequest,
     StoryGenerationRequest,
 )
 from app.services.story_service import StoryService
 
 
-TaskKind = Literal["outline", "relations_supplement", "story"]
+TaskKind = Literal["outline", "relations_supplement", "story", "story_chapter"]
 TaskStatus = Literal["running", "paused", "completed", "failed", "discarded"]
 
 
@@ -54,6 +55,12 @@ class LlmTaskManager:
         request: StoryGenerationRequest,
     ) -> LlmTaskStatusResponse:
         return self._create_task("story", request.model_dump())
+
+    async def create_story_chapter_task(
+        self,
+        request: StoryChapterRegenerationRequest,
+    ) -> LlmTaskStatusResponse:
+        return self._create_task("story_chapter", request.model_dump())
 
     def get_task(self, task_id: str) -> LlmTaskStatusResponse:
         task = self._require_task(task_id)
@@ -117,9 +124,12 @@ class LlmTaskManager:
             elif task.kind == "relations_supplement":
                 request = RelationSupplementRequest.model_validate(task.payload)
                 result = await self._story_service.supplement_relations(request.story)
-            else:
+            elif task.kind == "story":
                 request = StoryGenerationRequest.model_validate(task.payload)
                 result = await self._story_service.generate_story(request)
+            else:
+                request = StoryChapterRegenerationRequest.model_validate(task.payload)
+                result = await self._story_service.regenerate_story_chapter(request)
         except asyncio.CancelledError:
             task.updated_at = self._now()
             task.worker = None

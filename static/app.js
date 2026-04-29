@@ -4,10 +4,12 @@ import { GUEST_WORKSPACE_STORAGE_KEY } from './src/constants.js';
 import { generateId, normalizeFavoriteQuote, formatFavoriteTime, formatHistoryTime, sanitizeFilename, escapeHtml, clamp } from './src/utils.js';
 import { postJson, getJson } from './src/api.js';
 import { DEFAULT_NEXT_PATH, buildAuthUrl, getCurrentUser, getPostAuthNextPath, getUserContact, getUserDisplayName, getUserInitial, isAnonymousUser, requireAuth, signOut, subscribeToAuthChanges } from './src/auth-client.js';
+import { fetchUserWorkspaceSnapshot, saveUserWorkspaceSnapshot } from './src/cloud-workspace.js';
 
 function buildInitialWorkspaceSnapshot() {
   return {
-    version: 4,
+    version: 5,
+    updatedAt: null,
     genre: "",
     style: "",
     currentStage: "basic",
@@ -158,10 +160,36 @@ let createLogoutInProgress = false;
 let createAuthRecoveryRunId = 0;
 let createGuestMode = false;
 let guestWorkspaceRecoveredForSession = false;
+let currentAuthUserIsAnonymous = false;
+let cloudWorkspaceSaveTimer = null;
+let cloudWorkspaceSaveInFlight = false;
+let pendingCloudWorkspaceSnapshot = null;
+let lastCloudWorkspaceSnapshotJson = "";
+let lastCloudWorkspaceSyncErrorAt = 0;
+let pendingStoryChapterRegeneration = null;
 const GUEST_GUIDE_STORAGE_SCOPE = "guest-browser";
+const CLOUD_WORKSPACE_SAVE_DEBOUNCE_MS = 500;
+const CLOUD_WORKSPACE_SYNC_ERROR_COOLDOWN_MS = 15000;
+const WORKSPACE_TIMESTAMP_TOLERANCE_MS = 1000;
 
 function setCurrentAuthUser(user) {
-  currentAuthUserId = String(user?.id || "").trim();
+  const nextUserId = String(user?.id || "").trim();
+  if (nextUserId !== currentAuthUserId) {
+    resetCloudWorkspaceSyncState();
+  }
+  currentAuthUserId = nextUserId;
+  currentAuthUserIsAnonymous = Boolean(user && isAnonymousUser(user));
+}
+
+function resetCloudWorkspaceSyncState() {
+  if (cloudWorkspaceSaveTimer) {
+    window.clearTimeout(cloudWorkspaceSaveTimer);
+    cloudWorkspaceSaveTimer = null;
+  }
+  cloudWorkspaceSaveInFlight = false;
+  pendingCloudWorkspaceSnapshot = null;
+  lastCloudWorkspaceSnapshotJson = "";
+  lastCloudWorkspaceSyncErrorAt = 0;
 }
 
 function waitForDelay(ms) {
@@ -198,7 +226,35 @@ function isGuestCreateRequest() {
 }
 
 function getWorkspaceStorageKey() {
-  return createGuestMode ? GUEST_WORKSPACE_STORAGE_KEY : WORKSPACE_STORAGE_KEY;
+  if (createGuestMode) {
+    return GUEST_WORKSPACE_STORAGE_KEY;
+  }
+
+  return getScopedStorageKey(WORKSPACE_STORAGE_KEY, currentAuthUserId) || WORKSPACE_STORAGE_KEY;
+}
+
+function getLegacyWorkspaceStorageKeys() {
+  if (createGuestMode) {
+    return [];
+  }
+
+  const storageKey = getWorkspaceStorageKey();
+  return storageKey !== WORKSPACE_STORAGE_KEY ? [WORKSPACE_STORAGE_KEY] : [];
+}
+
+function shouldUseCloudWorkspace() {
+  return !createGuestMode && Boolean(currentAuthUserId) && !currentAuthUserIsAnonymous;
+}
+
+function serializeWorkspaceSnapshotForComparison(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") {
+    return "";
+  }
+
+  return JSON.stringify({
+    ...snapshot,
+    updatedAt: null,
+  });
 }
 
 function initializeGuideSessionState() {
@@ -266,6 +322,11 @@ const elements = {
   exportAllStory: document.querySelector("#export-all-story"),
   exportEverything: document.querySelector("#export-everything"),
   outlineFeedback: document.querySelector("#outline-feedback"),
+  storyRegenerateComposer: document.querySelector("#story-regenerate-composer"),
+  storyRegeneratePrompt: document.querySelector("#story-regenerate-prompt"),
+  storyRegenerateFeedback: document.querySelector("#story-regenerate-feedback"),
+  storyRegenerateSend: document.querySelector("#story-regenerate-send"),
+  storyRegenerateCancel: document.querySelector("#story-regenerate-cancel"),
   guideOverlay: document.querySelector("#neuro-guide-overlay"),
   relationModal: document.querySelector("#relation-modal"),
   relationModalClose: document.querySelector("#relation-modal-close"),
@@ -671,18 +732,36 @@ function syncNeuroInputState() {
 
   const isOutlineStage = state.currentStage === "outline";
   const hasOutline = Boolean(state.outline);
+  const isStoryChapterFeedbackMode = Boolean(pendingStoryChapterRegeneration);
 
-  elements.neuroInputRow.classList.toggle("is-feedback-mode", isOutlineStage);
-  elements.neuroInputLabel.classList.toggle("hidden", !isOutlineStage);
-  elements.neuroInputHint.classList.toggle("hidden", !isOutlineStage);
-  elements.outlineFeedback.classList.toggle("hidden", !isOutlineStage);
-  elements.neuroInputPlaceholder.classList.toggle("hidden", isOutlineStage);
+  elements.neuroInputRow.classList.toggle("is-feedback-mode", isOutlineStage || isStoryChapterFeedbackMode);
+  elements.neuroInputLabel.classList.toggle("hidden", !isOutlineStage && !isStoryChapterFeedbackMode);
+  elements.neuroInputHint.classList.toggle("hidden", !isOutlineStage && !isStoryChapterFeedbackMode);
+  elements.outlineFeedback.classList.toggle("hidden", !isOutlineStage || isStoryChapterFeedbackMode);
+  if (elements.storyRegenerateComposer) {
+    elements.storyRegenerateComposer.classList.toggle("hidden", !isStoryChapterFeedbackMode);
+    elements.storyRegenerateComposer.setAttribute("aria-hidden", isStoryChapterFeedbackMode ? "false" : "true");
+  }
+  elements.neuroInputPlaceholder.classList.toggle("hidden", isOutlineStage || isStoryChapterFeedbackMode);
 
-  if (!isOutlineStage) {
+  if (isStoryChapterFeedbackMode) {
+    const chapterNumber = pendingStoryChapterRegeneration.chapterNumber;
+    elements.neuroInputLabel.textContent = "单章重生成建议";
+    elements.neuroInputHint.textContent = `正在准备重生成第 ${chapterNumber} 章。`;
+    if (elements.storyRegeneratePrompt) {
+      elements.storyRegeneratePrompt.textContent = `第 ${chapterNumber} 章想怎么改？可以写一句建议，也可以留空直接发送。`;
+    }
     elements.outlineFeedback.disabled = false;
     return;
   }
 
+  if (!isOutlineStage) {
+    elements.outlineFeedback.disabled = false;
+    elements.neuroInputLabel.textContent = "改进意见";
+    return;
+  }
+
+  elements.neuroInputLabel.textContent = "改进意见";
   elements.neuroInputHint.textContent = hasOutline
     ? "在这里补充修改方向，然后点击“重新生成”。"
     : "首版大纲生成后，你可以在这里填写改进意见。";
@@ -805,7 +884,7 @@ function renderSidebarAuthUi(user) {
   }
 
   if (elements.sidebarProfileNote) {
-    elements.sidebarProfileNote.textContent = "登录账号，体验完整功能，保存创作进度。";
+    elements.sidebarProfileNote.textContent = "登录账号后，收藏和创作进度会与当前账户绑定同步。";
   }
 
   if (elements.sidebarProfileEmail) {
@@ -833,6 +912,15 @@ async function handleSidebarLogout() {
     elements.sidebarLogoutButton.disabled = true;
     elements.sidebarLogoutButton.textContent = "退出中...";
   }
+
+  saveWorkspaceSnapshot({ immediate: true });
+  await Promise.race([
+    (async () => {
+      await flushCloudWorkspaceSave();
+      await waitForCloudWorkspaceSaveIdle(1500);
+    })(),
+    waitForDelay(1500),
+  ]);
 
   try {
     await signOut();
@@ -951,7 +1039,7 @@ async function init() {
   }
 
   initializeGuideSessionState();
-  const restoredWorkspace = loadWorkspaceSnapshot();
+  const restoredWorkspace = await loadWorkspaceSnapshot();
   const requestedStageOverride = getRequestedStageOverride();
   const restoredGeneratedContent = Boolean(restoredWorkspace?.outline || restoredWorkspace?.generatedStory);
   if (restoredWorkspace) {
@@ -984,6 +1072,9 @@ async function init() {
   elements.exportSettings.addEventListener("click", handleExportSettings);
   elements.exportAllStory.addEventListener("click", handleExportAllStory);
   elements.exportEverything.addEventListener("click", handleExportEverything);
+  elements.storyRegenerateSend?.addEventListener("click", handleStoryChapterRegenerationSend);
+  elements.storyRegenerateCancel?.addEventListener("click", cancelStoryChapterRegenerationRequest);
+  elements.storyRegenerateFeedback?.addEventListener("keydown", handleStoryRegenerateFeedbackKeydown);
   elements.storyResult.addEventListener("click", handleStoryResultClick);
   elements.outlineHistory.addEventListener("click", openOutlineHistoryModal);
   elements.outlineHistoryClose.addEventListener("click", closeOutlineHistoryModal);
@@ -1062,9 +1153,11 @@ async function init() {
     positionStorySelectionToolbar();
   });
   document.addEventListener("selectionchange", handleDocumentSelectionChange);
+  document.addEventListener("visibilitychange", handleWorkspaceVisibilityChange);
   document.addEventListener("scroll", scheduleGuideOverlayPosition, true);
   document.addEventListener("mousedown", handleGlobalPointerDown);
   document.addEventListener("keydown", handleGlobalKeyDown);
+  window.addEventListener("pagehide", handleWorkspacePageHide);
   setupPanelInteractions();
   setupGraphInteractions();
   setupGraphResizeObserver();
@@ -1093,7 +1186,7 @@ async function init() {
       ? "已恢复游客模式下的本地内容，当前数据只保存在这个浏览器中。"
       : "当前为游客模式，创作内容会保存在这个浏览器的 localStorage 中。";
   } else if (guestWorkspaceRecoveredForSession) {
-    initialStatusMessage = "已恢复你在游客模式下保存在本地的内容，现在可以继续以当前账号编辑。";
+    initialStatusMessage = "已恢复你在游客模式下保存在本地的内容，并会同步到当前账号。";
   }
 
   setStatus(initialStatusMessage, false);
@@ -2221,54 +2314,106 @@ function saveSeenGuides(guides) {
   }
 }
 
-function loadWorkspaceSnapshot() {
+async function loadWorkspaceSnapshot() {
+  const localRecord = loadLocalWorkspaceRecord();
+  const localSnapshot = localRecord?.snapshot || null;
+  if (!shouldUseCloudWorkspace()) {
+    return localSnapshot;
+  }
+
+  try {
+    const cloudSnapshot = await fetchUserWorkspaceSnapshot(currentAuthUserId);
+    if (cloudSnapshot) {
+      if (guestWorkspaceRecoveredForSession && localSnapshot) {
+        const mergedSnapshot = mergeWorkspaceSnapshotsForAccountTransfer(cloudSnapshot, localSnapshot);
+        cacheWorkspaceSnapshotLocally(mergedSnapshot, "缓存迁移后的账号工作区失败：");
+        queueCloudWorkspaceSave(mergedSnapshot, { immediate: true });
+        return mergedSnapshot;
+      }
+
+      if (shouldPreferLocalAccountSnapshot(localRecord, cloudSnapshot)) {
+        queueCloudWorkspaceSave(localSnapshot, { immediate: true });
+        return localSnapshot;
+      }
+
+      markCloudWorkspaceSnapshotSynced(cloudSnapshot);
+      cacheWorkspaceSnapshotLocally(cloudSnapshot, "缓存账号工作区失败：");
+      return cloudSnapshot;
+    }
+  } catch (error) {
+    console.warn("读取账号工作区失败，已回退到本地缓存：", error);
+  }
+
+  if (localSnapshot) {
+    queueCloudWorkspaceSave(localSnapshot, { immediate: true });
+  }
+  return localSnapshot;
+}
+
+function loadLocalWorkspaceRecord() {
   try {
     const storageKey = getWorkspaceStorageKey();
-    let raw = window.localStorage.getItem(storageKey);
+    const candidateStorageKeys = [storageKey, ...getLegacyWorkspaceStorageKeys()].filter(Boolean);
+    let raw = null;
+    let matchedStorageKey = "";
     guestWorkspaceRecoveredForSession = false;
 
     if (!createGuestMode && isGuestTransferRequest()) {
       const guestRaw = window.localStorage.getItem(GUEST_WORKSPACE_STORAGE_KEY);
       if (guestRaw) {
         raw = guestRaw;
-        guestWorkspaceRecoveredForSession = true;
-      }
-    } else if (!raw && !createGuestMode) {
-      const guestRaw = window.localStorage.getItem(GUEST_WORKSPACE_STORAGE_KEY);
-      if (guestRaw) {
-        raw = guestRaw;
+        matchedStorageKey = GUEST_WORKSPACE_STORAGE_KEY;
         guestWorkspaceRecoveredForSession = true;
       }
     }
 
     if (!raw) {
+      candidateStorageKeys.some((candidateKey) => {
+        const candidateRaw = window.localStorage.getItem(candidateKey);
+        if (!candidateRaw) {
+          return false;
+        }
+        raw = candidateRaw;
+        matchedStorageKey = candidateKey;
+        return true;
+      });
+    }
+
+    if (!raw) {
       return null;
     }
+
     const snapshot = JSON.parse(raw);
     if (!snapshot || typeof snapshot !== "object") {
       guestWorkspaceRecoveredForSession = false;
       return null;
     }
 
-    if (guestWorkspaceRecoveredForSession && !createGuestMode) {
+    if (!createGuestMode && matchedStorageKey && matchedStorageKey !== storageKey) {
       try {
-        window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
+        persistWorkspaceSnapshotToLocalStorage(snapshot);
       } catch (persistError) {
-        console.warn("迁移游客工作区缓存失败：", persistError);
+        console.warn("迁移用户工作区缓存失败：", persistError);
       }
     }
 
     if (!isLegacyMockWorkspace(snapshot)) {
-      return snapshot;
+      return {
+        snapshot,
+        storageKey: matchedStorageKey,
+      };
     }
 
     const initialWorkspace = buildInitialWorkspaceSnapshot();
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify(initialWorkspace));
+      persistWorkspaceSnapshotToLocalStorage(initialWorkspace);
     } catch (persistError) {
       console.warn("清理旧 mock 工作区缓存失败：", persistError);
     }
-    return initialWorkspace;
+    return {
+      snapshot: initialWorkspace,
+      storageKey,
+    };
   } catch (error) {
     guestWorkspaceRecoveredForSession = false;
     console.warn("读取本地工作区缓存失败：", error);
@@ -2276,21 +2421,290 @@ function loadWorkspaceSnapshot() {
   }
 }
 
-function saveWorkspaceSnapshot() {
+function shouldPreferLocalAccountSnapshot(localRecord, cloudSnapshot) {
+  const localSnapshot = localRecord?.snapshot || null;
+  if (!localSnapshot || guestWorkspaceRecoveredForSession) {
+    return false;
+  }
+
+  if (localRecord?.storageKey !== getWorkspaceStorageKey()) {
+    return false;
+  }
+
+  return getWorkspaceSnapshotTimestamp(localSnapshot)
+    > getWorkspaceSnapshotTimestamp(cloudSnapshot) + WORKSPACE_TIMESTAMP_TOLERANCE_MS;
+}
+
+function getWorkspaceSnapshotTimestamp(snapshot) {
+  const timestamp = Date.parse(String(snapshot?.updatedAt || ""));
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function mergeWorkspaceSnapshotsForAccountTransfer(accountSnapshot, guestSnapshot) {
+  const mergedSnapshot = {
+    ...accountSnapshot,
+    ...guestSnapshot,
+    version: Math.max(Number(accountSnapshot?.version) || 0, Number(guestSnapshot?.version) || 0, 5),
+    updatedAt: new Date().toISOString(),
+  };
+
+  mergedSnapshot.favoriteQuotes = mergeWorkspaceSnapshotEntries(
+    guestSnapshot?.favoriteQuotes,
+    accountSnapshot?.favoriteQuotes,
+    { keyOf: getFavoriteQuoteMergeKey },
+  );
+  mergedSnapshot.basicHistory = mergeWorkspaceSnapshotEntries(
+    guestSnapshot?.basicHistory,
+    accountSnapshot?.basicHistory,
+    { limit: HISTORY_LIMIT },
+  );
+  mergedSnapshot.characterHistory = mergeWorkspaceSnapshotEntries(
+    guestSnapshot?.characterHistory,
+    accountSnapshot?.characterHistory,
+    { limit: HISTORY_LIMIT },
+  );
+  mergedSnapshot.outlineHistory = mergeWorkspaceSnapshotEntries(
+    guestSnapshot?.outlineHistory,
+    accountSnapshot?.outlineHistory,
+    { limit: HISTORY_LIMIT },
+  );
+
+  return mergedSnapshot;
+}
+
+function mergeWorkspaceSnapshotEntries(primaryEntries, secondaryEntries, { limit = Infinity, keyOf = getWorkspaceEntryMergeKey } = {}) {
+  const mergedByKey = new Map();
+  [...toArray(primaryEntries), ...toArray(secondaryEntries)].forEach((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return;
+    }
+    const key = keyOf(entry);
+    if (!mergedByKey.has(key)) {
+      mergedByKey.set(key, entry);
+    }
+  });
+
+  return Array.from(mergedByKey.values())
+    .sort((left, right) => getWorkspaceEntryTimestamp(right) - getWorkspaceEntryTimestamp(left))
+    .slice(0, limit);
+}
+
+function toArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function getWorkspaceEntryMergeKey(entry) {
+  return String(entry?.id || `${entry?.createdAt || ""}:${entry?.type || ""}:${JSON.stringify(entry?.snapshot || entry?.outline || "")}`);
+}
+
+function getFavoriteQuoteMergeKey(entry) {
+  return String(
+    entry?.id
+    || [
+      entry?.storyTitle || "",
+      entry?.chapterNumber || "",
+      entry?.startOffset || "",
+      entry?.endOffset || "",
+      entry?.text || "",
+    ].join("|"),
+  );
+}
+
+function getWorkspaceEntryTimestamp(entry) {
+  const timestamp = Date.parse(String(entry?.createdAt || entry?.updatedAt || ""));
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function persistWorkspaceSnapshotToLocalStorage(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") {
+    return;
+  }
+
+  window.localStorage.setItem(
+    getWorkspaceStorageKey(),
+    JSON.stringify(snapshot),
+  );
+}
+
+function cacheWorkspaceSnapshotLocally(snapshot, failureMessage) {
   try {
-    window.localStorage.setItem(
-      getWorkspaceStorageKey(),
-      JSON.stringify(buildWorkspaceSnapshot()),
-    );
+    persistWorkspaceSnapshotToLocalStorage(snapshot);
+  } catch (error) {
+    console.warn(failureMessage, error);
+  }
+}
+
+function notifyCloudWorkspaceSyncError(error) {
+  console.warn("同步账号工作区失败：", error);
+  const now = Date.now();
+  if (now - lastCloudWorkspaceSyncErrorAt < CLOUD_WORKSPACE_SYNC_ERROR_COOLDOWN_MS) {
+    return;
+  }
+
+  lastCloudWorkspaceSyncErrorAt = now;
+  setStatus(getCloudWorkspaceSyncErrorMessage(error), false, true);
+}
+
+function getCloudWorkspaceSyncErrorMessage(error) {
+  const code = String(error?.code || "").trim();
+  const message = String(error?.message || error || "").trim();
+  const detail = [
+    code,
+    message,
+    error?.details,
+    error?.hint,
+    error?.status,
+    error?.statusText,
+  ]
+    .filter((value) => value != null && String(value).trim())
+    .map((value) => String(value).trim())
+    .join(" ")
+    .toLowerCase();
+
+  if (
+    detail.includes("row-level security")
+    || detail.includes("permission")
+    || detail.includes("policy")
+    || code === "42501"
+  ) {
+    return "账号工作区同步失败：请为 authenticated 角色授予 public schema 使用权和 user_workspaces 读写权限，并确认 RLS 策略允许当前用户读写自己的工作区。当前修改仍保存在这个浏览器中。";
+  }
+
+  if (
+    code === "42P01"
+    || code === "PGRST205"
+    || detail.includes("relation \"public.user_workspaces\" does not exist")
+    || detail.includes("relation user_workspaces does not exist")
+    || detail.includes("could not find the table")
+  ) {
+    return "账号工作区同步失败：Supabase REST API 找不到 public.user_workspaces 表，请执行 SUPABASE_SETUP.md 中的工作区迁移 SQL 并刷新 schema cache。当前修改仍保存在这个浏览器中。";
+  }
+
+  if (
+    code === "PGRST204"
+    || code === "42703"
+    || detail.includes("could not find")
+    || detail.includes("schema cache")
+    || detail.includes("column")
+  ) {
+    return "账号工作区同步失败：user_workspaces 表结构不完整或 schema cache 尚未刷新，请重新执行 SUPABASE_SETUP.md 中的工作区迁移 SQL。当前修改仍保存在这个浏览器中。";
+  }
+
+  return "账号工作区同步失败，当前修改仍保存在这个浏览器中，可稍后重试。";
+}
+
+function markCloudWorkspaceSnapshotSynced(snapshot) {
+  lastCloudWorkspaceSnapshotJson = serializeWorkspaceSnapshotForComparison(snapshot);
+  lastCloudWorkspaceSyncErrorAt = 0;
+}
+
+function queueCloudWorkspaceSave(snapshot, { immediate = false } = {}) {
+  if (!shouldUseCloudWorkspace() || !snapshot || typeof snapshot !== "object") {
+    return;
+  }
+
+  pendingCloudWorkspaceSnapshot = snapshot;
+
+  if (cloudWorkspaceSaveTimer) {
+    window.clearTimeout(cloudWorkspaceSaveTimer);
+    cloudWorkspaceSaveTimer = null;
+  }
+
+  if (immediate) {
+    void flushCloudWorkspaceSave();
+    return;
+  }
+
+  cloudWorkspaceSaveTimer = window.setTimeout(() => {
+    cloudWorkspaceSaveTimer = null;
+    void flushCloudWorkspaceSave();
+  }, CLOUD_WORKSPACE_SAVE_DEBOUNCE_MS);
+}
+
+async function flushCloudWorkspaceSave() {
+  if (!shouldUseCloudWorkspace()) {
+    pendingCloudWorkspaceSnapshot = null;
+    if (cloudWorkspaceSaveTimer) {
+      window.clearTimeout(cloudWorkspaceSaveTimer);
+      cloudWorkspaceSaveTimer = null;
+    }
+    return;
+  }
+
+  if (cloudWorkspaceSaveInFlight) {
+    return;
+  }
+
+  const snapshot = pendingCloudWorkspaceSnapshot;
+  if (!snapshot || typeof snapshot !== "object") {
+    return;
+  }
+
+  const serializedSnapshot = serializeWorkspaceSnapshotForComparison(snapshot);
+  if (serializedSnapshot === lastCloudWorkspaceSnapshotJson) {
+    pendingCloudWorkspaceSnapshot = null;
+    return;
+  }
+
+  pendingCloudWorkspaceSnapshot = null;
+  cloudWorkspaceSaveInFlight = true;
+  const targetUserId = currentAuthUserId;
+  try {
+    await saveUserWorkspaceSnapshot(targetUserId, snapshot);
+    if (targetUserId === currentAuthUserId) {
+      markCloudWorkspaceSnapshotSynced(snapshot);
+    }
+  } catch (error) {
+    if (targetUserId === currentAuthUserId) {
+      pendingCloudWorkspaceSnapshot = snapshot;
+      notifyCloudWorkspaceSyncError(error);
+    }
+    return;
+  } finally {
+    if (targetUserId === currentAuthUserId) {
+      cloudWorkspaceSaveInFlight = false;
+    }
+  }
+
+  if (targetUserId === currentAuthUserId && pendingCloudWorkspaceSnapshot) {
+    void flushCloudWorkspaceSave();
+  }
+}
+
+async function waitForCloudWorkspaceSaveIdle(timeoutMs = 1500) {
+  const deadline = Date.now() + Math.max(0, timeoutMs);
+  while (cloudWorkspaceSaveInFlight && Date.now() < deadline) {
+    await waitForDelay(50);
+  }
+}
+
+function handleWorkspaceVisibilityChange() {
+  if (document.visibilityState === "hidden") {
+    saveWorkspaceSnapshot({ immediate: true });
+  }
+}
+
+function handleWorkspacePageHide() {
+  saveWorkspaceSnapshot({ immediate: true });
+}
+
+function saveWorkspaceSnapshot({ immediate = false } = {}) {
+  const snapshot = buildWorkspaceSnapshot();
+  try {
+    persistWorkspaceSnapshotToLocalStorage(snapshot);
   } catch (error) {
     console.warn("保存本地工作区缓存失败：", error);
   }
+
+  queueCloudWorkspaceSave(snapshot, { immediate });
+  return snapshot;
 }
 
 function buildWorkspaceSnapshot() {
   syncRelationNames();
   return {
-    version: 4,
+    version: 5,
+    updatedAt: new Date().toISOString(),
     genre: state.genre,
     style: state.style,
     currentStage: state.currentStage,
@@ -2635,20 +3049,34 @@ function updateSectionActionState() {
   }
 }
 
+function canExportGeneratedStoryOutputs() {
+  return Boolean(state.generatedStory?.chapters?.length);
+}
+
 function updateOutputActionState() {
   const outlineTaskRunning = llmTaskController.currentTask?.kind === "outline"
     && llmTaskController.currentTask?.status === "running";
   const storyTaskRunning = llmTaskController.currentTask?.kind === "story"
     && llmTaskController.currentTask?.status === "running";
+  const canExportStoryOutputs = canExportGeneratedStoryOutputs();
   elements.regenerateOutline.disabled = outlineTaskRunning || storyTaskRunning || !state.outline;
   elements.generateStory.disabled = outlineTaskRunning || storyTaskRunning || !state.outline;
   elements.exportOutline.disabled = !state.outline;
-  elements.exportSettings.disabled = !state.outline;
-  elements.exportAllStory.disabled = !state.generatedStory;
-  elements.exportEverything.disabled = !state.generatedStory;
+  elements.exportSettings.disabled = !canExportStoryOutputs;
+  elements.exportAllStory.disabled = !canExportStoryOutputs;
+  elements.exportEverything.disabled = !canExportStoryOutputs;
+  setStoryChapterRegenerationActionsDisabled(hasBlockingLlmTask());
   if (elements.outlineHistory) {
     elements.outlineHistory.disabled = !state.outlineHistory.length;
   }
+}
+
+function setStoryChapterRegenerationActionsDisabled(disabled) {
+  elements.storyResult
+    ?.querySelectorAll("[data-regenerate-chapter]")
+    .forEach((button) => {
+      button.disabled = disabled;
+    });
 }
 
 function startLlmActivityRun({ title, summary, firstStepTitle, firstStepDetail = "", waitingMessages = [] }) {
@@ -4477,6 +4905,7 @@ function restoreOutlineTaskActions() {
 function disableStoryTaskActions() {
   elements.generateStory.disabled = true;
   elements.regenerateOutline.disabled = true;
+  setStoryChapterRegenerationActionsDisabled(true);
 }
 
 function restoreStoryTaskActions() {
@@ -4916,7 +5345,7 @@ async function handleStoryGenerate() {
         saveWorkspaceSnapshot();
         setCurrentStage("story", { showGuide: false });
         setStatus("全文生成完成。你可以继续修改设定后重新走一次流程。", false);
-        finishLlmActivityRun("正文已生成完成，现在可以导出单章或全部正文。");
+        finishLlmActivityRun("正文已生成完成，现在可以导出设定、导出全书或导出全部。");
         unlockStoryGuide();
       },
     });
@@ -4987,8 +5416,8 @@ function normalizeGeneratedStory(story, fallbackTitle = "") {
         chapter_number: Number(chapter?.chapter_number || index + 1),
         title: String(chapter?.title || `第${index + 1}章`),
         summary: String(chapter?.summary || ""),
-        content: String(chapter?.content || ""),
-        rendered_html: String(chapter?.rendered_html || ""),
+        content: normalizeGeneratedStoryContent(chapter?.content || ""),
+        rendered_html: sanitizeGeneratedStoryHtml(chapter?.rendered_html || ""),
       }))
       .filter((chapter) => chapter.content || chapter.summary || chapter.title)
     : [];
@@ -5097,7 +5526,7 @@ async function exportCharacterHistoryEntry(entryId) {
 }
 
 async function handleExportSettings() {
-  if (!state.outline) {
+  if (!canExportGeneratedStoryOutputs()) {
     return;
   }
   if (!saveActStructureEdits(true)) {
@@ -5117,7 +5546,7 @@ async function handleExportSettings() {
 }
 
 async function handleExportAllStory() {
-  if (!state.generatedStory) {
+  if (!canExportGeneratedStoryOutputs()) {
     return;
   }
 
@@ -5134,7 +5563,7 @@ async function handleExportAllStory() {
 }
 
 async function handleExportEverything() {
-  if (!state.generatedStory) {
+  if (!canExportGeneratedStoryOutputs()) {
     return;
   }
   if (!saveActStructureEdits(true)) {
@@ -5184,6 +5613,15 @@ function handleStoryResultClick(event) {
     return;
   }
 
+  const regenerateButton = event.target.closest("[data-regenerate-chapter]");
+  if (regenerateButton) {
+    const chapterNumber = Number(regenerateButton.dataset.regenerateChapter);
+    if (Number.isFinite(chapterNumber)) {
+      requestStoryChapterRegeneration(chapterNumber);
+    }
+    return;
+  }
+
   const exportButton = event.target.closest("[data-export-chapter]");
   if (!exportButton) {
     return;
@@ -5195,6 +5633,179 @@ function handleStoryResultClick(event) {
   }
 
   void exportSingleChapter(chapterNumber);
+}
+
+function requestStoryChapterRegeneration(chapterNumber) {
+  if (!ensureNoBlockingLlmTask()) {
+    return;
+  }
+  if (!state.outline || !state.generatedStory) {
+    setStatus("请先生成正文后再重新生成单章。", false, true);
+    return;
+  }
+  const chapter = findGeneratedChapter(chapterNumber);
+  if (!chapter) {
+    setStatus("未找到要重新生成的章节。", false, true);
+    return;
+  }
+  if (!saveActStructureEdits(true)) {
+    return;
+  }
+
+  pendingStoryChapterRegeneration = { chapterNumber };
+  stopLlmActivityWaitingLoop();
+  stopLlmActivityAutoClose();
+  llmActivity.active = false;
+  llmActivity.runId += 1;
+  llmActivity.panelOpen = true;
+  llmActivity.waitIndex = 0;
+  llmActivity.waitingMessages = [];
+  elements.llmActivityTitle.textContent = "单章重生成";
+  setLlmActivityStatus("等待建议");
+  setAssistantSummary(`Neuro 正在等待第 ${chapterNumber} 章的改进建议。`);
+  elements.llmActivityLog.innerHTML = "";
+  appendLlmActivityStep(
+    "Neuro 提示",
+    `请在下方输入第 ${chapterNumber} 章的改进建议。也可以留空发送，我会按当前大纲和章节细纲重新生成这一章。`,
+  );
+  syncNeuroInputState();
+  syncLlmActivityPanelState();
+  if (elements.storyRegenerateFeedback) {
+    elements.storyRegenerateFeedback.value = "";
+    window.setTimeout(() => elements.storyRegenerateFeedback.focus(), 0);
+  }
+}
+
+function cancelStoryChapterRegenerationRequest() {
+  if (!pendingStoryChapterRegeneration) {
+    return;
+  }
+  pendingStoryChapterRegeneration = null;
+  if (elements.storyRegenerateFeedback) {
+    elements.storyRegenerateFeedback.value = "";
+  }
+  syncNeuroInputState();
+  appendLlmActivityStep("已取消", "本次单章重生成请求已取消。", "stopped");
+  setStatus("已取消本章重新生成。", false);
+}
+
+function handleStoryRegenerateFeedbackKeydown(event) {
+  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+    event.preventDefault();
+    void handleStoryChapterRegenerationSend();
+  }
+}
+
+async function handleStoryChapterRegenerationSend() {
+  const pending = pendingStoryChapterRegeneration;
+  if (!pending) {
+    return;
+  }
+  if (!ensureNoBlockingLlmTask()) {
+    return;
+  }
+
+  const feedback = elements.storyRegenerateFeedback?.value.trim() || "";
+  pendingStoryChapterRegeneration = null;
+  syncNeuroInputState();
+  await regenerateStoryChapter(pending.chapterNumber, feedback);
+}
+
+async function regenerateStoryChapter(chapterNumber, feedback) {
+  const chapter = findGeneratedChapter(chapterNumber);
+  if (!chapter || !state.outline || !state.generatedStory) {
+    setStatus("未找到要重新生成的章节。", false, true);
+    return;
+  }
+  if (!saveActStructureEdits(true)) {
+    return;
+  }
+
+  startLlmActivityRun({
+    title: "AI 重生成单章",
+    summary: `正在根据当前大纲、章节细纲与建议重生成第 ${chapterNumber} 章。`,
+    firstStepTitle: "接收单章重生成请求",
+    firstStepDetail: `将只替换第 ${chapterNumber} 章，其余章节保持不变。`,
+  });
+  appendLlmActivityStep("用户建议", feedback || "未输入额外建议，将按大纲和章节细纲重新生成。", "user");
+  appendLlmActivityStep("锁定章节细纲", "正在读取当前章节目标、关键事件、章末收束和篇章位置。");
+  startLlmActivityWaitingLoop(
+    `Neuro AI 正在重写第 ${chapterNumber} 章。`,
+    [
+      { title: "重写章节结构", detail: "正在根据建议重新安排本章节奏和段落推进。" },
+      { title: "检查前文连续性", detail: "正在对齐前文章节摘要，避免人物状态和情节断裂。" },
+      { title: "整理单章结果", detail: "正在校验正文段落、乱码字符和 JSON 结构。" },
+    ],
+  );
+  setBusyState(`正在重生成第 ${chapterNumber} 章...`);
+  disableStoryTaskActions();
+
+  try {
+    await createManagedLlmTask("/api/llm-tasks/story/chapter", {
+      story: buildStoryPayload(),
+      outline: state.outline,
+      chapter_number: chapterNumber,
+      feedback,
+      current_chapters: buildCurrentGeneratedChaptersPayload(),
+    }, {
+      busyMessage: `正在重生成第 ${chapterNumber} 章...`,
+      runningSummary: `Neuro AI 正在重写第 ${chapterNumber} 章。`,
+      waitingMessages: [
+        { title: "重写章节结构", detail: "正在根据建议重新安排本章节奏和段落推进。" },
+        { title: "检查前文连续性", detail: "正在对齐前文章节摘要，避免人物状态和情节断裂。" },
+        { title: "整理单章结果", detail: "正在校验正文段落、乱码字符和 JSON 结构。" },
+      ],
+      pausedSummary: `第 ${chapterNumber} 章重生成已暂停。若继续，将按刚才的建议重新生成本章。`,
+      discardSummary: `第 ${chapterNumber} 章重生成已放弃，原正文未被替换。`,
+      discardStatusMessage: `第 ${chapterNumber} 章重生成已放弃。`,
+      restoreUi: restoreStoryTaskActions,
+      onCompleted: (response) => {
+        const regenerated = normalizeRegeneratedChapterPayload(response, chapter);
+        replaceGeneratedChapter(regenerated);
+        state.activeChapterNumber = regenerated.chapter_number;
+        appendLlmActivityStep("替换章节内容", `第 ${regenerated.chapter_number} 章已更新到正文区。`);
+        renderStory();
+        saveWorkspaceSnapshot();
+        setStatus(`第 ${regenerated.chapter_number} 章已重新生成。`, false);
+        finishLlmActivityRun(`第 ${regenerated.chapter_number} 章已重新生成完成。`);
+      },
+    });
+  } catch (error) {
+    restoreStoryTaskActions();
+    setStatus(error.message || "单章重新生成失败。", false, true);
+    finishLlmActivityRun(error.message || "单章重新生成失败。", "error");
+  }
+}
+
+function buildCurrentGeneratedChaptersPayload() {
+  return (state.generatedStory?.chapters || []).map((chapter) => ({
+    chapter_number: Number(chapter.chapter_number),
+    title: String(chapter.title || ""),
+    summary: String(chapter.summary || ""),
+    content: normalizeGeneratedStoryContent(chapter.content || ""),
+  }));
+}
+
+function normalizeRegeneratedChapterPayload(payload, fallbackChapter) {
+  const chapter = payload?.chapter && typeof payload.chapter === "object" ? payload.chapter : payload;
+  return {
+    chapter_number: Number(chapter?.chapter_number || fallbackChapter.chapter_number),
+    title: String(chapter?.title || fallbackChapter.title || `第${fallbackChapter.chapter_number}章`),
+    summary: String(chapter?.summary || fallbackChapter.summary || ""),
+    content: normalizeGeneratedStoryContent(chapter?.content || fallbackChapter.content || ""),
+    rendered_html: "",
+  };
+}
+
+function replaceGeneratedChapter(chapter) {
+  const chapters = state.generatedStory?.chapters;
+  if (!Array.isArray(chapters)) {
+    return;
+  }
+  const index = chapters.findIndex((item) => Number(item.chapter_number) === Number(chapter.chapter_number));
+  if (index >= 0) {
+    chapters[index] = chapter;
+  }
 }
 
 async function exportSingleChapter(chapterNumber) {
@@ -5738,7 +6349,24 @@ function renderStory() {
             <div>
               <div class="chapter-block-title">第${activeChapter.chapter_number}章 · ${escapeHtml(activeChapter.title)}</div>
             </div>
-            <button type="button" class="btn-export" data-export-chapter="${activeChapter.chapter_number}">导出本章</button>
+            <div class="chapter-header-actions">
+              <button
+                type="button"
+                class="icon-btn-wrap icon-button chapter-regenerate-button"
+                title="重新生成本章"
+                aria-label="重新生成本章"
+                data-regenerate-chapter="${activeChapter.chapter_number}"
+                ${hasBlockingLlmTask() ? "disabled" : ""}
+              >
+                <span class="icon-btn" aria-hidden="true">
+                  <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M2 7a5 5 0 1 1 3.5 4.7"></path>
+                    <path d="M10 4 8 7l2 3"></path>
+                  </svg>
+                </span>
+              </button>
+              <button type="button" class="btn-export" data-export-chapter="${activeChapter.chapter_number}">导出本章</button>
+            </div>
           </div>
           <div
             class="chapter-content prose-content"
@@ -5792,15 +6420,114 @@ function scrollStoryReaderToTop() {
 }
 
 function buildChapterContentHtml(content) {
-  const normalized = String(content || "").trim();
-  if (!normalized) {
+  const paragraphs = splitChapterContentIntoParagraphs(content);
+  if (!paragraphs.length) {
     return "<p>暂无正文。</p>";
   }
 
-  return normalized
-    .split(/\n{2,}/)
+  return paragraphs
     .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/<br \/>/g, "<br />")}</p>`)
     .join("");
+}
+
+function normalizeGeneratedStoryContent(content) {
+  return splitChapterContentIntoParagraphs(content).join("\n\n");
+}
+
+function sanitizeGeneratedStoryHtml(html) {
+  return String(html || "").replace(/\uFFFD+/g, "");
+}
+
+function splitChapterContentIntoParagraphs(content) {
+  const normalized = normalizeChapterLineBreaks(content)
+    .replace(/\uFFFD+/g, "")
+    .trim();
+  if (!normalized) {
+    return [];
+  }
+
+  let paragraphs = normalized
+    .split(/\n\s*\n+/)
+    .map((paragraph) => cleanChapterParagraph(paragraph))
+    .filter(Boolean);
+
+  if (paragraphs.length <= 1) {
+    paragraphs = normalized
+      .split(/\n+/)
+      .map((paragraph) => cleanChapterParagraph(paragraph))
+      .filter(Boolean);
+  }
+
+  return paragraphs.flatMap((paragraph) => splitLongChapterParagraph(paragraph));
+}
+
+function splitLongChapterParagraph(paragraph) {
+  const maxChars = 420;
+  const cleaned = cleanChapterParagraph(paragraph);
+  if (countCompactChars(cleaned) <= maxChars) {
+    return cleaned ? [cleaned] : [];
+  }
+
+  const sentences = cleaned.match(/.+?(?:[。！？!?；;]|$)/g) || [cleaned];
+  if (sentences.length <= 1) {
+    const chunks = [];
+    for (let index = 0; index < cleaned.length; index += maxChars) {
+      chunks.push(cleaned.slice(index, index + maxChars).trim());
+    }
+    return chunks.filter(Boolean);
+  }
+
+  const paragraphs = [];
+  let current = "";
+  sentences.forEach((sentence) => {
+    const nextSentence = sentence.trim();
+    if (!nextSentence) {
+      return;
+    }
+    const currentLength = countCompactChars(current);
+    const nextLength = countCompactChars(nextSentence);
+    if (current && currentLength >= 180 && currentLength + nextLength > maxChars) {
+      paragraphs.push(current.trim());
+      current = nextSentence;
+    } else {
+      current = `${current}${nextSentence}`;
+    }
+  });
+
+  if (current.trim()) {
+    paragraphs.push(current.trim());
+  }
+  if (paragraphs.length > 1 && countCompactChars(paragraphs[paragraphs.length - 1]) < 80) {
+    const tail = paragraphs.pop();
+    paragraphs[paragraphs.length - 1] = `${paragraphs[paragraphs.length - 1]}${tail}`;
+  }
+
+  return paragraphs;
+}
+
+function normalizeChapterLineBreaks(content) {
+  return String(content || "")
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\n")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/[\u2028\u2029]/g, "\n")
+    .replace(/\u00a0/g, " ");
+}
+
+function cleanChapterParagraph(paragraph) {
+  return String(paragraph || "")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .filter(Boolean)
+    .join("")
+    .replace(/ {2,}/g, " ")
+    .trim();
+}
+
+function countCompactChars(value) {
+  return String(value || "").replace(/\s+/g, "").length;
 }
 
 function handleDocumentSelectionChange() {
@@ -6231,8 +6958,8 @@ function syncChapterContentFromDom(chapterNumber) {
 }
 
 function normalizeEditorText(value) {
-  return String(value || "")
-    .replace(/\r/g, "")
+  return normalizeChapterLineBreaks(value)
+    .replace(/\uFFFD+/g, "")
     .replace(/\u00a0/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();

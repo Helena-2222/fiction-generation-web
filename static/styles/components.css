@@ -1756,6 +1756,17 @@ button:disabled {
   margin-bottom: 34px;
 }
 
+.chapter-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.chapter-regenerate-button {
+  min-width: var(--btn-h-sm);
+}
+
 .chapter-label-en {
   font-size: 14px;
   font-weight: 600;
@@ -2280,6 +2291,12 @@ body.neuro-panel-open #stage-story .prose-content {
   background: rgba(166, 144, 118, 0.08);
 }
 
+.llm-activity-log-item.is-user {
+  margin-left: 28px;
+  border-radius: var(--radius-md) 4px var(--radius-md) var(--radius-md);
+  background: rgba(94, 80, 63, 0.1);
+}
+
 .llm-activity-dot {
   width: 8px;
   height: 8px;
@@ -2343,6 +2360,28 @@ body.neuro-panel-open #stage-story .prose-content {
 .neuro-feedback-input {
   min-height: 124px;
   background: rgba(255, 255, 255, 0.92);
+}
+
+.neuro-chat-composer {
+  display: grid;
+  gap: 10px;
+}
+
+.neuro-chat-bubble {
+  padding: 10px 12px;
+  border-radius: 4px var(--radius-md) var(--radius-md) var(--radius-md);
+  border: 0.5px solid var(--border);
+  background: #ffffff;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  box-shadow: var(--shadow-sm);
+}
+
+.neuro-chat-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .neuro-input-placeholder {

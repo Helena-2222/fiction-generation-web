@@ -19,6 +19,7 @@ from app.models import (
     OutlineGenerationRequest,
     OutlineGenerationResponse,
     RelationSupplementResponse,
+    StoryChapterRegenerationRequest,
     StoryDraftRequest,
     StorySelectionRewriteRequest,
     StorySelectionRewriteResponse,
@@ -111,6 +112,9 @@ DETAIL_PROMPT_KEYWORDS = {
         "stream of consciousness",
     ),
 }
+GENERATED_CHAPTER_QUALITY_RETRIES = 2
+MAX_GENERATED_PARAGRAPH_CHARS = 420
+REPLACEMENT_CHARACTER = "\ufffd"
 
 
 class StageContext(TypedDict):
@@ -294,22 +298,11 @@ class StoryService:
                 },
             )
 
-            result = await self.client.chat_json(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a literary novelist. Follow the user's prompt template "
-                            "exactly and return one strict JSON object only, parsable by Python "
-                            "json.loads, with no markdown or extra text."
-                        ),
-                    },
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0.9,
+            generated = await self._generate_chapter_with_quality_guard(
+                user_prompt=user_prompt,
+                chapter_number=chapter.chapter_number,
+                target_words=chapter.target_words,
             )
-
-            generated = GeneratedChapter.model_validate(result)
             generated_chapters.append(generated)
             continuity_summaries.append(
                 {
@@ -320,6 +313,331 @@ class StoryService:
             )
 
         return StoryGenerationResponse(title=outline.title, chapters=generated_chapters)
+
+    async def regenerate_story_chapter(
+        self,
+        request: StoryChapterRegenerationRequest,
+    ) -> GeneratedChapter:
+        story = self._normalize_story(request.story)
+        outline = request.outline
+        outline.act_structure = self._normalize_act_structure(outline.act_structure, outline.chapter_count)
+
+        target_chapter = next(
+            (
+                chapter
+                for chapter in outline.chapters
+                if chapter.chapter_number == request.chapter_number
+            ),
+            None,
+        )
+        if target_chapter is None:
+            raise ValueError(f"未找到第 {request.chapter_number} 章的章节细纲。")
+
+        stage_context = self._get_stage_context(outline, target_chapter.chapter_number)
+        stage_chapters = [
+            {
+                "chapter_number": item.chapter_number,
+                "title": item.title,
+                "summary": item.summary,
+            }
+            for item in outline.chapters
+            if stage_context["start_chapter"] <= item.chapter_number <= stage_context["end_chapter"]
+        ]
+        chapter_spec = {
+            "chapter_number": target_chapter.chapter_number,
+            "title": target_chapter.title,
+            "target_words": target_chapter.target_words,
+            "summary": target_chapter.summary,
+            "key_events": target_chapter.key_events,
+            "cliffhanger": target_chapter.cliffhanger,
+            "stage": stage_context["stage"],
+            "stage_range": stage_context["chapter_range"],
+            "stage_content": stage_context["content"],
+            "stage_chapters": stage_chapters,
+        }
+        existing_chapter = next(
+            (
+                chapter
+                for chapter in request.current_chapters
+                if chapter.chapter_number == target_chapter.chapter_number
+            ),
+            None,
+        )
+        continuity_summaries = [
+            {
+                "chapter_number": str(chapter.chapter_number),
+                "title": chapter.title,
+                "summary": chapter.summary,
+            }
+            for chapter in sorted(request.current_chapters, key=lambda item: item.chapter_number)
+            if chapter.chapter_number < target_chapter.chapter_number
+        ]
+        future_chapter_summaries = [
+            {
+                "chapter_number": str(chapter.chapter_number),
+                "title": chapter.title,
+                "summary": chapter.summary,
+            }
+            for chapter in sorted(request.current_chapters, key=lambda item: item.chapter_number)
+            if chapter.chapter_number > target_chapter.chapter_number
+        ]
+        chapter_targets = self._chapter_targets(story.total_words, story.chapter_words or 2000)
+        detail_time_blocks = self._build_detail_prompt_time_blocks(story, target_chapter.target_words)
+
+        user_prompt = _render_prompt(
+            DETAIL_PROMPT_TEMPLATE,
+            {
+                "CHAPTER_NUMBER": str(target_chapter.chapter_number),
+                "STORY_JSON": self._build_compact_story_prompt_json(
+                    story,
+                    chapter_targets,
+                    include_relation_ids=False,
+                ),
+                "STORY_STYLE_GUIDANCE": self._build_story_style_guidance(story),
+                "OUTLINE_JSON": json.dumps(outline.model_dump(), ensure_ascii=False, indent=2),
+                "CONTINUITY_SUMMARIES": json.dumps(
+                    continuity_summaries,
+                    ensure_ascii=False,
+                    indent=2,
+                ) if continuity_summaries else "尚无前文，请从开篇写起。",
+                "CHAPTER_SPEC": json.dumps(chapter_spec, ensure_ascii=False, indent=2),
+                "CHAPTER_TITLE_JSON": json.dumps(target_chapter.title, ensure_ascii=False),
+                **detail_time_blocks,
+            },
+        )
+        feedback = request.feedback.strip() or "用户未补充额外建议，请依据大纲与章节细纲重写本章。"
+        previous_version_block = ""
+        if existing_chapter:
+            previous_version_block = "\n\n".join(
+                [
+                    "当前章节旧版结果（仅供发现问题与保持连续性，不要照抄）：",
+                    json.dumps(
+                        {
+                            "title": existing_chapter.title,
+                            "summary": existing_chapter.summary,
+                            "content_excerpt": self._limit_prompt_text(existing_chapter.content, 1600),
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                ]
+            )
+        user_prompt = "\n\n".join(
+            [
+                user_prompt,
+                "单章重新生成要求：",
+                f"用户改进建议：{feedback}",
+                "本次只重新生成当前章节，不要输出其他章节。",
+                "必须严格依据完整大纲、当前章节细纲、已完成前文章节摘要和用户建议；若用户建议与大纲冲突，以保持全书连续性为先，并在正文中自然调整。",
+                "后续章节摘要（用于保持与已生成后文衔接，不要输出这些章节）：",
+                json.dumps(future_chapter_summaries, ensure_ascii=False, indent=2) if future_chapter_summaries else "暂无后续章节摘要。",
+                previous_version_block,
+            ]
+        ).strip()
+
+        return await self._generate_chapter_with_quality_guard(
+            user_prompt=user_prompt,
+            chapter_number=target_chapter.chapter_number,
+            target_words=target_chapter.target_words,
+        )
+
+    async def _generate_chapter_with_quality_guard(
+        self,
+        *,
+        user_prompt: str,
+        chapter_number: int,
+        target_words: int,
+    ) -> GeneratedChapter:
+        retry_note = ""
+        last_generated: GeneratedChapter | None = None
+        last_issues: List[str] = []
+
+        for attempt in range(GENERATED_CHAPTER_QUALITY_RETRIES + 1):
+            prompt = user_prompt
+            if retry_note:
+                prompt = f"{user_prompt}\n\n质量重试要求：\n{retry_note}"
+
+            result = await self.client.chat_json(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a literary novelist. Follow the user's prompt template "
+                            "exactly and return one strict JSON object only, parsable by Python "
+                            "json.loads, with no markdown or extra text."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.82 if attempt == 0 else 0.3,
+            )
+
+            generated = GeneratedChapter.model_validate(result)
+            generated.chapter_number = chapter_number
+            generated.title = self._sanitize_generated_text(generated.title)
+            generated.summary = self._sanitize_generated_text(generated.summary)
+            generated.content = self._normalize_generated_chapter_content(
+                generated.content,
+                target_words,
+            )
+            issues = self._generated_chapter_quality_issues(generated, target_words)
+            if not issues:
+                return generated
+
+            last_generated = generated
+            last_issues = issues
+            retry_note = self._build_chapter_quality_retry_instruction(
+                chapter_number,
+                issues,
+            )
+
+        if last_generated and last_generated.content.strip() and not self._has_replacement_character(last_generated):
+            return last_generated
+
+        issue_text = "；".join(last_issues) or "未知质量问题"
+        raise ValueError(f"第 {chapter_number} 章生成结果质量校验失败：{issue_text}")
+
+    @classmethod
+    def _build_chapter_quality_retry_instruction(cls, chapter_number: int, issues: List[str]) -> str:
+        return "\n".join(
+            [
+                f"上一版第 {chapter_number} 章质量校验未通过：{'；'.join(issues)}。",
+                "请重新生成完整本章，不要只修补局部。",
+                "content 必须使用多个自然段，段落之间用 \\n\\n 分隔，严禁整章只有一段。",
+                "title、summary、content 中不得出现 �、���、控制字符或任何乱码符号。",
+            ]
+        )
+
+    @classmethod
+    def _generated_chapter_quality_issues(
+        cls,
+        generated: GeneratedChapter,
+        target_words: int,
+    ) -> List[str]:
+        issues: List[str] = []
+        if cls._has_replacement_character(generated):
+            issues.append("包含 Unicode 替换字符或乱码占位符")
+        if not generated.content.strip():
+            issues.append("正文为空")
+
+        paragraphs = cls._extract_generated_paragraphs(generated.content)
+        compact_length = len(re.sub(r"\s+", "", generated.content))
+        min_paragraphs = cls._min_generated_paragraph_count(compact_length, target_words)
+        if compact_length >= 800 and len(paragraphs) < min_paragraphs:
+            issues.append(f"段落数过少（当前 {len(paragraphs)} 段，至少 {min_paragraphs} 段）")
+
+        longest_paragraph = max((len(re.sub(r"\s+", "", paragraph)) for paragraph in paragraphs), default=0)
+        if longest_paragraph > MAX_GENERATED_PARAGRAPH_CHARS:
+            issues.append(f"存在超长段落（最长约 {longest_paragraph} 字）")
+
+        return issues
+
+    @staticmethod
+    def _min_generated_paragraph_count(text_length: int, target_words: int) -> int:
+        reference_length = max(text_length, int(target_words or 0))
+        if reference_length < 800:
+            return 2
+        return max(3, min(8, math.ceil(reference_length / MAX_GENERATED_PARAGRAPH_CHARS)))
+
+    @classmethod
+    def _has_replacement_character(cls, generated: GeneratedChapter) -> bool:
+        return any(
+            REPLACEMENT_CHARACTER in value
+            for value in (generated.title, generated.summary, generated.content)
+        )
+
+    @classmethod
+    def _normalize_generated_chapter_content(cls, content: str, target_words: int) -> str:
+        text = cls._sanitize_generated_text(content)
+        paragraphs = cls._extract_generated_paragraphs(text)
+        normalized_paragraphs: List[str] = []
+        for paragraph in paragraphs:
+            normalized_paragraphs.extend(cls._split_long_generated_paragraph(paragraph))
+
+        min_paragraphs = cls._min_generated_paragraph_count(
+            len(re.sub(r"\s+", "", text)),
+            target_words,
+        )
+        if len(normalized_paragraphs) < min_paragraphs and normalized_paragraphs:
+            normalized_paragraphs = cls._split_long_generated_paragraph(
+                "".join(normalized_paragraphs),
+                max_chars=max(260, math.ceil(len(re.sub(r"\s+", "", text)) / min_paragraphs)),
+            )
+
+        return "\n\n".join(paragraph for paragraph in normalized_paragraphs if paragraph).strip()
+
+    @classmethod
+    def _extract_generated_paragraphs(cls, content: str) -> List[str]:
+        text = cls._normalize_generated_line_breaks(content)
+        paragraphs = [paragraph.strip() for paragraph in re.split(r"\n\s*\n+", text) if paragraph.strip()]
+        if len(paragraphs) <= 1:
+            paragraphs = [paragraph.strip() for paragraph in re.split(r"\n+", text) if paragraph.strip()]
+        return [cls._collapse_inline_whitespace(paragraph) for paragraph in paragraphs if paragraph]
+
+    @classmethod
+    def _split_long_generated_paragraph(
+        cls,
+        paragraph: str,
+        *,
+        max_chars: int = MAX_GENERATED_PARAGRAPH_CHARS,
+    ) -> List[str]:
+        clean = cls._collapse_inline_whitespace(paragraph)
+        if len(re.sub(r"\s+", "", clean)) <= max_chars:
+            return [clean] if clean else []
+
+        sentences = [part.strip() for part in re.findall(r".+?(?:[。！？!?；;]|$)", clean) if part.strip()]
+        if len(sentences) <= 1:
+            return [clean[index:index + max_chars].strip() for index in range(0, len(clean), max_chars)]
+
+        paragraphs: List[str] = []
+        current = ""
+        for sentence in sentences:
+            current_length = len(re.sub(r"\s+", "", current))
+            sentence_length = len(re.sub(r"\s+", "", sentence))
+            if current and current_length >= 180 and current_length + sentence_length > max_chars:
+                paragraphs.append(current.strip())
+                current = sentence
+            else:
+                current = f"{current}{sentence}"
+
+        if current.strip():
+            paragraphs.append(current.strip())
+
+        if len(paragraphs) > 1 and len(re.sub(r"\s+", "", paragraphs[-1])) < 80:
+            tail = paragraphs.pop()
+            paragraphs[-1] = f"{paragraphs[-1]}{tail}"
+
+        return paragraphs
+
+    @classmethod
+    def _sanitize_generated_text(cls, content: str) -> str:
+        return cls._normalize_generated_line_breaks(content).replace("\ufeff", "").strip()
+
+    @staticmethod
+    def _normalize_generated_line_breaks(content: str) -> str:
+        return (
+            str(content or "")
+            .replace("\\r\\n", "\n")
+            .replace("\\n", "\n")
+            .replace("\\r", "\n")
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+            .replace("\u2028", "\n")
+            .replace("\u2029", "\n")
+            .replace("\u00a0", " ")
+        )
+
+    @staticmethod
+    def _collapse_inline_whitespace(content: str) -> str:
+        lines = [re.sub(r"[ \t]+", " ", line).strip() for line in str(content or "").split("\n")]
+        return re.sub(r" {2,}", " ", "".join(line for line in lines if line)).strip()
+
+    @staticmethod
+    def _limit_prompt_text(content: str, limit: int) -> str:
+        text = str(content or "").strip()
+        if len(text) <= limit:
+            return text
+        return f"{text[:limit].rstrip()}..."
 
     async def rewrite_story_selection(
         self,
