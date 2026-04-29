@@ -1,8 +1,10 @@
 const CONFIG_ENDPOINT = "/api/public-config";
+const SUPABASE_BROWSER_SDK_URL = "/vendor/supabase.js";
 export const DEFAULT_NEXT_PATH = "/create?stage=basic";
 
 let configPromise = null;
 let clientPromise = null;
+let sdkLoadPromise = null;
 
 function resolveLocalPath(pathname) {
   const candidate = String(pathname || "").trim();
@@ -27,9 +29,92 @@ export function getRequestedNextPath(fallbackPath = DEFAULT_NEXT_PATH) {
   return resolveLocalPath(params.get("next") || fallbackPath);
 }
 
+export function getPostAuthNextPath(nextPath = `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+  const safeNextPath = resolveLocalPath(nextPath);
+
+  try {
+    const resolvedUrl = new URL(safeNextPath, window.location.origin);
+    if (resolvedUrl.pathname === "/create") {
+      const shouldRecoverGuestWorkspace = resolvedUrl.searchParams.has("guest");
+      resolvedUrl.searchParams.delete("guest");
+      if (shouldRecoverGuestWorkspace) {
+        resolvedUrl.searchParams.set("guestTransfer", "1");
+      }
+    }
+    return `${resolvedUrl.pathname}${resolvedUrl.search}${resolvedUrl.hash}` || DEFAULT_NEXT_PATH;
+  } catch (error) {
+    console.warn("Failed to normalize post-auth next path", error);
+    return DEFAULT_NEXT_PATH;
+  }
+}
+
 export function buildAuthUrl(nextPath = `${window.location.pathname}${window.location.search}${window.location.hash}`) {
   const safeNextPath = resolveLocalPath(nextPath);
   return `/auth?next=${encodeURIComponent(safeNextPath)}`;
+}
+
+function cleanupSupabaseSdkScript() {
+  document
+    .querySelectorAll('script[data-supabase-sdk="true"]')
+    .forEach((script) => script.remove());
+}
+
+function waitForSupabaseSdk(script) {
+  return new Promise((resolve, reject) => {
+    if (typeof window.supabase?.createClient === "function") {
+      resolve(window.supabase);
+      return;
+    }
+
+    const cleanup = () => {
+      script.removeEventListener("load", handleLoad);
+      script.removeEventListener("error", handleError);
+    };
+
+    const handleLoad = () => {
+      cleanup();
+      if (typeof window.supabase?.createClient === "function") {
+        resolve(window.supabase);
+        return;
+      }
+      reject(new Error("\u767b\u5f55 SDK \u521d\u59cb\u5316\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002"));
+    };
+
+    const handleError = () => {
+      cleanup();
+      reject(new Error("\u767b\u5f55\u670d\u52a1\u8d44\u6e90\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002"));
+    };
+
+    script.addEventListener("load", handleLoad, { once: true });
+    script.addEventListener("error", handleError, { once: true });
+  });
+}
+
+export async function ensureSupabaseBrowserSdk() {
+  if (typeof window.supabase?.createClient === "function") {
+    return window.supabase;
+  }
+
+  if (!sdkLoadPromise) {
+    sdkLoadPromise = (async () => {
+      let script = document.querySelector('script[data-supabase-sdk="true"]');
+      if (!(script instanceof HTMLScriptElement)) {
+        script = document.createElement("script");
+        script.src = SUPABASE_BROWSER_SDK_URL;
+        script.async = true;
+        script.dataset.supabaseSdk = "true";
+        document.head.appendChild(script);
+      }
+
+      return waitForSupabaseSdk(script);
+    })().catch((error) => {
+      sdkLoadPromise = null;
+      cleanupSupabaseSdkScript();
+      throw error;
+    });
+  }
+
+  return sdkLoadPromise;
 }
 
 export async function getAuthConfig() {
@@ -45,7 +130,11 @@ export async function getAuthConfig() {
         authEnabled: Boolean(config?.authEnabled),
         supabaseUrl: String(config?.supabaseUrl || "").trim(),
         supabaseAnonKey: String(config?.supabaseAnonKey || "").trim(),
-      }));
+      }))
+      .catch((error) => {
+        configPromise = null;
+        throw error;
+      });
   }
 
   return configPromise;
@@ -63,6 +152,7 @@ export async function getSupabaseClient() {
         throw new Error("当前项目还没有配置 Supabase 登录参数，请先检查 .env 里的 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY。");
       }
 
+      await ensureSupabaseBrowserSdk();
       const createClient = window.supabase?.createClient;
       if (typeof createClient !== "function") {
         throw new Error("Supabase 浏览器 SDK 未加载，请刷新页面后重试。");
@@ -77,7 +167,10 @@ export async function getSupabaseClient() {
       });
       window.__storyGenerationSupabaseClient = client;
       return client;
-    })();
+    })().catch((error) => {
+      clientPromise = null;
+      throw error;
+    });
   }
 
   return clientPromise;

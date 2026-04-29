@@ -1,11 +1,11 @@
-import { DEFAULT_NEXT_PATH, getCurrentUser, getRequestedNextPath, getSupabaseClient, getUserContact, getUserDisplayName, getUserInitial, isAnonymousUser, subscribeToAuthChanges } from "./src/auth-client.js";
+import { DEFAULT_NEXT_PATH, getCurrentUser, getPostAuthNextPath, getRequestedNextPath, getSupabaseClient, getUserContact, getUserDisplayName, getUserInitial, isAnonymousUser, subscribeToAuthChanges } from "./src/auth-client.js";
 
 const state = {
   supabase: null,
   currentUser: null,
   mode: "login",
   loading: false,
-  nextPath: getRequestedNextPath(DEFAULT_NEXT_PATH),
+  nextPath: getPostAuthNextPath(getRequestedNextPath(DEFAULT_NEXT_PATH)),
   redirectTimer: null,
   authCleanup: null,
 };

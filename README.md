@@ -87,7 +87,7 @@ Python 依赖：
 pip install -r requirements.txt
 ```
 
-如果你准备使用本地维护的前端依赖，可额外执行：
+如果你准备使用本地维护的前端依赖，可执行：
 
 ```bash
 npm install

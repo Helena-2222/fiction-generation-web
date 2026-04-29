@@ -13,7 +13,7 @@ from app.routers import outline_router, story_router, character_router, export_r
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 STATIC_DIR = BASE_DIR / "static"
-SUPABASE_BROWSER_BUNDLE = BASE_DIR / "node_modules" / "@supabase" / "supabase-js" / "dist" / "umd" / "supabase.js"
+SUPABASE_BROWSER_BUNDLE = STATIC_DIR / "vendor" / "supabase.js"
 
 app = FastAPI(title="AI 协同小说创作 WEB", version="1.0.0")
 app.add_middleware(

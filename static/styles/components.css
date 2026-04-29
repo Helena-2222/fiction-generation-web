@@ -1988,8 +1988,8 @@ body.neuro-panel-open #stage-story .prose-content {
   position: fixed;
   z-index: 1;
   width: var(--guide-note-size);
-  height: var(--guide-note-size);
-  padding: 20px 18px 18px;
+  height: calc(var(--guide-note-size) - 14px);
+  padding: 18px 18px 10px;
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;

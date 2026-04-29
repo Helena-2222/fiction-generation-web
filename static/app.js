@@ -3,7 +3,7 @@ import { state } from './src/state.js';
 import { GUEST_WORKSPACE_STORAGE_KEY } from './src/constants.js';
 import { generateId, normalizeFavoriteQuote, formatFavoriteTime, formatHistoryTime, sanitizeFilename, escapeHtml, clamp } from './src/utils.js';
 import { postJson, getJson } from './src/api.js';
-import { DEFAULT_NEXT_PATH, buildAuthUrl, getCurrentUser, getUserContact, getUserDisplayName, getUserInitial, isAnonymousUser, requireAuth, signOut, subscribeToAuthChanges } from './src/auth-client.js';
+import { DEFAULT_NEXT_PATH, buildAuthUrl, getCurrentUser, getPostAuthNextPath, getUserContact, getUserDisplayName, getUserInitial, isAnonymousUser, requireAuth, signOut, subscribeToAuthChanges } from './src/auth-client.js';
 
 function buildInitialWorkspaceSnapshot() {
   return {
@@ -73,6 +73,30 @@ function clearStageOverrideFromUrl() {
     window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
   } catch (error) {
     console.warn("清理页面阶段参数失败：", error);
+  }
+}
+
+function isGuestTransferRequest() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("guestTransfer") === "1";
+  } catch (error) {
+    console.warn("读取游客迁移参数失败：", error);
+    return false;
+  }
+}
+
+function clearGuestTransferFromUrl() {
+  if (!window.history?.replaceState) {
+    return;
+  }
+
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("guestTransfer");
+    window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+  } catch (error) {
+    console.warn("清理游客迁移参数失败：", error);
   }
 }
 
@@ -196,6 +220,7 @@ const elements = {
   sidebarProfileName: document.querySelector("#sidebar-profile-name"),
   sidebarProfileNote: document.querySelector("#sidebar-profile-note"),
   sidebarProfileEmail: document.querySelector("#sidebar-profile-email"),
+  sidebarLoginLink: document.querySelector("#sidebar-login-link"),
   sidebarLogoutButton: document.querySelector("#sidebar-logout-button"),
   favoriteList: document.querySelector("#favorite-list"),
   favoriteCountBadge: document.querySelector("#favorite-count-badge"),
@@ -671,6 +696,10 @@ function getCurrentCreatePath() {
   return `${window.location.pathname}${window.location.search}${window.location.hash}` || DEFAULT_NEXT_PATH;
 }
 
+function getGuestLoginRedirectPath() {
+  return getPostAuthNextPath(getCurrentCreatePath());
+}
+
 function restoreSidebarAuthUi() {
   if (elements.sidebarAvatarToggle) {
     elements.sidebarAvatarToggle.classList.remove("is-authenticated");
@@ -694,6 +723,12 @@ function restoreSidebarAuthUi() {
 
   if (elements.sidebarProfileEmail) {
     elements.sidebarProfileEmail.textContent = "";
+  }
+
+  if (elements.sidebarLoginLink) {
+    elements.sidebarLoginLink.href = "/auth";
+    elements.sidebarLoginLink.classList.add("hidden");
+    elements.sidebarLoginLink.setAttribute("aria-hidden", "true");
   }
 
   if (elements.sidebarLogoutButton) {
@@ -727,6 +762,12 @@ function renderGuestSidebarUi() {
 
   if (elements.sidebarProfileEmail) {
     elements.sidebarProfileEmail.textContent = "未登录";
+  }
+
+  if (elements.sidebarLoginLink) {
+    elements.sidebarLoginLink.href = buildAuthUrl(getGuestLoginRedirectPath());
+    elements.sidebarLoginLink.classList.remove("hidden");
+    elements.sidebarLoginLink.setAttribute("aria-hidden", "false");
   }
 
   if (elements.sidebarLogoutButton) {
@@ -769,6 +810,12 @@ function renderSidebarAuthUi(user) {
 
   if (elements.sidebarProfileEmail) {
     elements.sidebarProfileEmail.textContent = contact;
+  }
+
+  if (elements.sidebarLoginLink) {
+    elements.sidebarLoginLink.href = "/auth";
+    elements.sidebarLoginLink.classList.add("hidden");
+    elements.sidebarLoginLink.setAttribute("aria-hidden", "true");
   }
 
   const shouldShowLogout = !isAnonymousUser(user);
@@ -1056,6 +1103,9 @@ async function init() {
   });
   if (requestedStageOverride) {
     clearStageOverrideFromUrl();
+  }
+  if (isGuestTransferRequest()) {
+    clearGuestTransferFromUrl();
   }
 }
 
@@ -1488,21 +1538,6 @@ function syncGuideProgressForStage(previousStage, nextStage) {
     changed = true;
   }
 
-  if (previousStage === "characters" && nextStage !== "characters") {
-    if (!progress.characters_intro_completed) {
-      progress.characters_intro_completed = true;
-      changed = true;
-    }
-    if (progress.characters_graph_unlocked && !progress.characters_graph_completed) {
-      progress.characters_graph_completed = true;
-      changed = true;
-    }
-    if (progress.characters_ai_unlocked && !progress.characters_ai_completed) {
-      progress.characters_ai_completed = true;
-      changed = true;
-    }
-  }
-
   if (nextStage === "outline" && !progress.outline_intro_unlocked) {
     progress.outline_intro_unlocked = true;
     changed = true;
@@ -1569,14 +1604,14 @@ function getActiveGuideState(progress) {
   }
 
   if (state.currentStage === "characters") {
-    if (progress.characters_ai_unlocked && !progress.characters_ai_completed) {
-      return { panel: null, noteKey: "characters_ai" };
+    if (!progress.characters_intro_completed) {
+      return { panel: null, noteKey: "characters_intro" };
     }
     if (progress.characters_graph_unlocked && !progress.characters_graph_completed) {
       return { panel: null, noteKey: "characters_graph" };
     }
-    if (!progress.characters_intro_completed) {
-      return { panel: null, noteKey: "characters_intro" };
+    if (progress.characters_ai_unlocked && !progress.characters_ai_completed) {
+      return { panel: null, noteKey: "characters_ai" };
     }
     return { panel: null, noteKey: null };
   }
@@ -1876,7 +1911,7 @@ function positionGuideOverlay() {
     item.arrowElement.style.display = "";
 
     const noteRect = item.noteElement.getBoundingClientRect();
-    const position = getGuideNotePosition(targetRect, noteRect, item.config.placement || "right");
+    const position = getGuideNotePosition(targetRect, noteRect, item.config);
     item.noteElement.style.left = `${position.left}px`;
     item.noteElement.style.top = `${position.top}px`;
 
@@ -1892,8 +1927,11 @@ function positionGuideOverlay() {
   });
 }
 
-function getGuideNotePosition(targetRect, noteRect, placement) {
+function getGuideNotePosition(targetRect, noteRect, config = {}) {
   const gap = 26;
+  const placement = config.placement || "right";
+  const offsetX = Number(config.offsetX) || 0;
+  const offsetY = Number(config.offsetY) || 0;
   let left = targetRect.right + gap;
   let top = targetRect.top + (targetRect.height - noteRect.height) / 2;
 
@@ -1920,8 +1958,8 @@ function getGuideNotePosition(targetRect, noteRect, placement) {
   const maxLeft = Math.max(GUIDE_VIEWPORT_MARGIN, window.innerWidth - noteRect.width - GUIDE_VIEWPORT_MARGIN);
   const maxTop = Math.max(GUIDE_VIEWPORT_MARGIN, window.innerHeight - noteRect.height - GUIDE_VIEWPORT_MARGIN);
   return {
-    left: clamp(left, GUIDE_VIEWPORT_MARGIN, maxLeft),
-    top: clamp(top, GUIDE_VIEWPORT_MARGIN, maxTop),
+    left: clamp(clamp(left, GUIDE_VIEWPORT_MARGIN, maxLeft) + offsetX, GUIDE_VIEWPORT_MARGIN, maxLeft),
+    top: clamp(clamp(top, GUIDE_VIEWPORT_MARGIN, maxTop) + offsetY, GUIDE_VIEWPORT_MARGIN, maxTop),
   };
 }
 
@@ -2030,28 +2068,11 @@ function unlockCharactersAiGuide() {
   }
 
   const progress = loadSeenGuides();
-  let changed = false;
-
-  if (!progress.characters_intro_completed) {
-    progress.characters_intro_completed = true;
-    changed = true;
-  }
-  if (!progress.characters_graph_unlocked) {
-    progress.characters_graph_unlocked = true;
-    changed = true;
-  }
-  if (!progress.characters_graph_completed) {
-    progress.characters_graph_completed = true;
-    changed = true;
-  }
-  if (!progress.characters_ai_unlocked) {
-    progress.characters_ai_unlocked = true;
-    changed = true;
-  }
-  if (!changed) {
+  if (progress.characters_ai_unlocked) {
     return;
   }
 
+  progress.characters_ai_unlocked = true;
   saveSeenGuides(progress);
   syncTutorialGuidance(true);
 }
@@ -2126,9 +2147,10 @@ function handleGuidePointerDown(event) {
       progress.basic_flow_completed = true;
       changed = true;
     }
-  } else if (state.currentStage === "characters" && progress.characters_ai_unlocked && !progress.characters_ai_completed) {
-    if (isGuideDismissTarget(target)) {
-      progress.characters_ai_completed = true;
+  } else if (state.currentStage === "characters" && !progress.characters_intro_completed) {
+    if (target.closest("#rel-area, #character-graph-stage, #graph-canvas, #graph-nodes, #graph-svg")) {
+      progress.characters_intro_completed = true;
+      progress.characters_graph_unlocked = true;
       changed = true;
     }
   } else if (state.currentStage === "characters" && progress.characters_graph_unlocked && !progress.characters_graph_completed) {
@@ -2136,10 +2158,9 @@ function handleGuidePointerDown(event) {
       progress.characters_graph_completed = true;
       changed = true;
     }
-  } else if (state.currentStage === "characters" && !progress.characters_intro_completed) {
-    if (target.closest("#rel-area, #character-graph-stage, #graph-canvas, #graph-nodes, #graph-svg")) {
-      progress.characters_intro_completed = true;
-      progress.characters_graph_unlocked = true;
+  } else if (state.currentStage === "characters" && progress.characters_ai_unlocked && !progress.characters_ai_completed) {
+    if (isGuideDismissTarget(target)) {
+      progress.characters_ai_completed = true;
       changed = true;
     }
   } else if (state.currentStage === "outline" && progress.outline_tools_unlocked && !progress.outline_tools_completed) {
@@ -2206,7 +2227,13 @@ function loadWorkspaceSnapshot() {
     let raw = window.localStorage.getItem(storageKey);
     guestWorkspaceRecoveredForSession = false;
 
-    if (!raw && !createGuestMode) {
+    if (!createGuestMode && isGuestTransferRequest()) {
+      const guestRaw = window.localStorage.getItem(GUEST_WORKSPACE_STORAGE_KEY);
+      if (guestRaw) {
+        raw = guestRaw;
+        guestWorkspaceRecoveredForSession = true;
+      }
+    } else if (!raw && !createGuestMode) {
       const guestRaw = window.localStorage.getItem(GUEST_WORKSPACE_STORAGE_KEY);
       if (guestRaw) {
         raw = guestRaw;

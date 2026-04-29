@@ -29,6 +29,88 @@ from app.models import (
 
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "llm" / "prompts"
 DEBUG_RELATIONS_PATH = Path(__file__).resolve().parents[2] / "test" / "test.txt"
+DETAIL_PROMPT_TEMPLATE = "detail_prompt.txt"
+DETAIL_SPECIAL_PROMPTS = {
+    "plot_driven": {
+        "label": "情节驱动型强化版",
+        "template_name": "detail_writing/detail_prompt_plot_driven.txt",
+    },
+    "character_driven": {
+        "label": "人物驱动型强化版",
+        "template_name": "detail_writing/detail_prompt_character_driven.txt",
+    },
+    "immersive": {
+        "label": "沉浸型强化版",
+        "template_name": "detail_writing/detail_prompt_immersive.txt",
+    },
+}
+DETAIL_PROMPT_KEYWORDS = {
+    "plot_driven": (
+        "悬疑",
+        "科幻",
+        "奇幻",
+        "推理",
+        "侦探",
+        "冒险",
+        "反转",
+        "调查",
+        "谜案",
+        "犯罪",
+        "追踪",
+        "逃亡",
+        "谍战",
+        "夺宝",
+        "阴谋",
+        "惊悚",
+        "解谜",
+        "线索",
+        "survival",
+        "mystery",
+        "thriller",
+        "adventure",
+        "crime",
+        "detective",
+    ),
+    "character_driven": (
+        "成长",
+        "情感",
+        "爱情",
+        "文学",
+        "现实主义",
+        "历史",
+        "家庭",
+        "青春",
+        "伦理",
+        "关系",
+        "人物",
+        "治愈",
+        "回忆",
+        "婚姻",
+        "心灵",
+        "coming-of-age",
+        "literary",
+        "romance",
+        "family",
+    ),
+    "immersive": (
+        "极简",
+        "高张力",
+        "沉浸",
+        "压迫",
+        "实时",
+        "切片",
+        "意识流",
+        "实验",
+        "微观",
+        "临场",
+        "一镜到底",
+        "恐怖",
+        "immersive",
+        "minimalist",
+        "slice of life",
+        "stream of consciousness",
+    ),
+}
 
 
 class StageContext(TypedDict):
@@ -188,9 +270,10 @@ class StoryService:
                 "stage_content": stage_context["content"],
                 "stage_chapters": stage_chapters,
             }
+            detail_time_blocks = self._build_detail_prompt_time_blocks(story, chapter.target_words)
 
             user_prompt = _render_prompt(
-                "detail_prompt.txt",
+                DETAIL_PROMPT_TEMPLATE,
                 {
                     "CHAPTER_NUMBER": str(chapter.chapter_number),
                     "STORY_JSON": self._build_compact_story_prompt_json(
@@ -207,6 +290,7 @@ class StoryService:
                     ) if continuity_summaries else "尚无前文，请从开篇写起。",
                     "CHAPTER_SPEC": json.dumps(chapter_spec, ensure_ascii=False, indent=2),
                     "CHAPTER_TITLE_JSON": json.dumps(chapter.title, ensure_ascii=False),
+                    **detail_time_blocks,
                 },
             )
 
@@ -451,6 +535,138 @@ class StoryService:
                 "STORY_STYLE": style or "待模型推断",
             },
         )
+
+    @staticmethod
+    def _detail_prompt_signal_text(story: StoryDraftRequest) -> str:
+        parts = [
+            story.genre,
+            story.style,
+            story.synopsis,
+            story.worldview_time,
+            story.worldview_physical,
+            story.worldview_social,
+        ]
+        cleaned_parts = [re.sub(r"\s+", " ", str(part or "")).strip().casefold() for part in parts]
+        return " ".join(part for part in cleaned_parts if part)
+
+    @staticmethod
+    def _detail_length_strategy(total_words: int) -> Dict[str, str]:
+        if total_words < 3000:
+            return {
+                "key": "flash",
+                "label": "极短篇",
+                "rule": "按短篇单一时间策略执行，尽量只保留一条主时间线，聚焦最关键的瞬间或跨越。",
+            }
+        if total_words <= 15000:
+            return {
+                "key": "short",
+                "label": "短篇",
+                "rule": "只能使用单一时间策略。",
+            }
+        if total_words < 20000:
+            return {
+                "key": "short_plus",
+                "label": "短篇偏长",
+                "rule": "仍以单一主时间策略为先，必要时只做非常克制的插叙，避免多条时间线平均分配。",
+            }
+        if total_words <= 40000:
+            return {
+                "key": "mid",
+                "label": "中短篇",
+                "rule": "允许双时间节奏结构，可用主线时间配合插叙或回忆，但每章仍只聚焦一个意义单位。",
+            }
+        return {
+            "key": "extended",
+            "label": "扩展篇幅",
+            "rule": "超出中短篇上限时，必须有时间层级结构，例如：主线：3天，副线：3年，背景：30年。",
+        }
+
+    @classmethod
+    def _detail_prompt_match_hits(cls, signal_text: str) -> Dict[str, List[str]]:
+        return {
+            mode: [keyword for keyword in keywords if keyword.casefold() in signal_text]
+            for mode, keywords in DETAIL_PROMPT_KEYWORDS.items()
+        }
+
+    @staticmethod
+    def _break_detail_prompt_tie(
+        candidates: List[str],
+        length_key: str,
+        chapter_target_words: int,
+    ) -> str:
+        if "immersive" in candidates and length_key in {"flash", "short"} and chapter_target_words <= 1800:
+            return "immersive"
+        if "character_driven" in candidates and length_key in {"mid", "extended"}:
+            return "character_driven"
+        if "plot_driven" in candidates:
+            return "plot_driven"
+        return candidates[0]
+
+    @staticmethod
+    def _fallback_detail_prompt(length_key: str, chapter_target_words: int) -> str:
+        if length_key in {"flash", "short"} and chapter_target_words <= 1800:
+            return "immersive"
+        if length_key in {"mid", "extended"}:
+            return "character_driven"
+        return "plot_driven"
+
+    @classmethod
+    def _select_detail_prompt_mode(
+        cls,
+        story: StoryDraftRequest,
+        chapter_target_words: int,
+    ) -> Dict[str, str]:
+        signal_text = cls._detail_prompt_signal_text(story)
+        chapter_words = story.chapter_words or chapter_target_words
+        length_strategy = cls._detail_length_strategy(story.total_words)
+        hits = cls._detail_prompt_match_hits(signal_text)
+        scores = {mode: len(items) for mode, items in hits.items()}
+        best_score = max(scores.values())
+
+        if best_score > 0:
+            candidates = [mode for mode, score in scores.items() if score == best_score]
+            selected_mode = cls._break_detail_prompt_tie(
+                candidates,
+                length_strategy["key"],
+                chapter_words,
+            )
+            hit_text = " / ".join(hits[selected_mode][:4])
+            reason = (
+                f"题材信号命中：{hit_text}；总字数 {story.total_words}，"
+                f"单章目标约 {chapter_words} 字，按“{length_strategy['label']}”策略执行。"
+            )
+        else:
+            selected_mode = cls._fallback_detail_prompt(length_strategy["key"], chapter_words)
+            reason = (
+                f"题材信号不够明确，因此参考总字数 {story.total_words} 与单章目标约 "
+                f"{chapter_words} 字，就近匹配“{DETAIL_SPECIAL_PROMPTS[selected_mode]['label']}”。"
+            )
+
+        selected_prompt = DETAIL_SPECIAL_PROMPTS[selected_mode]
+        return {
+            "mode_label": selected_prompt["label"],
+            "template_name": selected_prompt["template_name"],
+            "reason": reason,
+            "length_label": length_strategy["label"],
+            "length_rule": length_strategy["rule"],
+        }
+
+    @classmethod
+    def _build_detail_prompt_time_blocks(
+        cls,
+        story: StoryDraftRequest,
+        chapter_target_words: int,
+    ) -> Dict[str, str]:
+        selection = cls._select_detail_prompt_mode(story, chapter_target_words)
+        selection_lines = [
+            f"- 自动选择的时间强化模式：{selection['mode_label']}",
+            f"- 选择依据：{selection['reason']}",
+            f"- 篇幅时间约束：{selection['length_label']}；{selection['length_rule']}",
+        ]
+        return {
+            "TIME_CONTROL_SELECTION": "\n".join(selection_lines),
+            "SPECIAL_TIME_PROMPT_BLOCK": _load_prompt_template(selection["template_name"]),
+        }
 
     @staticmethod
     def _update_character_name(

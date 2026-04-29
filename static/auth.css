@@ -18,6 +18,8 @@
   --auth-radius: 14px;
   --auth-radius-sm: 8px;
   --auth-radius-pill: 100px;
+  --auth-font-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+  --auth-font-serif: "Source Han Serif SC", "Songti SC", "STSong", "SimSun", serif;
 }
 
 *,
@@ -35,7 +37,7 @@ body {
 body {
   background: var(--auth-bg);
   color: var(--auth-text-primary);
-  font-family: "Noto Sans SC", sans-serif;
+  font-family: var(--auth-font-sans);
 }
 
 .hidden {
@@ -89,7 +91,7 @@ body {
   left: 32px;
   z-index: 10;
   color: var(--auth-text-primary);
-  font-family: "Noto Serif SC", serif;
+  font-family: var(--auth-font-serif);
   font-size: 18px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -134,7 +136,7 @@ body {
 .auth-user-name {
   margin: 0 0 6px;
   color: var(--auth-text-primary);
-  font-family: "Noto Serif SC", serif;
+  font-family: var(--auth-font-serif);
   font-size: 26px;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -340,7 +342,7 @@ body {
   border-radius: var(--auth-radius-sm);
   background: var(--auth-accent);
   color: #faf8f4;
-  font-family: "Noto Serif SC", serif;
+  font-family: var(--auth-font-serif);
   font-size: 15px;
   font-weight: 500;
   letter-spacing: 0.05em;
@@ -424,7 +426,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: "Noto Serif SC", serif;
+  font-family: var(--auth-font-serif);
   font-size: 24px;
   font-weight: 600;
 }
@@ -492,7 +494,7 @@ body {
   right: 40px;
   bottom: 32px;
   color: var(--auth-text-light);
-  font-family: "Noto Serif SC", serif;
+  font-family: var(--auth-font-serif);
   font-size: 11px;
   letter-spacing: 0.1em;
   writing-mode: vertical-rl;

@@ -66,6 +66,7 @@ export const GUIDE_NOTES = {
     placement: "top-right",
     size: "md",
     rotation: -2,
+    offsetY: 60,
     text: "进入角色档案环节 👤 你可以为每个角色填写详细设定，点击标签切换编辑不同角色。",
   },
   characters_graph: {
@@ -74,6 +75,7 @@ export const GUIDE_NOTES = {
     placement: "top-left",
     size: "md",
     rotation: 2,
+    offsetY: 130,
     text: "编辑完档案后，可以在右侧的角色关系图中，点击角色节点并拖拽来建立角色之间的关系连线。",
   },
   characters_ai: {
