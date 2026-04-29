@@ -31,6 +31,11 @@ function buildInitialWorkspaceSnapshot() {
     outline: null,
     generatedStory: null,
     favoriteQuotes: [],
+    workspaceLock: {
+      locked: false,
+      lockedAt: null,
+      signature: "",
+    },
     form: {},
   };
 }
@@ -132,6 +137,20 @@ const FAVORITE_BUTTON_ICONS = {
     </svg>
   `,
 };
+const WORKSPACE_LOCK_ICONS = {
+  open: `
+    <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M4 6V4.5a3 3 0 0 1 5.2-2"></path>
+      <rect x="3" y="6" width="8" height="6" rx="1.4"></rect>
+    </svg>
+  `,
+  closed: `
+    <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M4 6V4.5a3 3 0 0 1 6 0V6"></path>
+      <rect x="3" y="6" width="8" height="6" rx="1.4"></rect>
+    </svg>
+  `,
+};
 const llmActivity = {
   active: false,
   runId: 0,
@@ -145,6 +164,12 @@ const llmTaskController = {
   currentTask: null,
   pollTimer: null,
   pollInFlight: false,
+};
+const workspaceLockState = {
+  locked: false,
+  lockedAt: "",
+  signature: "",
+  pending: false,
 };
 const DEFAULT_SIDEBAR_AVATAR_ICON = `
   <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -190,6 +215,7 @@ function resetCloudWorkspaceSyncState() {
   pendingCloudWorkspaceSnapshot = null;
   lastCloudWorkspaceSnapshotJson = "";
   lastCloudWorkspaceSyncErrorAt = 0;
+  setWorkspaceLockState({ locked: false, lockedAt: "", signature: "" });
 }
 
 function waitForDelay(ms) {
@@ -318,6 +344,7 @@ const elements = {
   exportOutline: document.querySelector("#export-outline"),
   regenerateOutline: document.querySelector("#regenerate-outline"),
   generateStory: document.querySelector("#generate-story"),
+  workspaceLock: document.querySelector("#workspace-lock"),
   exportSettings: document.querySelector("#export-settings"),
   exportAllStory: document.querySelector("#export-all-story"),
   exportEverything: document.querySelector("#export-everything"),
@@ -1069,6 +1096,7 @@ async function init() {
   elements.exportOutline.addEventListener("click", handleOutlineExport);
   elements.regenerateOutline.addEventListener("click", handleOutlineRegenerate);
   elements.generateStory.addEventListener("click", handleStoryGenerate);
+  elements.workspaceLock?.addEventListener("click", handleWorkspaceLockClick);
   elements.exportSettings.addEventListener("click", handleExportSettings);
   elements.exportAllStory.addEventListener("click", handleExportAllStory);
   elements.exportEverything.addEventListener("click", handleExportEverything);
@@ -2324,15 +2352,19 @@ async function loadWorkspaceSnapshot() {
   try {
     const cloudSnapshot = await fetchUserWorkspaceSnapshot(currentAuthUserId);
     if (cloudSnapshot) {
+      if (isLockedWorkspaceSnapshot(cloudSnapshot)) {
+        markCloudWorkspaceSnapshotSynced(cloudSnapshot);
+        cacheWorkspaceSnapshotLocally(cloudSnapshot, "缓存已锁定账号工作区失败：");
+        return cloudSnapshot;
+      }
+
       if (guestWorkspaceRecoveredForSession && localSnapshot) {
         const mergedSnapshot = mergeWorkspaceSnapshotsForAccountTransfer(cloudSnapshot, localSnapshot);
         cacheWorkspaceSnapshotLocally(mergedSnapshot, "缓存迁移后的账号工作区失败：");
-        queueCloudWorkspaceSave(mergedSnapshot, { immediate: true });
         return mergedSnapshot;
       }
 
       if (shouldPreferLocalAccountSnapshot(localRecord, cloudSnapshot)) {
-        queueCloudWorkspaceSave(localSnapshot, { immediate: true });
         return localSnapshot;
       }
 
@@ -2344,9 +2376,6 @@ async function loadWorkspaceSnapshot() {
     console.warn("读取账号工作区失败，已回退到本地缓存：", error);
   }
 
-  if (localSnapshot) {
-    queueCloudWorkspaceSave(localSnapshot, { immediate: true });
-  }
   return localSnapshot;
 }
 
@@ -2440,12 +2469,67 @@ function getWorkspaceSnapshotTimestamp(snapshot) {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
+function isLockedWorkspaceSnapshot(snapshot) {
+  const lock = normalizeWorkspaceLock(snapshot?.workspaceLock);
+  return lock.locked && lock.signature && lock.signature === buildWorkspaceLockSignature(snapshot);
+}
+
+function normalizeWorkspaceLock(lock) {
+  const normalized = lock && typeof lock === "object" ? lock : {};
+  return {
+    locked: Boolean(normalized.locked),
+    lockedAt: String(normalized.lockedAt || "").trim(),
+    signature: String(normalized.signature || "").trim(),
+  };
+}
+
+function setWorkspaceLockState(lock) {
+  const normalized = normalizeWorkspaceLock(lock);
+  workspaceLockState.locked = normalized.locked;
+  workspaceLockState.lockedAt = normalized.lockedAt;
+  workspaceLockState.signature = normalized.signature;
+  updateWorkspaceLockActionState();
+}
+
+function syncWorkspaceLockStateFromSnapshot(snapshot) {
+  const lock = normalizeWorkspaceLock(snapshot?.workspaceLock);
+  const signature = buildWorkspaceLockSignature(snapshot || {});
+  setWorkspaceLockState({
+    locked: lock.locked && lock.signature === signature,
+    lockedAt: lock.lockedAt,
+    signature: lock.signature,
+  });
+}
+
+function buildWorkspaceLockSignature(snapshot) {
+  return JSON.stringify(buildWorkspaceLockComparableSnapshot(snapshot));
+}
+
+function buildWorkspaceLockComparableSnapshot(snapshot) {
+  const comparable = {
+    ...(snapshot && typeof snapshot === "object" ? snapshot : {}),
+  };
+  delete comparable.updatedAt;
+  delete comparable.workspaceLock;
+  delete comparable.currentStage;
+  delete comparable.activeCharacterId;
+  delete comparable.activeChapterNumber;
+  delete comparable.sidebarProfileOpen;
+  delete comparable.graphView;
+  return comparable;
+}
+
 function mergeWorkspaceSnapshotsForAccountTransfer(accountSnapshot, guestSnapshot) {
   const mergedSnapshot = {
     ...accountSnapshot,
     ...guestSnapshot,
     version: Math.max(Number(accountSnapshot?.version) || 0, Number(guestSnapshot?.version) || 0, 5),
     updatedAt: new Date().toISOString(),
+    workspaceLock: {
+      locked: false,
+      lockedAt: null,
+      signature: "",
+    },
   };
 
   mergedSnapshot.favoriteQuotes = mergeWorkspaceSnapshotEntries(
@@ -2690,13 +2774,17 @@ function handleWorkspacePageHide() {
 
 function saveWorkspaceSnapshot({ immediate = false } = {}) {
   const snapshot = buildWorkspaceSnapshot();
+  const signature = buildWorkspaceLockSignature(snapshot);
+  if (workspaceLockState.locked && workspaceLockState.signature && workspaceLockState.signature !== signature) {
+    setWorkspaceLockState({ locked: false, lockedAt: "", signature: "" });
+    snapshot.workspaceLock = normalizeWorkspaceLock(workspaceLockState);
+  }
   try {
     persistWorkspaceSnapshotToLocalStorage(snapshot);
   } catch (error) {
     console.warn("保存本地工作区缓存失败：", error);
   }
 
-  queueCloudWorkspaceSave(snapshot, { immediate });
   return snapshot;
 }
 
@@ -2756,6 +2844,7 @@ function buildWorkspaceSnapshot() {
     outline: state.outline,
     generatedStory: state.generatedStory,
     favoriteQuotes: state.favoriteQuotes.map((item) => ({ ...item })),
+    workspaceLock: normalizeWorkspaceLock(workspaceLockState),
     form: {
       customGenre: elements.customGenre.value,
       customStyle: elements.customStyle.value,
@@ -2835,6 +2924,7 @@ function applyWorkspaceSnapshot(snapshot) {
   if (!findGeneratedChapter(state.activeChapterNumber)) {
     state.activeChapterNumber = state.generatedStory?.chapters?.[0]?.chapter_number || null;
   }
+  syncWorkspaceLockStateFromSnapshot(snapshot);
 }
 
 function applyPersistedFormValues(form = {}) {
@@ -3065,10 +3155,33 @@ function updateOutputActionState() {
   elements.exportSettings.disabled = !canExportStoryOutputs;
   elements.exportAllStory.disabled = !canExportStoryOutputs;
   elements.exportEverything.disabled = !canExportStoryOutputs;
+  updateWorkspaceLockActionState();
   setStoryChapterRegenerationActionsDisabled(hasBlockingLlmTask());
   if (elements.outlineHistory) {
     elements.outlineHistory.disabled = !state.outlineHistory.length;
   }
+}
+
+function updateWorkspaceLockActionState() {
+  if (!elements.workspaceLock) {
+    return;
+  }
+
+  const canLockWorkspace = canExportGeneratedStoryOutputs();
+  const isPending = Boolean(workspaceLockState.pending);
+  const icon = elements.workspaceLock.querySelector(".icon-btn");
+  if (icon) {
+    icon.innerHTML = workspaceLockState.locked ? WORKSPACE_LOCK_ICONS.closed : WORKSPACE_LOCK_ICONS.open;
+  }
+  elements.workspaceLock.disabled = !canLockWorkspace || isPending || hasBlockingLlmTask();
+  elements.workspaceLock.classList.toggle("is-locked", workspaceLockState.locked);
+  elements.workspaceLock.setAttribute(
+    "aria-label",
+    workspaceLockState.locked ? "工作区已保存" : "保存工作区",
+  );
+  elements.workspaceLock.title = workspaceLockState.locked
+    ? "工作区已保存。内容更新后会自动开锁。"
+    : "保存当前工作区到账号";
 }
 
 function setStoryChapterRegenerationActionsDisabled(disabled) {
@@ -5542,6 +5655,56 @@ async function handleExportSettings() {
     setStatus("三步设定已导出为 Word 文档。", false);
   } catch (error) {
     setStatus(error.message || "导出设定失败。", false, true);
+  }
+}
+
+async function handleWorkspaceLockClick() {
+  if (!canExportGeneratedStoryOutputs()) {
+    setStatus("请先生成正文后再保存工作区。", false, true);
+    return;
+  }
+  if (!shouldUseCloudWorkspace()) {
+    setStatus("请先登录账号后再保存工作区。游客模式只能保存在当前浏览器。", false, true);
+    return;
+  }
+  if (!ensureNoBlockingLlmTask()) {
+    return;
+  }
+  if (!saveActStructureEdits(true)) {
+    return;
+  }
+
+  workspaceLockState.pending = true;
+  updateWorkspaceLockActionState();
+
+  try {
+    const lockedAt = new Date().toISOString();
+    const snapshot = buildWorkspaceSnapshot();
+    const signature = buildWorkspaceLockSignature(snapshot);
+    const lockedSnapshot = {
+      ...snapshot,
+      updatedAt: lockedAt,
+      workspaceLock: {
+        locked: true,
+        lockedAt,
+        signature,
+      },
+    };
+
+    await saveUserWorkspaceSnapshot(currentAuthUserId, lockedSnapshot);
+    try {
+      persistWorkspaceSnapshotToLocalStorage(lockedSnapshot);
+    } catch (persistError) {
+      console.warn("缓存已锁定工作区到本地失败：", persistError);
+    }
+    markCloudWorkspaceSnapshotSynced(lockedSnapshot);
+    setWorkspaceLockState(lockedSnapshot.workspaceLock);
+    setStatus("工作区已上锁保存。下次登录会恢复这份基本信息、角色、大纲和正文。", false);
+  } catch (error) {
+    notifyCloudWorkspaceSyncError(error);
+  } finally {
+    workspaceLockState.pending = false;
+    updateWorkspaceLockActionState();
   }
 }
 
