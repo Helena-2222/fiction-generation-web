@@ -8,7 +8,7 @@ from xml.sax.saxutils import escape
 
 
 DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-DEFAULT_EXPORT_STEM = "未命名作品_神经元脚本"
+DEFAULT_EXPORT_STEM = "未命名作品_Super Story 非凡故事"
 
 
 def sanitize_docx_filename(filename: str) -> str:
@@ -91,7 +91,7 @@ def _build_app_properties_xml() -> str:
     return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
             xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
-  <Application>Neuro Script Export</Application>
+  <Application>Super Story 非凡故事 Export</Application>
 </Properties>
 """
 
@@ -105,8 +105,8 @@ def _build_core_properties_xml(title: str, timestamp: str) -> str:
                    xmlns:dcmitype="http://purl.org/dc/dcmitype/"
                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <dc:title>{safe_title}</dc:title>
-  <dc:creator>Neuro Script</dc:creator>
-  <cp:lastModifiedBy>Neuro Script</cp:lastModifiedBy>
+  <dc:creator>Super Story 非凡故事</dc:creator>
+  <cp:lastModifiedBy>Super Story 非凡故事</cp:lastModifiedBy>
   <dcterms:created xsi:type="dcterms:W3CDTF">{timestamp}</dcterms:created>
   <dcterms:modified xsi:type="dcterms:W3CDTF">{timestamp}</dcterms:modified>
 </cp:coreProperties>

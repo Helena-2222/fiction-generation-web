@@ -5566,7 +5566,7 @@ async function handleOutlineExport() {
 
   try {
     await downloadDocxFile(
-      `${buildExportBaseName()}-大纲_神经元脚本.docx`,
+      `${buildExportBaseName()}-大纲_Super Story 非凡故事.docx`,
       state.outline.title || "未命名作品",
       buildOutlineExportText(),
     );
@@ -5579,7 +5579,7 @@ async function handleOutlineExport() {
 async function handleBasicExport() {
   try {
     await downloadDocxFile(
-      `${buildExportBaseName()}-基本信息_神经元脚本.docx`,
+      `${buildExportBaseName()}-基本信息_Super Story 非凡故事.docx`,
       resolveCurrentWorkTitle(),
       buildBasicInfoExportText(),
     );
@@ -5597,7 +5597,7 @@ async function exportBasicHistoryEntry(entryId) {
 
   try {
     await downloadDocxFile(
-      `${buildExportBaseName()}-${sanitizeFilename(entry.type || "基本信息历史")}_神经元脚本.docx`,
+      `${buildExportBaseName()}-${sanitizeFilename(entry.type || "基本信息历史")}_Super Story 非凡故事.docx`,
       resolveCurrentWorkTitle(),
       buildBasicInfoExportText(entry.snapshot),
     );
@@ -5610,7 +5610,7 @@ async function exportBasicHistoryEntry(entryId) {
 async function handleCharactersExport() {
   try {
     await downloadDocxFile(
-      `${buildExportBaseName()}-角色关系_神经元脚本.docx`,
+      `${buildExportBaseName()}-角色关系_Super Story 非凡故事.docx`,
       resolveCurrentWorkTitle(),
       buildCharactersExportText(),
     );
@@ -5628,7 +5628,7 @@ async function exportCharacterHistoryEntry(entryId) {
 
   try {
     await downloadDocxFile(
-      `${buildExportBaseName()}-${sanitizeFilename(entry.type || "角色关系历史")}_神经元脚本.docx`,
+      `${buildExportBaseName()}-${sanitizeFilename(entry.type || "角色关系历史")}_Super Story 非凡故事.docx`,
       resolveCurrentWorkTitle(),
       buildCharactersExportText(entry.snapshot),
     );
@@ -5648,7 +5648,7 @@ async function handleExportSettings() {
 
   try {
     await downloadDocxFile(
-      `${buildExportBaseName()}-导出设定_神经元脚本.docx`,
+      `${buildExportBaseName()}-导出设定_Super Story 非凡故事.docx`,
       resolveCurrentWorkTitle(),
       buildSettingsExportText(),
     );
@@ -5715,7 +5715,7 @@ async function handleExportAllStory() {
 
   try {
     await downloadDocxFile(
-      `${buildExportBaseName()}-全部正文_神经元脚本.docx`,
+      `${buildExportBaseName()}-全部正文_Super Story 非凡故事.docx`,
       state.generatedStory.title || state.outline?.title || "未命名作品",
       buildAllStoryExportText(),
     );
@@ -5735,7 +5735,7 @@ async function handleExportEverything() {
 
   try {
     await downloadDocxFile(
-      `${buildExportBaseName()}-导出全部_神经元脚本.docx`,
+      `${buildExportBaseName()}-导出全部_Super Story 非凡故事.docx`,
       resolveCurrentWorkTitle(),
       buildEverythingExportText(),
     );
@@ -5980,7 +5980,7 @@ async function exportSingleChapter(chapterNumber) {
 
   try {
     await downloadDocxFile(
-      `${buildExportBaseName()}-第${chapter.chapter_number}章-${sanitizeFilename(chapter.title)}_神经元脚本.docx`,
+      `${buildExportBaseName()}-第${chapter.chapter_number}章-${sanitizeFilename(chapter.title)}_Super Story 非凡故事.docx`,
       `${state.generatedStory?.title || state.outline?.title || "未命名作品"} 第${chapter.chapter_number}章`,
       buildSingleChapterExportText(chapter),
     );

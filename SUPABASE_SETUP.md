@@ -1,4 +1,4 @@
-# 神经元脚本 · Supabase 鉴权接入指南
+# Super Story 非凡故事 · Supabase 鉴权接入指南
 
 ## 一、项目初始化
 
