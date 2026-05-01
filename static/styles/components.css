@@ -551,6 +551,26 @@
   letter-spacing: var(--tracking-title);
 }
 
+.page-title-line {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.page-title.page-title-line {
+  margin-bottom: 0;
+}
+
+.page-title-line .page-subtitle {
+  display: inline;
+}
+
+.page-title-divider {
+  color: var(--text-secondary);
+  font-size: var(--text-body-lg);
+}
+
 .stage-header {
   display: flex;
   align-items: flex-start;

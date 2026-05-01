@@ -91,6 +91,65 @@ CREATE TRIGGER set_user_workspaces_updated_at
 NOTIFY pgrst, 'reload schema';
 ```
 
+如果需要启用“作品管理 / 单人多作品”，继续执行下面这段增量迁移 SQL，新增 `works` 表：
+
+```sql
+-- 单人多作品：每个用户可以拥有多部作品，每部作品保存一份独立创作快照
+CREATE TABLE IF NOT EXISTS public.works (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title       TEXT NOT NULL DEFAULT '未命名作品',
+  genre       TEXT,
+  style       TEXT,
+  status      TEXT NOT NULL DEFAULT 'active',
+  snapshot    JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.works ENABLE ROW LEVEL SECURITY;
+
+CREATE INDEX IF NOT EXISTS works_user_updated_idx
+  ON public.works (user_id, updated_at DESC);
+
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON TABLE public.works
+  TO authenticated;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'works'
+      AND policyname = 'works: 用户只能读写自己的作品'
+  ) THEN
+    CREATE POLICY "works: 用户只能读写自己的作品"
+      ON public.works FOR ALL
+      USING (auth.uid() = user_id)
+      WITH CHECK (auth.uid() = user_id);
+  END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_works_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS set_works_updated_at ON public.works;
+
+CREATE TRIGGER set_works_updated_at
+  BEFORE UPDATE ON public.works
+  FOR EACH ROW EXECUTE FUNCTION public.handle_works_updated_at();
+
+NOTIFY pgrst, 'reload schema';
+```
+
 如果页面仍提示“账号工作区同步失败”，先在 SQL Editor 里执行下面的检查：
 
 ```sql
@@ -156,16 +215,30 @@ CREATE TABLE public.user_workspaces (
   updated_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 单人多作品：每部作品保存一份独立创作快照
+CREATE TABLE public.works (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title       TEXT NOT NULL DEFAULT '未命名作品',
+  genre       TEXT,
+  style       TEXT,
+  status      TEXT NOT NULL DEFAULT 'active',
+  snapshot    JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- 行级别安全策略（Row Level Security）—— 用户只能看/改自己的数据
 ALTER TABLE public.profiles         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.novels           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.saved_sentences  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_workspaces  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.works            ENABLE ROW LEVEL SECURITY;
 
 GRANT USAGE ON SCHEMA public TO authenticated;
 
 GRANT SELECT, INSERT, UPDATE, DELETE
-  ON TABLE public.user_workspaces
+  ON TABLE public.user_workspaces, public.works
   TO authenticated;
 
 -- profiles 策略
@@ -192,6 +265,11 @@ CREATE POLICY "user_workspaces: 用户只能读写自己的工作区"
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
+CREATE POLICY "works: 用户只能读写自己的作品"
+  ON public.works FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
 -- 工作区更新时间自动刷新
 CREATE OR REPLACE FUNCTION public.handle_user_workspace_updated_at()
 RETURNS TRIGGER AS $$
@@ -204,6 +282,21 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER set_user_workspaces_updated_at
   BEFORE UPDATE ON public.user_workspaces
   FOR EACH ROW EXECUTE FUNCTION public.handle_user_workspace_updated_at();
+
+CREATE INDEX IF NOT EXISTS works_user_updated_idx
+  ON public.works (user_id, updated_at DESC);
+
+CREATE OR REPLACE FUNCTION public.handle_works_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER set_works_updated_at
+  BEFORE UPDATE ON public.works
+  FOR EACH ROW EXECUTE FUNCTION public.handle_works_updated_at();
 
 NOTIFY pgrst, 'reload schema';
 

@@ -47,6 +47,26 @@ async def create_page() -> FileResponse:
     return FileResponse(STATIC_DIR / "create.html")
 
 
+@app.get("/works")
+async def works_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "works.html")
+
+
+@app.get("/mynote")
+async def mynote_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "mynote.html")
+
+
+@app.get("/notes")
+async def notes_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "mynote.html")
+
+
+@app.get("/usercenter")
+async def usercenter_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "usercenter.html")
+
+
 @app.get("/vendor/supabase.js")
 async def supabase_browser_bundle() -> FileResponse:
     if not SUPABASE_BROWSER_BUNDLE.exists():

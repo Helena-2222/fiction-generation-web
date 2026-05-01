@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>我的笔记 | 非凡故事</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600&display=swap" />
+    <link rel="stylesheet" href="/static/styles/app-nav.css" />
+    <link rel="stylesheet" href="/static/styles/mynote.css" />
+  </head>
+  <body>
+    <aside class="app-sidebar" aria-label="主导航">
+      <a id="nav-logo" class="app-logo-link" href="/create?stage=basic" aria-label="回到创作台" title="回到创作台">
+        <img class="app-logo" src="/static/logo2.png" alt="非凡故事" />
+      </a>
+
+      <nav class="nav-items" aria-label="主导航">
+        <a id="nav-create" class="nav-item" href="/create?stage=basic" aria-label="创作台" title="创作台">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path d="M5.4 15.6c2.6-.7 4.8-2 6.6-3.9 2-2.1 3-4.6 3.3-7.4-2.8.3-5.3 1.4-7.4 3.3-1.9 1.8-3.2 4-3.9 6.6l1.4 1.4Z"></path>
+            <path d="M8.2 11.8 4 16"></path>
+          </svg>
+          <span class="nav-label">创作台</span>
+        </a>
+        <a id="nav-works" class="nav-item" href="/works" aria-label="作品管理" title="作品管理">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <rect x="4" y="3" width="12" height="14" rx="1.4"></rect>
+            <path d="M7 3v14M9 7h4"></path>
+          </svg>
+          <span class="nav-label">作品管理</span>
+        </a>
+        <a id="nav-notes" class="nav-item active" href="/mynote" aria-label="我的笔记" title="我的笔记">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+            <path d="M10 16.2 4.7 11.5a3.5 3.5 0 0 1 5-4.9L10 7l.3-.4a3.5 3.5 0 0 1 5 4.9L10 16.2Z"></path>
+          </svg>
+          <span class="nav-label">我的笔记</span>
+        </a>
+        <a id="nav-usercenter" class="nav-item app-nav-user" href="/usercenter" aria-label="用户中心" title="用户中心">
+          <span class="nav-user-avatar" aria-hidden="true">游</span>
+        </a>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <div class="content">
+        <header class="page-head">
+          <h1 class="page-title">我的笔记</h1>
+          <div class="page-controls">
+            <div class="stat-pill" aria-live="polite">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                <path d="M10 16.2 4.7 11.5a3.5 3.5 0 0 1 5-4.9L10 7l.3-.4a3.5 3.5 0 0 1 5 4.9L10 16.2Z"></path>
+              </svg>
+              <span><strong id="note-count">0</strong> 条收藏</span>
+            </div>
+            <div id="filter-bar" class="filter-bar" aria-label="按作品筛选"></div>
+          </div>
+        </header>
+
+        <div id="notes-message" class="notes-message hidden" role="status"></div>
+        <div id="notes-list"></div>
+      </div>
+    </main>
+
+    <script type="module" src="/static/mynote.js?v=20260502-shell"></script>
+  </body>
+</html>

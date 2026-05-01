@@ -5,6 +5,7 @@ import { generateId, normalizeFavoriteQuote, formatFavoriteTime, formatHistoryTi
 import { postJson, getJson } from './src/api.js';
 import { DEFAULT_NEXT_PATH, buildAuthUrl, getCurrentUser, getPostAuthNextPath, getUserContact, getUserDisplayName, getUserInitial, isAnonymousUser, requireAuth, signOut, subscribeToAuthChanges } from './src/auth-client.js';
 import { fetchUserWorkspaceSnapshot, saveUserWorkspaceSnapshot } from './src/cloud-workspace.js';
+import { getWork, updateWorkSnapshot } from './src/work-library.js';
 
 function buildInitialWorkspaceSnapshot() {
   return {
@@ -178,7 +179,9 @@ const DEFAULT_SIDEBAR_AVATAR_ICON = `
   </svg>
 `;
 let authStateCleanup = null;
+let currentAuthUser = null;
 let currentAuthUserId = "";
+let currentWorkId = "";
 let guideEnabledForSession = false;
 let createAuthRedirectPending = false;
 let createLogoutInProgress = false;
@@ -191,9 +194,14 @@ let cloudWorkspaceSaveInFlight = false;
 let pendingCloudWorkspaceSnapshot = null;
 let lastCloudWorkspaceSnapshotJson = "";
 let lastCloudWorkspaceSyncErrorAt = 0;
+let activeWorkSaveTimer = null;
+let activeWorkSaveInFlight = false;
+let pendingActiveWorkSnapshot = null;
+let lastActiveWorkSyncErrorAt = 0;
 let pendingStoryChapterRegeneration = null;
 const GUEST_GUIDE_STORAGE_SCOPE = "guest-browser";
 const CLOUD_WORKSPACE_SAVE_DEBOUNCE_MS = 500;
+const ACTIVE_WORK_SAVE_DEBOUNCE_MS = 700;
 const CLOUD_WORKSPACE_SYNC_ERROR_COOLDOWN_MS = 15000;
 const WORKSPACE_TIMESTAMP_TOLERANCE_MS = 1000;
 
@@ -201,7 +209,9 @@ function setCurrentAuthUser(user) {
   const nextUserId = String(user?.id || "").trim();
   if (nextUserId !== currentAuthUserId) {
     resetCloudWorkspaceSyncState();
+    resetActiveWorkSyncState();
   }
+  currentAuthUser = user || null;
   currentAuthUserId = nextUserId;
   currentAuthUserIsAnonymous = Boolean(user && isAnonymousUser(user));
 }
@@ -216,6 +226,16 @@ function resetCloudWorkspaceSyncState() {
   lastCloudWorkspaceSnapshotJson = "";
   lastCloudWorkspaceSyncErrorAt = 0;
   setWorkspaceLockState({ locked: false, lockedAt: "", signature: "" });
+}
+
+function resetActiveWorkSyncState() {
+  if (activeWorkSaveTimer) {
+    window.clearTimeout(activeWorkSaveTimer);
+    activeWorkSaveTimer = null;
+  }
+  activeWorkSaveInFlight = false;
+  pendingActiveWorkSnapshot = null;
+  lastActiveWorkSyncErrorAt = 0;
 }
 
 function waitForDelay(ms) {
@@ -251,9 +271,25 @@ function isGuestCreateRequest() {
   }
 }
 
+function getRequestedWorkId() {
+  try {
+    return String(new URLSearchParams(window.location.search).get("workId") || "").trim();
+  } catch (error) {
+    console.warn("读取作品参数失败：", error);
+    return "";
+  }
+}
+
 function getWorkspaceStorageKey() {
   if (createGuestMode) {
-    return GUEST_WORKSPACE_STORAGE_KEY;
+    return currentWorkId
+      ? getScopedStorageKey(GUEST_WORKSPACE_STORAGE_KEY, currentWorkId)
+      : GUEST_WORKSPACE_STORAGE_KEY;
+  }
+
+  if (currentWorkId) {
+    const userScope = currentAuthUserId || "browser";
+    return getScopedStorageKey(WORKSPACE_STORAGE_KEY, `${userScope}:${currentWorkId}`);
   }
 
   return getScopedStorageKey(WORKSPACE_STORAGE_KEY, currentAuthUserId) || WORKSPACE_STORAGE_KEY;
@@ -296,6 +332,8 @@ function initializeGuideSessionState() {
 
 const elements = {
   sidebar: document.querySelector("#sidebar-rail"),
+  sidebarLogoLink: document.querySelector("#sidebar-logo-link"),
+  sidebarCreateLink: document.querySelector("#sidebar-create-link"),
   sidebarAvatarToggle: document.querySelector("#sidebar-avatar-toggle"),
   sidebarDetailPanel: document.querySelector("#sidebar-detail-panel"),
   sidebarProfileAvatar: document.querySelector("#sidebar-profile-avatar"),
@@ -303,6 +341,9 @@ const elements = {
   sidebarProfileNote: document.querySelector("#sidebar-profile-note"),
   sidebarProfileEmail: document.querySelector("#sidebar-profile-email"),
   sidebarLoginLink: document.querySelector("#sidebar-login-link"),
+  sidebarWorksLink: document.querySelector("#sidebar-works-link"),
+  sidebarNotesLink: document.querySelector("#sidebar-notes-link"),
+  sidebarUserCenterLink: document.querySelector("#sidebar-usercenter-link"),
   sidebarLogoutButton: document.querySelector("#sidebar-logout-button"),
   favoriteList: document.querySelector("#favorite-list"),
   favoriteCountBadge: document.querySelector("#favorite-count-badge"),
@@ -806,6 +847,65 @@ function getGuestLoginRedirectPath() {
   return getPostAuthNextPath(getCurrentCreatePath());
 }
 
+function buildCreateNavUrl() {
+  const params = new URLSearchParams();
+  if (createGuestMode) {
+    params.set("guest", "true");
+  }
+  if (currentWorkId) {
+    params.set("workId", currentWorkId);
+  } else {
+    params.set("stage", "basic");
+  }
+  return `/create?${params.toString()}`;
+}
+
+function buildShellPageUrl(path) {
+  const params = new URLSearchParams();
+  if (createGuestMode) {
+    params.set("guest", "true");
+  }
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
+}
+
+function syncShellNavLinks() {
+  const createUrl = buildCreateNavUrl();
+  if (elements.sidebarLogoLink) {
+    elements.sidebarLogoLink.href = createUrl;
+  }
+  if (elements.sidebarCreateLink) {
+    elements.sidebarCreateLink.href = createUrl;
+  }
+  if (elements.sidebarWorksLink) {
+    elements.sidebarWorksLink.href = buildShellPageUrl("/works");
+  }
+  if (elements.sidebarNotesLink) {
+    elements.sidebarNotesLink.href = buildShellPageUrl("/mynote");
+  }
+  if (elements.sidebarUserCenterLink) {
+    elements.sidebarUserCenterLink.href = buildShellPageUrl("/usercenter");
+  }
+  syncShellNavUserAvatar();
+}
+
+function syncShellNavUserAvatar() {
+  const avatar = elements.sidebarUserCenterLink?.querySelector(".nav-user-avatar");
+  if (!avatar) {
+    return;
+  }
+
+  const displayName = createGuestMode || !currentAuthUser
+    ? "游客模式"
+    : getUserDisplayName(currentAuthUser);
+  const initial = createGuestMode || !currentAuthUser
+    ? "游"
+    : getUserInitial(currentAuthUser);
+  avatar.textContent = initial;
+  elements.sidebarUserCenterLink.setAttribute("aria-label", displayName);
+  elements.sidebarUserCenterLink.setAttribute("title", displayName);
+}
+
 function restoreSidebarAuthUi() {
   if (elements.sidebarAvatarToggle) {
     elements.sidebarAvatarToggle.classList.remove("is-authenticated");
@@ -835,6 +935,10 @@ function restoreSidebarAuthUi() {
     elements.sidebarLoginLink.href = "/auth";
     elements.sidebarLoginLink.classList.add("hidden");
     elements.sidebarLoginLink.setAttribute("aria-hidden", "true");
+  }
+
+  if (elements.sidebarWorksLink) {
+    elements.sidebarWorksLink.href = "/works";
   }
 
   if (elements.sidebarLogoutButton) {
@@ -874,6 +978,10 @@ function renderGuestSidebarUi() {
     elements.sidebarLoginLink.href = buildAuthUrl(getGuestLoginRedirectPath());
     elements.sidebarLoginLink.classList.remove("hidden");
     elements.sidebarLoginLink.setAttribute("aria-hidden", "false");
+  }
+
+  if (elements.sidebarWorksLink) {
+    elements.sidebarWorksLink.href = "/works?guest=true";
   }
 
   if (elements.sidebarLogoutButton) {
@@ -924,6 +1032,10 @@ function renderSidebarAuthUi(user) {
     elements.sidebarLoginLink.setAttribute("aria-hidden", "true");
   }
 
+  if (elements.sidebarWorksLink) {
+    elements.sidebarWorksLink.href = "/works";
+  }
+
   const shouldShowLogout = !isAnonymousUser(user);
   if (elements.sidebarLogoutButton) {
     elements.sidebarLogoutButton.disabled = !shouldShowLogout;
@@ -944,7 +1056,9 @@ async function handleSidebarLogout() {
   await Promise.race([
     (async () => {
       await flushCloudWorkspaceSave();
+      await flushActiveWorkSnapshotSave();
       await waitForCloudWorkspaceSaveIdle(1500);
+      await waitForActiveWorkSaveIdle(1500);
     })(),
     waitForDelay(1500),
   ]);
@@ -973,6 +1087,7 @@ async function handleCreateAuthStateChange(event, session) {
     createAuthRedirectPending = false;
     setCurrentAuthUser(session.user);
     renderSidebarAuthUi(session.user);
+    syncShellNavLinks();
     return;
   }
 
@@ -988,6 +1103,7 @@ async function handleCreateAuthStateChange(event, session) {
     createAuthRedirectPending = false;
     setCurrentAuthUser(recoveredUser);
     renderSidebarAuthUi(recoveredUser);
+    syncShellNavLinks();
     return;
   }
 
@@ -1000,6 +1116,8 @@ async function handleCreateAuthStateChange(event, session) {
 async function bootstrapCreateAuth() {
   restoreSidebarAuthUi();
   createGuestMode = isGuestCreateRequest();
+  currentWorkId = getRequestedWorkId();
+  syncShellNavLinks();
   guestWorkspaceRecoveredForSession = false;
   createAuthRedirectPending = false;
   createLogoutInProgress = false;
@@ -1007,6 +1125,7 @@ async function bootstrapCreateAuth() {
   if (createGuestMode) {
     setCurrentAuthUser(null);
     renderGuestSidebarUi();
+    syncShellNavLinks();
     if (typeof authStateCleanup === "function") {
       authStateCleanup();
       authStateCleanup = null;
@@ -1026,6 +1145,7 @@ async function bootstrapCreateAuth() {
 
   setCurrentAuthUser(user);
   renderSidebarAuthUi(user);
+  syncShellNavLinks();
   if (elements.sidebarLogoutButton) {
     elements.sidebarLogoutButton.removeEventListener("click", handleSidebarLogout);
     elements.sidebarLogoutButton.addEventListener("click", handleSidebarLogout);
@@ -2343,6 +2463,19 @@ function saveSeenGuides(guides) {
 }
 
 async function loadWorkspaceSnapshot() {
+  if (currentWorkId) {
+    const work = await getWork(
+      {
+        userId: currentAuthUserId,
+        guestMode: createGuestMode,
+      },
+      currentWorkId,
+    );
+    if (work?.snapshot) {
+      return work.snapshot;
+    }
+  }
+
   const localRecord = loadLocalWorkspaceRecord();
   const localSnapshot = localRecord?.snapshot || null;
   if (!shouldUseCloudWorkspace()) {
@@ -2762,6 +2895,91 @@ async function waitForCloudWorkspaceSaveIdle(timeoutMs = 1500) {
   }
 }
 
+function getActiveWorkOptions() {
+  return {
+    userId: currentAuthUserId,
+    guestMode: createGuestMode,
+  };
+}
+
+function notifyActiveWorkSyncError(error) {
+  console.warn("同步当前作品失败：", error);
+  const now = Date.now();
+  if (now - lastActiveWorkSyncErrorAt < CLOUD_WORKSPACE_SYNC_ERROR_COOLDOWN_MS) {
+    return;
+  }
+  lastActiveWorkSyncErrorAt = now;
+  setStatus("当前作品已保存到本地缓存，但云端作品库同步失败。请检查 works 表是否已创建并配置 RLS。", false, true);
+}
+
+function queueActiveWorkSnapshotSave(snapshot, { immediate = false } = {}) {
+  if (!currentWorkId || !snapshot || typeof snapshot !== "object") {
+    return;
+  }
+
+  pendingActiveWorkSnapshot = snapshot;
+
+  if (activeWorkSaveTimer) {
+    window.clearTimeout(activeWorkSaveTimer);
+    activeWorkSaveTimer = null;
+  }
+
+  if (immediate) {
+    void flushActiveWorkSnapshotSave();
+    return;
+  }
+
+  activeWorkSaveTimer = window.setTimeout(() => {
+    activeWorkSaveTimer = null;
+    void flushActiveWorkSnapshotSave();
+  }, ACTIVE_WORK_SAVE_DEBOUNCE_MS);
+}
+
+async function flushActiveWorkSnapshotSave() {
+  if (!currentWorkId) {
+    pendingActiveWorkSnapshot = null;
+    return;
+  }
+  if (activeWorkSaveInFlight) {
+    return;
+  }
+
+  const snapshot = pendingActiveWorkSnapshot;
+  if (!snapshot || typeof snapshot !== "object") {
+    return;
+  }
+
+  pendingActiveWorkSnapshot = null;
+  activeWorkSaveInFlight = true;
+  const targetWorkId = currentWorkId;
+  try {
+    await updateWorkSnapshot(getActiveWorkOptions(), targetWorkId, snapshot);
+    if (targetWorkId === currentWorkId) {
+      lastActiveWorkSyncErrorAt = 0;
+    }
+  } catch (error) {
+    if (targetWorkId === currentWorkId) {
+      pendingActiveWorkSnapshot = snapshot;
+      notifyActiveWorkSyncError(error);
+    }
+  } finally {
+    if (targetWorkId === currentWorkId) {
+      activeWorkSaveInFlight = false;
+    }
+  }
+
+  if (targetWorkId === currentWorkId && pendingActiveWorkSnapshot) {
+    void flushActiveWorkSnapshotSave();
+  }
+}
+
+async function waitForActiveWorkSaveIdle(timeoutMs = 1500) {
+  const deadline = Date.now() + Math.max(0, timeoutMs);
+  while (activeWorkSaveInFlight && Date.now() < deadline) {
+    await waitForDelay(50);
+  }
+}
+
 function handleWorkspaceVisibilityChange() {
   if (document.visibilityState === "hidden") {
     saveWorkspaceSnapshot({ immediate: true });
@@ -2784,6 +3002,7 @@ function saveWorkspaceSnapshot({ immediate = false } = {}) {
   } catch (error) {
     console.warn("保存本地工作区缓存失败：", error);
   }
+  queueActiveWorkSnapshotSave(snapshot, { immediate });
 
   return snapshot;
 }
@@ -5691,7 +5910,11 @@ async function handleWorkspaceLockClick() {
       },
     };
 
-    await saveUserWorkspaceSnapshot(currentAuthUserId, lockedSnapshot);
+    if (currentWorkId) {
+      await updateWorkSnapshot(getActiveWorkOptions(), currentWorkId, lockedSnapshot);
+    } else {
+      await saveUserWorkspaceSnapshot(currentAuthUserId, lockedSnapshot);
+    }
     try {
       persistWorkspaceSnapshotToLocalStorage(lockedSnapshot);
     } catch (persistError) {
@@ -6805,7 +7028,7 @@ function handleStorySelectionFavorite() {
       "story-fragment-favorite",
       { favoriteId: favoriteQuote.id },
     );
-    showFavoriteToast("已收藏句子，可在左侧‘我的收藏’中查看");
+    showFavoriteToast("已收藏句子，可在“我的笔记”中查看");
   } else {
     removeFavoriteById(existingFavorite.id, { showToast: false });
     closeStorySelectionToolbar({ preserveSelection: false });
