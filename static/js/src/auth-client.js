@@ -1,5 +1,5 @@
 const CONFIG_ENDPOINT = "/api/public-config";
-const SUPABASE_BROWSER_SDK_URL = "/vendor/supabase.js";
+const SUPABASE_BROWSER_SDK_URL = "/static/js/vendor/supabase.js";
 export const DEFAULT_NEXT_PATH = "/create?stage=basic";
 
 let configPromise = null;

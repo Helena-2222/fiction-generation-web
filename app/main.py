@@ -13,7 +13,8 @@ from app.routers import outline_router, story_router, character_router, export_r
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 STATIC_DIR = BASE_DIR / "static"
-SUPABASE_BROWSER_BUNDLE = STATIC_DIR / "vendor" / "supabase.js"
+HTML_DIR = STATIC_DIR / "html"
+SUPABASE_BROWSER_BUNDLE = STATIC_DIR / "js" / "vendor" / "supabase.js"
 
 app = FastAPI(title="AI 协同小说创作 WEB", version="1.0.0")
 app.add_middleware(
@@ -34,37 +35,37 @@ app.include_router(task_router.router)
 
 @app.get("/")
 async def landing() -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html")
+    return FileResponse(HTML_DIR / "index.html")
 
 
 @app.get("/auth")
 async def auth_page() -> FileResponse:
-    return FileResponse(STATIC_DIR / "auth.html")
+    return FileResponse(HTML_DIR / "auth.html")
 
 
 @app.get("/create")
 async def create_page() -> FileResponse:
-    return FileResponse(STATIC_DIR / "create.html")
+    return FileResponse(HTML_DIR / "create.html")
 
 
 @app.get("/works")
 async def works_page() -> FileResponse:
-    return FileResponse(STATIC_DIR / "works.html")
+    return FileResponse(HTML_DIR / "works.html")
 
 
 @app.get("/mynote")
 async def mynote_page() -> FileResponse:
-    return FileResponse(STATIC_DIR / "mynote.html")
+    return FileResponse(HTML_DIR / "mynote.html")
 
 
 @app.get("/notes")
 async def notes_page() -> FileResponse:
-    return FileResponse(STATIC_DIR / "mynote.html")
+    return FileResponse(HTML_DIR / "mynote.html")
 
 
 @app.get("/usercenter")
 async def usercenter_page() -> FileResponse:
-    return FileResponse(STATIC_DIR / "usercenter.html")
+    return FileResponse(HTML_DIR / "usercenter.html")
 
 
 @app.get("/vendor/supabase.js")

@@ -13,7 +13,7 @@ import {
 } from "./src/work-library.js";
 import { escapeHtml, formatFavoriteTime, normalizeFavoriteQuote } from "./src/utils.js";
 
-const BOOK_COLORS = ["#3A8275", "#A83850", "#6E3A8A", "#3A5E9A", "#35714A", "#AC4A2A", "#A87020", "#A03A60", "#28487A", "#527035"];
+const BOOK_COLORS = ["#d38f2f", "#6bcb8c", "#e55a5a", "#3A5E9A", "#35714A", "#AC4A2A", "#A03A60", "#28487A", "#527035"];
 
 const state = {
   currentUser: null,
