@@ -147,6 +147,67 @@ CREATE TRIGGER set_works_updated_at
   BEFORE UPDATE ON public.works
   FOR EACH ROW EXECUTE FUNCTION public.handle_works_updated_at();
 
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.works;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+  WHEN undefined_object THEN NULL;
+END;
+$$;
+
+NOTIFY pgrst, 'reload schema';
+```
+
+如果需要启用用户中心的“创作时长 / 创作天数”统计，继续执行下面这段增量迁移 SQL，新增 `user_activity_stats` 表：
+
+```sql
+-- 用户创作统计：记录创作台停留时长和登录日期
+CREATE TABLE IF NOT EXISTS public.user_activity_stats (
+  user_id               UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  writing_time_seconds  BIGINT NOT NULL DEFAULT 0,
+  active_days           TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  created_at            TIMESTAMPTZ DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.user_activity_stats ENABLE ROW LEVEL SECURITY;
+
+GRANT SELECT, INSERT, UPDATE
+  ON TABLE public.user_activity_stats
+  TO authenticated;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'user_activity_stats'
+      AND policyname = 'user_activity_stats: 用户只能读写自己的创作统计'
+  ) THEN
+    CREATE POLICY "user_activity_stats: 用户只能读写自己的创作统计"
+      ON public.user_activity_stats FOR ALL
+      USING (auth.uid() = user_id)
+      WITH CHECK (auth.uid() = user_id);
+  END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_user_activity_stats_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS set_user_activity_stats_updated_at ON public.user_activity_stats;
+
+CREATE TRIGGER set_user_activity_stats_updated_at
+  BEFORE UPDATE ON public.user_activity_stats
+  FOR EACH ROW EXECUTE FUNCTION public.handle_user_activity_stats_updated_at();
+
 NOTIFY pgrst, 'reload schema';
 ```
 
@@ -228,17 +289,31 @@ CREATE TABLE public.works (
   updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 用户创作统计：创作台停留时长 + 登录日期
+CREATE TABLE public.user_activity_stats (
+  user_id               UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  writing_time_seconds  BIGINT NOT NULL DEFAULT 0,
+  active_days           TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  created_at            TIMESTAMPTZ DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- 行级别安全策略（Row Level Security）—— 用户只能看/改自己的数据
 ALTER TABLE public.profiles         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.novels           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.saved_sentences  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_workspaces  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.works            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_activity_stats ENABLE ROW LEVEL SECURITY;
 
 GRANT USAGE ON SCHEMA public TO authenticated;
 
 GRANT SELECT, INSERT, UPDATE, DELETE
   ON TABLE public.user_workspaces, public.works
+  TO authenticated;
+
+GRANT SELECT, INSERT, UPDATE
+  ON TABLE public.user_activity_stats
   TO authenticated;
 
 -- profiles 策略
@@ -270,6 +345,11 @@ CREATE POLICY "works: 用户只能读写自己的作品"
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
+CREATE POLICY "user_activity_stats: 用户只能读写自己的创作统计"
+  ON public.user_activity_stats FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
 -- 工作区更新时间自动刷新
 CREATE OR REPLACE FUNCTION public.handle_user_workspace_updated_at()
 RETURNS TRIGGER AS $$
@@ -297,6 +377,27 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER set_works_updated_at
   BEFORE UPDATE ON public.works
   FOR EACH ROW EXECUTE FUNCTION public.handle_works_updated_at();
+
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.works;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+  WHEN undefined_object THEN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_user_activity_stats_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER set_user_activity_stats_updated_at
+  BEFORE UPDATE ON public.user_activity_stats
+  FOR EACH ROW EXECUTE FUNCTION public.handle_user_activity_stats_updated_at();
 
 NOTIFY pgrst, 'reload schema';
 

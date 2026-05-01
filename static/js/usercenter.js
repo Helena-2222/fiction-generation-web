@@ -7,6 +7,11 @@ import {
   isAnonymousUser,
 } from "./src/auth-client.js";
 import { fetchUserWorkspaceSnapshot } from "./src/cloud-workspace.js";
+import {
+  fetchUserActivityStats,
+  formatWritingDurationParts,
+  recordUserActivity,
+} from "./src/user-activity.js";
 import { GUEST_WORKSPACE_STORAGE_KEY, WORKSPACE_STORAGE_KEY } from "./src/constants.js";
 import {
   getWorkProgressLabel,
@@ -14,7 +19,7 @@ import {
   getWorkWordCount,
   listWorks,
 } from "./src/work-library.js";
-import { escapeHtml, normalizeFavoriteQuote } from "./src/utils.js";
+import { escapeHtml } from "./src/utils.js";
 
 const BOOK_COLORS = ["#3A8275", "#A83850", "#6E3A8A", "#3A5E9A", "#35714A", "#AC4A2A", "#A87020", "#A03A60", "#28487A", "#527035"];
 
@@ -22,7 +27,7 @@ const state = {
   currentUser: null,
   guestMode: false,
   works: [],
-  notes: [],
+  activityStats: null,
 };
 
 const elements = {
@@ -39,12 +44,11 @@ const elements = {
   bio: document.querySelector("#profile-bio"),
   authAction: document.querySelector("#profile-auth-action"),
   statWorks: document.querySelector("#stat-works"),
-  statNotes: document.querySelector("#stat-notes"),
+  statWritingTime: document.querySelector("#stat-writing-time"),
+  statWritingDays: document.querySelector("#stat-writing-days"),
   statWords: document.querySelector("#stat-words"),
   tabWorksCount: document.querySelector("#tab-works-count"),
-  tabNotesCount: document.querySelector("#tab-notes-count"),
   booksRow: document.querySelector("#user-books-row"),
-  notesList: document.querySelector("#user-notes-list"),
   tabs: Array.from(document.querySelectorAll("[data-tab]")),
   panels: Array.from(document.querySelectorAll(".shelf-panel")),
 };
@@ -61,6 +65,13 @@ function getWorkOptions() {
   return {
     userId: state.currentUser?.id || "",
     guestMode: state.guestMode,
+  };
+}
+
+function getActivityOptions() {
+  return {
+    userId: state.currentUser?.id || "",
+    guestMode: state.guestMode || isAnonymousUser(state.currentUser),
   };
 }
 
@@ -144,21 +155,6 @@ function getWorkStatusText(work) {
   return work.snapshot?.generatedStory?.chapters?.length ? "正文" : "进行中";
 }
 
-function collectNotes(works) {
-  return works.flatMap((work) => {
-    const favorites = Array.isArray(work.snapshot?.favoriteQuotes) ? work.snapshot.favoriteQuotes : [];
-    const fallbackTitle = work.title || getWorkTitleFromSnapshot(work.snapshot);
-    return favorites
-      .map((item) => normalizeFavoriteQuote(item))
-      .filter(Boolean)
-      .map((favorite) => ({
-        ...favorite,
-        workId: work.id,
-        workTitle: String(favorite.storyTitle || fallbackTitle || "未命名作品").trim() || "未命名作品",
-      }));
-  }).sort((left, right) => Date.parse(right.createdAt || "") - Date.parse(left.createdAt || ""));
-}
-
 function formatCompactNumber(value) {
   const number = Number(value) || 0;
   if (number >= 10000) {
@@ -168,28 +164,37 @@ function formatCompactNumber(value) {
 }
 
 function renderProfile() {
-  const displayName = state.guestMode ? "游客模式" : getUserDisplayName(state.currentUser);
-  const initial = state.guestMode ? "游" : getUserInitial(state.currentUser);
-  const contact = state.guestMode ? "未登录" : getUserContact(state.currentUser);
+  const isGuestProfile = state.guestMode || isAnonymousUser(state.currentUser);
+  const displayName = isGuestProfile ? "游客模式" : getUserDisplayName(state.currentUser);
+  const initial = isGuestProfile ? "游" : getUserInitial(state.currentUser);
+  const contact = isGuestProfile ? "未登录" : getUserContact(state.currentUser);
 
   elements.avatar.textContent = initial;
   elements.name.textContent = displayName;
-  elements.status.textContent = state.guestMode || isAnonymousUser(state.currentUser) ? "游客模式" : "创作者";
+  elements.status.textContent = isGuestProfile ? "游客模式" : "创作者";
   elements.contact.textContent = contact;
-  elements.bio.textContent = state.guestMode
+  elements.bio.textContent = isGuestProfile
     ? "当前内容只保存在这个浏览器的 localStorage 中，登录后可以继续迁移。"
-    : "你的作品、收藏和创作进度会跟随当前账号持续保存。";
-  elements.authAction.textContent = state.guestMode ? "登录/注册" : "管理作品";
-  elements.authAction.href = state.guestMode ? buildAuthUrl(getShellUrl("/usercenter")) : getShellUrl("/works");
+    : "你的作品和创作进度会跟随当前账号持续保存。";
+  elements.authAction.classList.toggle("hidden", !isGuestProfile);
+  elements.authAction.setAttribute("aria-hidden", isGuestProfile ? "false" : "true");
+  if (isGuestProfile) {
+    elements.authAction.textContent = "登录/注册";
+    elements.authAction.href = buildAuthUrl("/create?stage=basic");
+  } else {
+    elements.authAction.removeAttribute("href");
+  }
 }
 
 function renderStats() {
   const words = state.works.reduce((total, work) => total + getWorkWordCount(work.snapshot), 0);
+  const writingTime = formatWritingDurationParts(state.activityStats?.writingTimeSeconds || 0);
+  const writingDays = Array.isArray(state.activityStats?.activeDays) ? state.activityStats.activeDays.length : 0;
   elements.statWorks.textContent = String(state.works.length);
-  elements.statNotes.textContent = String(state.notes.length);
+  elements.statWritingTime.innerHTML = `${escapeHtml(writingTime.value)}<em>${escapeHtml(writingTime.unit)}</em>`;
+  elements.statWritingDays.innerHTML = `${escapeHtml(String(writingDays))}<em>天</em>`;
   elements.statWords.innerHTML = `${escapeHtml(formatCompactNumber(words))}<em>字</em>`;
   elements.tabWorksCount.textContent = String(state.works.length);
-  elements.tabNotesCount.textContent = String(state.notes.length);
 }
 
 function renderWorks() {
@@ -217,28 +222,11 @@ function renderWorks() {
     .join("");
 }
 
-function renderNotes() {
-  if (!state.notes.length) {
-    elements.notesList.innerHTML = `<div class="shelf-empty">还没有收藏句子。</div>`;
-    return;
-  }
-
-  elements.notesList.innerHTML = state.notes.slice(0, 12)
-    .map((note) => `
-      <article class="note-mini">
-        <div class="note-mini-title">${escapeHtml(note.workTitle)} · ${Number(note.chapterNumber) ? `第${Number(note.chapterNumber)}章` : "正文"}</div>
-        <p class="note-mini-text">${escapeHtml(note.text)}</p>
-      </article>
-    `)
-    .join("");
-}
-
 function render() {
   syncNavLinks();
   renderProfile();
   renderStats();
   renderWorks();
-  renderNotes();
 }
 
 async function readLegacySnapshot() {
@@ -265,10 +253,28 @@ async function readLegacySnapshot() {
   return null;
 }
 
+async function loadActivityStats() {
+  try {
+    await recordUserActivity(getActivityOptions(), { writingSeconds: 0 });
+    return await fetchUserActivityStats(getActivityOptions());
+  } catch (error) {
+    console.warn("读取创作统计失败：", error);
+    return {
+      stats: null,
+      source: "local",
+      error,
+    };
+  }
+}
+
 async function loadUserData() {
   setMessage("");
-  const result = await listWorks(getWorkOptions());
+  const [result, activityResult] = await Promise.all([
+    listWorks(getWorkOptions()),
+    loadActivityStats(),
+  ]);
   state.works = result.works;
+  state.activityStats = activityResult.stats;
 
   if (!state.works.length) {
     const legacySnapshot = await readLegacySnapshot();
@@ -284,9 +290,10 @@ async function loadUserData() {
 
   if (result.error) {
     setMessage("云端作品库暂时不可用，当前展示本地缓存。", true);
+  } else if (activityResult.error) {
+    setMessage("创作统计暂时使用本地缓存，云端统计同步失败。", true);
   }
 
-  state.notes = collectNotes(state.works);
   render();
 }
 
@@ -321,6 +328,11 @@ function bindTabs() {
       elements.panels.forEach((panel) => {
         panel.classList.toggle("active", panel.id === `panel-${target}`);
       });
+      if (target === "subscriptions") {
+        setMessage("订阅功能正在开发中");
+      } else {
+        setMessage("");
+      }
     });
   });
 }

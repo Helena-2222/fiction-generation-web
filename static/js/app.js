@@ -5,7 +5,9 @@ import { generateId, normalizeFavoriteQuote, formatFavoriteTime, formatHistoryTi
 import { postJson, getJson } from './src/api.js';
 import { DEFAULT_NEXT_PATH, buildAuthUrl, getCurrentUser, getPostAuthNextPath, getUserContact, getUserDisplayName, getUserInitial, isAnonymousUser, requireAuth, signOut, subscribeToAuthChanges } from './src/auth-client.js';
 import { fetchUserWorkspaceSnapshot, saveUserWorkspaceSnapshot } from './src/cloud-workspace.js';
-import { getWork, updateWorkSnapshot } from './src/work-library.js';
+import { notifyFavoriteQuotesChanged } from './src/favorite-sync.js';
+import { recordUserActivity } from './src/user-activity.js';
+import { cacheWorkSnapshotLocally, getWork, updateWorkSnapshot } from './src/work-library.js';
 
 function buildInitialWorkspaceSnapshot() {
   return {
@@ -199,15 +201,20 @@ let activeWorkSaveInFlight = false;
 let pendingActiveWorkSnapshot = null;
 let lastActiveWorkSyncErrorAt = 0;
 let pendingStoryChapterRegeneration = null;
+let createActivityStartedAt = 0;
+let pendingCreateActivitySeconds = 0;
+let createActivityFlushTimer = null;
 const GUEST_GUIDE_STORAGE_SCOPE = "guest-browser";
 const CLOUD_WORKSPACE_SAVE_DEBOUNCE_MS = 500;
 const ACTIVE_WORK_SAVE_DEBOUNCE_MS = 700;
 const CLOUD_WORKSPACE_SYNC_ERROR_COOLDOWN_MS = 15000;
+const CREATE_ACTIVITY_FLUSH_INTERVAL_MS = 60000;
 const WORKSPACE_TIMESTAMP_TOLERANCE_MS = 1000;
 
 function setCurrentAuthUser(user) {
   const nextUserId = String(user?.id || "").trim();
   if (nextUserId !== currentAuthUserId) {
+    stopCreateActivityTracking();
     resetCloudWorkspaceSyncState();
     resetActiveWorkSyncState();
   }
@@ -242,6 +249,82 @@ function waitForDelay(ms) {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms);
   });
+}
+
+function canTrackCreateActivity() {
+  return !createGuestMode && Boolean(currentAuthUserId) && !currentAuthUserIsAnonymous;
+}
+
+function getCreateActivityOptions() {
+  return {
+    userId: currentAuthUserId,
+    guestMode: createGuestMode || currentAuthUserIsAnonymous,
+  };
+}
+
+function startCreateActivityTracking() {
+  stopCreateActivityTracking();
+  if (!canTrackCreateActivity()) {
+    return;
+  }
+
+  void recordUserActivity(getCreateActivityOptions(), { writingSeconds: 0 });
+  if (document.visibilityState !== "hidden") {
+    createActivityStartedAt = Date.now();
+  }
+  createActivityFlushTimer = window.setInterval(() => {
+    void flushCreateActivityTime();
+  }, CREATE_ACTIVITY_FLUSH_INTERVAL_MS);
+}
+
+function stopCreateActivityTracking() {
+  if (createActivityFlushTimer) {
+    window.clearInterval(createActivityFlushTimer);
+    createActivityFlushTimer = null;
+  }
+  createActivityStartedAt = 0;
+  pendingCreateActivitySeconds = 0;
+}
+
+function collectCreateActivityTime() {
+  if (!canTrackCreateActivity() || !createActivityStartedAt) {
+    return;
+  }
+
+  const now = Date.now();
+  const seconds = Math.floor((now - createActivityStartedAt) / 1000);
+  if (seconds > 0) {
+    pendingCreateActivitySeconds += seconds;
+    createActivityStartedAt = now;
+  }
+}
+
+async function flushCreateActivityTime() {
+  collectCreateActivityTime();
+  const seconds = pendingCreateActivitySeconds;
+  if (!seconds || !canTrackCreateActivity()) {
+    return;
+  }
+
+  pendingCreateActivitySeconds = 0;
+  try {
+    await recordUserActivity(getCreateActivityOptions(), { writingSeconds: seconds });
+  } catch (error) {
+    console.warn("记录创作时长失败：", error);
+  }
+}
+
+function pauseCreateActivityTracking() {
+  collectCreateActivityTime();
+  createActivityStartedAt = 0;
+  void flushCreateActivityTime();
+}
+
+function resumeCreateActivityTracking() {
+  if (!canTrackCreateActivity() || document.visibilityState === "hidden") {
+    return;
+  }
+  createActivityStartedAt = Date.now();
 }
 
 function getScopedStorageKey(baseKey, scope) {
@@ -1047,6 +1130,7 @@ function renderSidebarAuthUi(user) {
 
 async function handleSidebarLogout() {
   createLogoutInProgress = true;
+  pauseCreateActivityTracking();
   if (elements.sidebarLogoutButton) {
     elements.sidebarLogoutButton.disabled = true;
     elements.sidebarLogoutButton.textContent = "退出中...";
@@ -1185,6 +1269,7 @@ async function init() {
     return;
   }
 
+  startCreateActivityTracking();
   initializeGuideSessionState();
   const restoredWorkspace = await loadWorkspaceSnapshot();
   const requestedStageOverride = getRequestedStageOverride();
@@ -1537,6 +1622,16 @@ function handleFavoriteListClick(event) {
   removeFavoriteById(favoriteId);
 }
 
+function broadcastFavoriteQuoteChanges() {
+  notifyFavoriteQuotesChanged({
+    workId: currentWorkId,
+    userId: currentAuthUserId,
+    guestMode: createGuestMode,
+    workTitle: state.generatedStory?.title || state.outline?.title || "未命名作品",
+    favoriteQuotes: state.favoriteQuotes.map((item) => ({ ...item })),
+  });
+}
+
 function removeFavoriteById(favoriteId, { showToast = true, toastMessage = "已删除收藏" } = {}) {
   const favoriteQuote = state.favoriteQuotes.find((item) => item.id === favoriteId);
   if (!favoriteQuote) {
@@ -1547,7 +1642,8 @@ function removeFavoriteById(favoriteId, { showToast = true, toastMessage = "已�
   renderFavorites();
   removeFavoriteMarkup(favoriteQuote);
   syncStorySelectionFavoriteButtonState();
-  saveWorkspaceSnapshot();
+  saveWorkspaceSnapshot({ immediate: true });
+  broadcastFavoriteQuoteChanges();
   if (showToast) {
     showFavoriteToast(toastMessage);
   }
@@ -2982,11 +3078,15 @@ async function waitForActiveWorkSaveIdle(timeoutMs = 1500) {
 
 function handleWorkspaceVisibilityChange() {
   if (document.visibilityState === "hidden") {
+    pauseCreateActivityTracking();
     saveWorkspaceSnapshot({ immediate: true });
+    return;
   }
+  resumeCreateActivityTracking();
 }
 
 function handleWorkspacePageHide() {
+  pauseCreateActivityTracking();
   saveWorkspaceSnapshot({ immediate: true });
 }
 
@@ -2999,6 +3099,7 @@ function saveWorkspaceSnapshot({ immediate = false } = {}) {
   }
   try {
     persistWorkspaceSnapshotToLocalStorage(snapshot);
+    cacheWorkSnapshotLocally(getActiveWorkOptions(), currentWorkId, snapshot);
   } catch (error) {
     console.warn("保存本地工作区缓存失败：", error);
   }
@@ -7026,7 +7127,7 @@ function handleStorySelectionFavorite() {
     applyStorySelectionReplacement(
       state.storySelection.rawText || state.storySelection.text,
       "story-fragment-favorite",
-      { favoriteId: favoriteQuote.id },
+      { favoriteId: favoriteQuote.id, immediateSave: true, notifyFavorites: true },
     );
     showFavoriteToast("已收藏句子，可在“我的笔记”中查看");
   } else {
@@ -7298,7 +7399,7 @@ async function handleStorySelectionRegenerate() {
   }
 }
 
-function applyStorySelectionReplacement(text, fragmentClass, { favoriteId = "" } = {}) {
+function applyStorySelectionReplacement(text, fragmentClass, { favoriteId = "", immediateSave = false, notifyFavorites = false } = {}) {
   if (!state.storySelection?.range) {
     return;
   }
@@ -7325,7 +7426,10 @@ function applyStorySelectionReplacement(text, fragmentClass, { favoriteId = "" }
   state.storySelection = null;
   syncChapterContentFromDom(chapterNumber);
   closeStorySelectionToolbar({ preserveSelection: false });
-  saveWorkspaceSnapshot();
+  saveWorkspaceSnapshot({ immediate: immediateSave });
+  if (notifyFavorites) {
+    broadcastFavoriteQuoteChanges();
+  }
 
   window.setTimeout(() => {
     fragment.classList.remove("story-fragment-highlight");

@@ -1,10 +1,12 @@
 import {
   buildAuthUrl,
   getCurrentUser,
+  getSupabaseClient,
   getUserDisplayName,
   getUserInitial,
 } from "./src/auth-client.js";
 import { fetchUserWorkspaceSnapshot } from "./src/cloud-workspace.js";
+import { subscribeToFavoriteQuotesChanged } from "./src/favorite-sync.js";
 import { GUEST_WORKSPACE_STORAGE_KEY, WORKSPACE_STORAGE_KEY } from "./src/constants.js";
 import {
   getWorkTitleFromSnapshot,
@@ -13,7 +15,7 @@ import {
 } from "./src/work-library.js";
 import { escapeHtml, formatFavoriteTime, normalizeFavoriteQuote } from "./src/utils.js";
 
-const BOOK_COLORS = ["#d38f2f", "#6bcb8c", "#e55a5a", "#3A5E9A", "#35714A", "#AC4A2A", "#A03A60", "#28487A", "#527035"];
+const BOOK_COLORS = ["#3f68a4", "#e55a5a", "#b98c4e", "#6bcb8c", "#2b6035", "#AC4A2A", "#A03A60", "#28487A", "#527035"];
 
 const state = {
   currentUser: null,
@@ -21,6 +23,8 @@ const state = {
   works: [],
   notes: [],
   activeFilter: "all",
+  realtimeChannel: null,
+  reloadTimer: null,
 };
 
 const elements = {
@@ -116,6 +120,89 @@ function setMessage(text, isError = false) {
   elements.message.textContent = text || "";
   elements.message.classList.toggle("hidden", !text);
   elements.message.classList.toggle("is-error", Boolean(isError));
+}
+
+function isFavoriteSyncForCurrentScope(payload = {}) {
+  if (state.guestMode) {
+    return Boolean(payload.guestMode);
+  }
+  return String(payload.userId || "").trim() === String(state.currentUser?.id || "").trim();
+}
+
+function scheduleNotesReload() {
+  if (state.reloadTimer) {
+    window.clearTimeout(state.reloadTimer);
+  }
+
+  state.reloadTimer = window.setTimeout(() => {
+    state.reloadTimer = null;
+    void loadNotes().catch((error) => {
+      console.warn("刷新收藏笔记失败：", error);
+    });
+  }, 350);
+}
+
+function applyFavoriteSyncPayload(payload = {}) {
+  if (!isFavoriteSyncForCurrentScope(payload)) {
+    return;
+  }
+
+  if (!Array.isArray(payload.favoriteQuotes) || !payload.workId) {
+    scheduleNotesReload();
+    return;
+  }
+
+  const updatedAt = new Date().toISOString();
+  const existingWork = state.works.find((work) => work.id === payload.workId);
+  const snapshot = {
+    ...(existingWork?.snapshot || {}),
+    favoriteQuotes: payload.favoriteQuotes.map((item) => ({ ...item })),
+    updatedAt,
+  };
+
+  if (existingWork) {
+    existingWork.snapshot = snapshot;
+    existingWork.title = existingWork.title || payload.workTitle || getWorkTitleFromSnapshot(snapshot);
+    existingWork.updatedAt = updatedAt;
+  } else {
+    state.works.unshift({
+      id: payload.workId,
+      title: payload.workTitle || getWorkTitleFromSnapshot(snapshot),
+      snapshot,
+      updatedAt,
+    });
+  }
+
+  state.notes = collectNotes(state.works);
+  if (state.activeFilter !== "all" && !state.works.some((work) => work.id === state.activeFilter)) {
+    state.activeFilter = "all";
+  }
+  renderNotes();
+}
+
+async function subscribeToCloudFavoriteUpdates() {
+  if (state.guestMode || !state.currentUser?.id || state.realtimeChannel) {
+    return;
+  }
+
+  try {
+    const supabase = await getSupabaseClient();
+    state.realtimeChannel = supabase
+      .channel(`favorite-notes-${state.currentUser.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "works",
+          filter: `user_id=eq.${state.currentUser.id}`,
+        },
+        scheduleNotesReload,
+      )
+      .subscribe();
+  } catch (error) {
+    console.warn("订阅云端收藏更新失败：", error);
+  }
 }
 
 function getChapterLabel(chapterNumber) {
@@ -478,6 +565,7 @@ async function bootstrapAuth() {
 async function init() {
   elements.filterBar?.addEventListener("click", handleFilterClick);
   elements.list?.addEventListener("click", handleNoteClick);
+  subscribeToFavoriteQuotesChanged(applyFavoriteSyncPayload);
 
   const ready = await bootstrapAuth();
   if (!ready) {
@@ -485,6 +573,7 @@ async function init() {
     return;
   }
 
+  void subscribeToCloudFavoriteUpdates();
   await loadNotes();
 }
 

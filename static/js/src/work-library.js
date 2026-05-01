@@ -5,6 +5,7 @@ export const WORK_LIBRARY_STORAGE_KEY = "story-generation-works-v1";
 
 const ACTIVE_STATUS = "active";
 const DEFAULT_TITLE = "未命名作品";
+const WORK_TIMESTAMP_TOLERANCE_MS = 1000;
 
 function generateWorkId() {
   if (window.crypto?.randomUUID) {
@@ -159,12 +160,55 @@ async function fetchCloudWorks(options = {}) {
     throw error;
   }
 
-  const works = Array.isArray(data) ? data.map((item) => normalizeWork(item)).filter(Boolean) : [];
+  const cloudWorks = Array.isArray(data) ? data.map((item) => normalizeWork(item)).filter(Boolean) : [];
+  const localWorks = readLocalLibrary(options).works.filter((work) => work.status !== "deleted");
+  const worksById = new Map(cloudWorks.map((work) => [work.id, work]));
+  localWorks.forEach((localWork) => {
+    const cloudWork = worksById.get(localWork.id);
+    const localTime = Date.parse(localWork.updatedAt || "");
+    const cloudTime = Date.parse(cloudWork?.updatedAt || "");
+    if (!cloudWork || (Number.isFinite(localTime) && localTime > (Number.isFinite(cloudTime) ? cloudTime : 0) + WORK_TIMESTAMP_TOLERANCE_MS)) {
+      worksById.set(localWork.id, localWork);
+    }
+  });
+  const works = Array.from(worksById.values())
+    .map((item) => normalizeWork(item))
+    .filter(Boolean)
+    .sort((a, b) => Date.parse(b.updatedAt || "") - Date.parse(a.updatedAt || ""));
   writeLocalLibrary(options, {
     activeWorkId: readLocalLibrary(options).activeWorkId,
     works,
   });
   return works;
+}
+
+export function cacheWorkSnapshotLocally(options = {}, workId, snapshot) {
+  const normalizedWorkId = String(workId || "").trim();
+  if (!normalizedWorkId || !snapshot || typeof snapshot !== "object") {
+    return null;
+  }
+
+  const existing = readLocalLibrary(options).works.find((work) => work.id === normalizedWorkId);
+  if (!existing) {
+    return null;
+  }
+
+  const updatedAt = String(snapshot.updatedAt || new Date().toISOString()).trim();
+  const updatedWork = normalizeWork({
+    ...existing,
+    title: shouldAutofillTitle(existing.title)
+      ? getWorkTitleFromSnapshot(snapshot)
+      : existing.title,
+    genre: getWorkGenreFromSnapshot(snapshot),
+    style: getWorkStyleFromSnapshot(snapshot),
+    snapshot: {
+      ...snapshot,
+      updatedAt,
+    },
+    updatedAt,
+  });
+
+  return upsertLocalWork(options, updatedWork, { active: true });
 }
 
 export function buildEmptyWorkSnapshot() {

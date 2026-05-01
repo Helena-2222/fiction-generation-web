@@ -65,12 +65,16 @@
 
         <section class="milestones" aria-label="创作统计">
           <div class="milestone">
-            <div class="milestone-value" id="stat-works">0</div>
-            <div class="milestone-label">作品</div>
+            <div class="milestone-value" id="stat-writing-time">0<em>min</em></div>
+            <div class="milestone-label">创作时长</div>
           </div>
           <div class="milestone">
-            <div class="milestone-value" id="stat-notes">0</div>
-            <div class="milestone-label">收藏句子</div>
+            <div class="milestone-value" id="stat-writing-days">0<em>天</em></div>
+            <div class="milestone-label">创作天数</div>
+          </div>
+          <div class="milestone">
+            <div class="milestone-value" id="stat-works">0</div>
+            <div class="milestone-label">作品</div>
           </div>
           <div class="milestone">
             <div class="milestone-value" id="stat-words">0<em>字</em></div>
@@ -81,19 +85,19 @@
         <section class="shelf-section">
           <div class="shelf-tabs" role="tablist" aria-label="用户中心内容">
             <button type="button" class="shelf-tab active" data-tab="works">我的作品<span id="tab-works-count" class="shelf-tab-count">0</span></button>
-            <button type="button" class="shelf-tab" data-tab="notes">我的收藏<span id="tab-notes-count" class="shelf-tab-count">0</span></button>
+            <button type="button" class="shelf-tab" data-tab="subscriptions">订阅作品</button>
           </div>
 
           <div id="panel-works" class="shelf-panel active">
             <div id="user-books-row" class="books-row"></div>
           </div>
-          <div id="panel-notes" class="shelf-panel">
-            <div id="user-notes-list" class="note-mini-list"></div>
+          <div id="panel-subscriptions" class="shelf-panel">
+            <div class="shelf-empty">订阅功能正在开发中</div>
           </div>
         </section>
       </div>
     </main>
 
-    <script type="module" src="/static/js/usercenter.js?v=20260502-shell"></script>
+    <script type="module" src="/static/js/usercenter.js?v=20260502-account-login"></script>
   </body>
 </html>

@@ -50,7 +50,7 @@ a {
 }
 
 .main {
-  margin-left: 72px;
+  margin-left: var(--app-sidebar-width, 82px);
   flex: 1;
   padding: 44px 48px 56px;
   display: flex;

@@ -47,7 +47,7 @@ a {
 }
 
 .main {
-  margin-left: 72px;
+  margin-left: var(--app-sidebar-width, 82px);
   flex: 1;
   display: flex;
   justify-content: center;
@@ -57,7 +57,7 @@ a {
 
 .content {
   width: 100%;
-  max-width: 780px;
+  max-width: 980px;
 }
 
 .page-head {

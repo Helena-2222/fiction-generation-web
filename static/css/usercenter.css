@@ -48,7 +48,7 @@ a {
 }
 
 .main {
-  margin-left: 72px;
+  margin-left: var(--app-sidebar-width, 82px);
   flex: 1;
   display: flex;
   justify-content: center;
@@ -58,7 +58,7 @@ a {
 
 .content {
   width: 100%;
-  max-width: 660px;
+  max-width: 860px;
 }
 
 .profile-hero {
