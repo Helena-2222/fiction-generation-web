@@ -78,6 +78,43 @@ function canUseCloud(options = {}) {
   return !options.guestMode && Boolean(String(options.userId || "").trim());
 }
 
+function isRecoverableCloudActivityError(error) {
+  const detail = [
+    error?.code,
+    error?.message,
+    error?.details,
+    error?.hint,
+    error?.status,
+  ]
+    .filter((value) => value != null && String(value).trim())
+    .join(" ")
+    .toLowerCase();
+
+  return detail.includes(USER_ACTIVITY_TABLE)
+    || detail.includes("schema cache")
+    || detail.includes("relation")
+    || detail.includes("permission")
+    || detail.includes("policy")
+    || detail.includes("row-level security");
+}
+
+function buildLocalActivityFallback(localStats, error) {
+  if (!isRecoverableCloudActivityError(error)) {
+    return {
+      stats: localStats,
+      source: "local",
+      error,
+    };
+  }
+
+  return {
+    stats: localStats,
+    source: "local",
+    error: null,
+    cloudUnavailable: true,
+  };
+}
+
 async function fetchCloudStats(options = {}) {
   const supabase = await getSupabaseClient();
   const { data, error } = await supabase
@@ -137,11 +174,7 @@ export async function fetchUserActivityStats(options = {}) {
     };
   } catch (error) {
     console.warn("Failed to fetch user activity stats:", error);
-    return {
-      stats: localStats,
-      source: "local",
-      error,
-    };
+    return buildLocalActivityFallback(localStats, error);
   }
 }
 
@@ -171,11 +204,7 @@ export async function recordUserActivity(options = {}, { writingSeconds = 0, act
     };
   } catch (error) {
     console.warn("Failed to record user activity stats:", error);
-    return {
-      stats: nextLocalStats,
-      source: "local",
-      error,
-    };
+    return buildLocalActivityFallback(nextLocalStats, error);
   }
 }
 

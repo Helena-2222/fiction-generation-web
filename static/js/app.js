@@ -114,8 +114,10 @@ let nextCharacterColorIndex = 0;
 let graphResizeObserver = null;
 let graphRenderFrame = 0;
 let favoriteToastTimer = null;
+let pageToastTimer = null;
 let basicHistoryTimer = null;
 let characterHistoryTimer = null;
+let synopsisLimitNoticeActive = false;
 const guideOverlayState = {
   activeStage: null,
   activeNoteKey: null,
@@ -210,6 +212,8 @@ const ACTIVE_WORK_SAVE_DEBOUNCE_MS = 700;
 const CLOUD_WORKSPACE_SYNC_ERROR_COOLDOWN_MS = 15000;
 const CREATE_ACTIVITY_FLUSH_INTERVAL_MS = 60000;
 const WORKSPACE_TIMESTAMP_TOLERANCE_MS = 1000;
+const STORY_SYNOPSIS_MAX_CHARS = 10000;
+const GRAPH_NODE_EDGE_DRAG_DISTANCE = 8;
 
 function setCurrentAuthUser(user) {
   const nextUserId = String(user?.id || "").trim();
@@ -527,6 +531,7 @@ const elements = {
   storySelectionFavorite: document.querySelector("#story-selection-favorite"),
   storySelectionEdit: document.querySelector("#story-selection-edit"),
   storySelectionRegenerate: document.querySelector("#story-selection-regenerate"),
+  pageToast: document.querySelector("#page-toast"),
   favoriteToast: document.querySelector("#favorite-toast"),
   storyEditModal: document.querySelector("#story-edit-modal"),
   storyEditClose: document.querySelector("#story-edit-close"),
@@ -559,6 +564,7 @@ function createCharacter(index) {
     core_motivation: "",
     graph_x: position.x,
     graph_y: position.y,
+    graph_position_locked: false,
     graph_color_index: colorIndex,
     graph_color: color,
   };
@@ -704,18 +710,29 @@ function orderCharacterGraphSlotsFromCenter(slots) {
 
 function arrangeCharacterGraph() {
   const layout = calculateCharacterGraphLayout(state.characters.length);
+  const manualContentHeight = state.characters.reduce((height, character) => {
+    const graphY = Number(character.graph_y);
+    return Number.isFinite(graphY)
+      ? Math.max(height, graphY + GRAPH.nodeHeight + GRAPH.paddingY)
+      : height;
+  }, layout.height);
   if (elements.graphCanvas) {
     const viewportHeight = elements.graphWrap?.clientHeight || 0;
-    elements.graphCanvas.style.height = `${Math.max(layout.height, viewportHeight)}px`;
+    elements.graphCanvas.style.height = `${Math.max(layout.height, manualContentHeight, viewportHeight)}px`;
   }
 
   state.characters.forEach((character, index) => {
     const position = layout.positions[index];
-    if (!position) {
-      return;
+    if (position) {
+      const graphX = Number(character.graph_x);
+      const graphY = Number(character.graph_y);
+      const keepManualPosition =
+        Boolean(character.graph_position_locked) &&
+        Number.isFinite(graphX) &&
+        Number.isFinite(graphY);
+      character.graph_x = keepManualPosition ? graphX : position.x;
+      character.graph_y = keepManualPosition ? graphY : position.y;
     }
-    character.graph_x = position.x;
-    character.graph_y = position.y;
     getCharacterGraphColor(character, index);
   });
 }
@@ -1292,6 +1309,7 @@ async function init() {
   });
   elements.addCharacter.addEventListener("click", addCharacter);
   elements.storyForm.addEventListener("submit", handleOutlineSubmit);
+  elements.generateOutline.addEventListener("click", handleGenerateOutlineClick);
   elements.saveRelations.addEventListener("click", handleSaveRelations);
   elements.supplementRelations.addEventListener("click", handleAiRelationSupplement);
   elements.basicHistoryButton.addEventListener("click", openBasicHistoryModal);
@@ -2384,6 +2402,22 @@ function isGuideBasicInfoReady() {
   return Boolean(storyType && synopsis);
 }
 
+function getStorySetupValidationMessage(payload) {
+  const storyType = String(payload?.genre || "").trim();
+  const synopsis = String(payload?.synopsis || "").trim();
+
+  if (!storyType && !synopsis) {
+    return "请先填写故事类型和故事梗概";
+  }
+  if (!storyType) {
+    return "请先填写故事类型";
+  }
+  if (!synopsis) {
+    return "请先填写故事梗概";
+  }
+  return "";
+}
+
 function maybeCompleteBasicInfoGuide() {
   if (!guideEnabledForSession) {
     return;
@@ -3387,6 +3421,7 @@ function normalizePersistedCharacter(character, index, total) {
     core_motivation: character?.core_motivation || "",
     graph_x: Number.isFinite(Number(character?.graph_x)) ? Number(character.graph_x) : fallbackPosition.x,
     graph_y: Number.isFinite(Number(character?.graph_y)) ? Number(character.graph_y) : fallbackPosition.y,
+    graph_position_locked: Boolean(character?.graph_position_locked),
     graph_color_index: colorIndex,
     graph_color: character?.graph_color || getCharacterGraphColorByIndex(colorIndex),
   };
@@ -3407,12 +3442,27 @@ function bindStoryDraftInputs() {
       markStoryDraftDirty();
       queueBasicHistorySnapshot("编辑基本信息");
       maybeCompleteBasicInfoGuide();
+      if (control === elements.synopsis) {
+        maybeShowSynopsisLengthNotice();
+      }
     });
   });
 
   elements.outlineFeedback.addEventListener("input", () => {
     markStoryDraftDirty();
   });
+}
+
+function getSynopsisCharacterCount() {
+  return Array.from(String(elements.synopsis?.value || "").trim()).length;
+}
+
+function maybeShowSynopsisLengthNotice() {
+  const isOverLimit = getSynopsisCharacterCount() >= STORY_SYNOPSIS_MAX_CHARS;
+  if (isOverLimit && !synopsisLimitNoticeActive) {
+    showPageToast("请控制故事梗概的字数哦~");
+  }
+  synopsisLimitNoticeActive = isOverLimit;
 }
 
 function markStoryDraftDirty({ clearGeneratedContent = false } = {}) {
@@ -4547,13 +4597,17 @@ function handleGraphPointerDown(event) {
     elements.graphCanvas.setPointerCapture(event.pointerId);
   }
 
-  state.pendingEdge = {
-    sourceId: source.id,
+  startGraphNodePress(event, source, point);
+}
+
+function startGraphNodePress(event, character, point) {
+  cancelGraphNodePress();
+  state.nodePress = {
+    characterId: character.id,
     pointerId: event.pointerId,
+    startPoint: point,
     currentPoint: point,
-    candidateTargetId: null,
   };
-  renderGraph();
 }
 
 function handleGraphPointerMove(event) {
@@ -4564,15 +4618,25 @@ function handleGraphPointerMove(event) {
     return;
   }
 
+  if (state.nodePress?.pointerId === event.pointerId) {
+    const point = getGraphPointFromClient(event.clientX, event.clientY);
+    state.nodePress.currentPoint = point;
+    const distance = Math.hypot(
+      point.x - state.nodePress.startPoint.x,
+      point.y - state.nodePress.startPoint.y,
+    );
+    if (distance >= GRAPH_NODE_EDGE_DRAG_DISTANCE) {
+      startPendingEdgeFromNodePress(state.nodePress, point);
+    }
+    return;
+  }
+
   if (!state.pendingEdge || state.pendingEdge.pointerId !== event.pointerId) {
     return;
   }
 
   const point = getGraphPointFromClient(event.clientX, event.clientY);
-  const hoveredTarget = findCharacterAtGraphPoint(point.x, point.y);
-  state.pendingEdge.currentPoint = point;
-  state.pendingEdge.candidateTargetId =
-    hoveredTarget && hoveredTarget.id !== state.pendingEdge.sourceId ? hoveredTarget.id : null;
+  updatePendingEdgePoint(point);
   renderGraph();
 }
 
@@ -4580,6 +4644,12 @@ function handleGlobalPointerUp(event) {
   if (state.graphPan?.pointerId === event.pointerId) {
     finishGraphPan(event.pointerId);
     saveWorkspaceSnapshot();
+    return;
+  }
+
+  if (state.nodePress?.pointerId === event.pointerId) {
+    releaseGraphPointerCapture(event.pointerId);
+    cancelGraphNodePress();
     return;
   }
 
@@ -4605,6 +4675,12 @@ function handlePendingEdgeCancel(event) {
     return;
   }
 
+  if (state.nodePress?.pointerId === event.pointerId) {
+    releaseGraphPointerCapture(event.pointerId);
+    cancelGraphNodePress();
+    return;
+  }
+
   if (!state.pendingEdge || state.pendingEdge.pointerId !== event.pointerId) {
     return;
   }
@@ -4613,6 +4689,34 @@ function handlePendingEdgeCancel(event) {
   state.pendingEdge = null;
   renderGraph();
 }
+
+function cancelGraphNodePress() {
+  state.nodePress = null;
+}
+
+function startPendingEdgeFromNodePress(press, point) {
+  const sourceId = press.characterId;
+  cancelGraphNodePress();
+  state.pendingEdge = {
+    sourceId,
+    pointerId: press.pointerId,
+    currentPoint: point,
+    candidateTargetId: null,
+  };
+  updatePendingEdgePoint(point);
+  renderGraph();
+}
+
+function updatePendingEdgePoint(point) {
+  if (!state.pendingEdge) {
+    return;
+  }
+  const hoveredTarget = findCharacterAtGraphPoint(point.x, point.y);
+  state.pendingEdge.currentPoint = point;
+  state.pendingEdge.candidateTargetId =
+    hoveredTarget && hoveredTarget.id !== state.pendingEdge.sourceId ? hoveredTarget.id : null;
+}
+
 
 function startGraphPan(event) {
   if (!elements.graphCanvas) {
@@ -4751,14 +4855,14 @@ function buildCurveGeometryFromEndpoints(start, end, offset) {
   return buildCurveGeometryFromPoints(start, end, control);
 }
 
-function buildCurveGeometryFromRelation(relation, offset) {
+function buildCurveGeometryFromRelation(relation, offset, { forceEllipseEndpoints = false } = {}) {
   const sourceCharacter = getCharacterById(relation.source_id);
   const targetCharacter = getCharacterById(relation.target_id);
   if (!sourceCharacter || !targetCharacter) {
     return null;
   }
 
-  const hasStoredAnchors = relation.source_anchor && relation.target_anchor;
+  const hasStoredAnchors = !forceEllipseEndpoints && relation.source_anchor && relation.target_anchor;
   const { start, end } = hasStoredAnchors
     ? {
         start: resolveAnchorPoint(sourceCharacter, relation.source_anchor),
@@ -4872,6 +4976,7 @@ function renderPendingEdge() {
   preview.setAttribute("stroke-width", "2.4");
   preview.setAttribute("stroke-dasharray", "8 6");
   preview.setAttribute("stroke-linecap", "round");
+  preview.setAttribute("marker-end", "url(#arrow-end)");
   preview.setAttribute("pointer-events", "none");
   elements.graphSvg.appendChild(preview);
 }
@@ -4889,6 +4994,7 @@ function buildCurveGeometryFromPoints(start, end, control) {
     labelY,
     normalX: -dy / length,
     normalY: dx / length,
+    length,
   };
 }
 
@@ -4917,12 +5023,13 @@ function shouldMergeBidirectionalGroup(group) {
 }
 
 function isBidirectionalRelationPair(forward, reverse) {
+  const forwardLabel = normalizeRelationLabel(forward?.label);
+  const reverseLabel = normalizeRelationLabel(reverse?.label);
   return Boolean(
     forward &&
       reverse &&
-      forward.bidirectional &&
-      reverse.bidirectional &&
-      normalizeRelationLabel(forward.label) === normalizeRelationLabel(reverse.label),
+      forwardLabel &&
+      forwardLabel === reverseLabel,
   );
 }
 
@@ -4952,15 +5059,18 @@ function createDirectionalRelationRenderItem(relation, offset) {
 function createMergedRelationRenderItem(group) {
   const relation = group.forward || group.reverse;
   const mergedLabel = normalizeRelationLabel(relation?.label) || "未命名关系";
+  const sourceId = group.forward?.source_id || relation.source_id;
+  const targetId = group.forward?.target_id || relation.target_id;
   return {
     relation,
-    sourceId: group.forward?.source_id || relation.source_id,
-    targetId: group.forward?.target_id || relation.target_id,
+    sourceId,
+    targetId,
     offset: 0,
     markerStart: true,
     markerEnd: true,
-    label: mergedLabel,
+    label: getBidirectionalRelationDisplayText(sourceId, targetId, mergedLabel),
     labelSide: curveSign(group.key),
+    forceEllipseEndpoints: true,
     deleteRequest: {
       mode: "pair",
       pairKey: group.key,
@@ -4970,7 +5080,9 @@ function createMergedRelationRenderItem(group) {
 }
 
 function renderRelationItem(item) {
-  const geometry = buildCurveGeometryFromRelation(item.relation, item.offset);
+  const geometry = buildCurveGeometryFromRelation(item.relation, item.offset, {
+    forceEllipseEndpoints: Boolean(item.forceEllipseEndpoints),
+  });
   if (!geometry) {
     return;
   }
@@ -5000,9 +5112,8 @@ function renderRelationItem(item) {
   const badge = document.createElement("button");
   badge.type = "button";
   badge.className = "relation-badge relation-badge-button";
-  const labelSide = item.labelSide || 1;
-  badge.style.left = `${geometry.labelX + geometry.normalX * GRAPH.labelOffset * labelSide}px`;
-  badge.style.top = `${geometry.labelY + geometry.normalY * GRAPH.labelOffset * labelSide}px`;
+  badge.style.left = `${geometry.labelX}px`;
+  badge.style.top = `${geometry.labelY}px`;
   badge.innerHTML = `<span>${escapeHtml(item.label)}</span>`;
   bindRelationItemEvents(badge, item);
   elements.relationLabels.appendChild(badge);
@@ -5022,6 +5133,10 @@ function getDirectionalRelationDisplayText(relation) {
   }
   const label = normalizeRelationLabel(relation.label) || "未命名关系";
   return `${getCharacterName(relation.source_id)}→${getCharacterName(relation.target_id)}: ${label}`;
+}
+
+function getBidirectionalRelationDisplayText(sourceId, targetId, label) {
+  return `${getCharacterName(sourceId)}↔${getCharacterName(targetId)}：${label || "未命名关系"}`;
 }
 
 function cloneAnchor(anchor) {
@@ -5273,6 +5388,9 @@ function applyServerStoryDraft(story) {
           weaknesses: previous?.weaknesses,
           character_arc: previous?.character_arc,
           speaking_style: previous?.speaking_style,
+          graph_x: previous?.graph_x,
+          graph_y: previous?.graph_y,
+          graph_position_locked: previous?.graph_position_locked,
           graph_color_index: previous?.graph_color_index,
           graph_color: previous?.graph_color,
         },
@@ -5347,9 +5465,15 @@ function restoreStoryTaskActions() {
 
 function handleSaveRelations() {
   const payload = buildStoryPayload();
-  const validationMessage = validateStoryContextForRelationSave(payload);
+  const setupValidationMessage = getStorySetupValidationMessage(payload);
+  if (setupValidationMessage) {
+    showPageToast(setupValidationMessage);
+    return;
+  }
+
+  const validationMessage = validateStoryContextForRelationSave(payload, { skipSetup: true });
   if (validationMessage) {
-    setStatus(validationMessage, false, true);
+    setTopStatus(validationMessage, false, true);
     return;
   }
 
@@ -5361,9 +5485,12 @@ function handleSaveRelations() {
   unlockCharactersAiGuide();
 }
 
-function validateStoryContextForRelationSave(payload) {
-  if (!payload.synopsis) {
-    return "请先填写故事梗概后再保存关系。";
+function validateStoryContextForRelationSave(payload, { skipSetup = false } = {}) {
+  if (!skipSetup) {
+    const setupValidationMessage = getStorySetupValidationMessage(payload);
+    if (setupValidationMessage) {
+      return setupValidationMessage;
+    }
   }
   if (!(payload.total_words > 0)) {
     return "请先填写有效的小说整体篇幅后再保存关系。";
@@ -5552,6 +5679,16 @@ function serializeRelation(relation) {
   };
 }
 
+function handleGenerateOutlineClick(event) {
+  const setupValidationMessage = getStorySetupValidationMessage(buildStoryPayload());
+  if (!setupValidationMessage) {
+    return;
+  }
+
+  event.preventDefault();
+  showPageToast(setupValidationMessage);
+}
+
 async function handleOutlineSubmit(event) {
   event.preventDefault();
   if (!ensureNoBlockingLlmTask()) {
@@ -5559,8 +5696,9 @@ async function handleOutlineSubmit(event) {
   }
   const payload = buildStoryPayload();
   const hasUnnamedCharacters = (payload.characters || []).some((character) => !String(character?.name || "").trim());
-  if (!payload.synopsis) {
-    setStatus("请先填写故事梗概。", false, true);
+  const setupValidationMessage = getStorySetupValidationMessage(payload);
+  if (setupValidationMessage) {
+    showPageToast(setupValidationMessage);
     return;
   }
 
@@ -7196,6 +7334,21 @@ function showFavoriteToast(message) {
   }, 2200);
 }
 
+function showPageToast(message, duration = 2600) {
+  if (!elements.pageToast) {
+    return;
+  }
+
+  window.clearTimeout(pageToastTimer);
+  elements.pageToast.textContent = message;
+  elements.pageToast.classList.remove("hidden");
+  elements.pageToast.setAttribute("aria-hidden", "false");
+  pageToastTimer = window.setTimeout(() => {
+    elements.pageToast.classList.add("hidden");
+    elements.pageToast.setAttribute("aria-hidden", "true");
+  }, duration);
+}
+
 function removeFavoriteMarkup(favoriteQuote) {
   const chapterNumber = Number(favoriteQuote?.chapterNumber);
   if (!Number.isFinite(chapterNumber)) {
@@ -7470,6 +7623,16 @@ function setPausedState(message) {
   if (!llmActivity.panelOpen) {
     llmActivity.panelOpen = true;
     syncLlmActivityPanelState();
+  }
+}
+
+function setTopStatus(message, keepBusy = false, isError = false) {
+  setLlmActivityStatus(isError ? "出错了" : keepBusy ? "处理中" : "就绪", { busy: keepBusy, paused: false });
+  clearGuidePanelMode();
+  stopGuideTyping();
+  clearGuideOverlay();
+  if (elements.statusBox) {
+    elements.statusBox.textContent = message;
   }
 }
 

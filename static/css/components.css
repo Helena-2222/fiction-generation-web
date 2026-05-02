@@ -1151,6 +1151,7 @@ button:disabled {
   cursor: grabbing;
 }
 
+
 .graph-canvas {
   position: relative;
   width: 100%;
@@ -1208,6 +1209,7 @@ button:disabled {
   position: absolute;
   transform: translate(-50%, -50%);
   min-width: 100px;
+  max-width: 188px;
   padding: 8px 14px;
   font-size: 14px;
   color: var(--accent);
@@ -1221,6 +1223,8 @@ button:disabled {
 .relation-badge-button span {
   display: block;
   line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .relation-toolbar {
@@ -1987,6 +1991,25 @@ body.neuro-panel-open #stage-story .prose-content {
   box-shadow: var(--shadow-lg);
 }
 
+.page-toast {
+  position: fixed;
+  top: calc(var(--topbar-h) + 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 43;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 0.5px solid rgba(230, 175, 60, 0.46);
+  background: rgba(255, 250, 232, 0.98);
+  color: #8a5a13;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+}
+
 .neuro-guide-overlay {
   position: fixed;
   inset: 0;
@@ -2705,6 +2728,10 @@ body.neuro-panel-open #stage-story .prose-content {
 }
 
 @media (max-width: 720px) {
+  .page-toast {
+    top: 14px;
+  }
+
   .scroll-area,
   .outline-main {
     padding: 24px 18px;

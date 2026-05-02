@@ -22,6 +22,7 @@ export const state = {
     offsetY: 0,
   },
   graphPan: null,
+  nodePress: null,
   pendingEdge: null,
   relationEditor: null,
   relationDeleteRequest: null,
