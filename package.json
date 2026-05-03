@@ -1,4 +1,10 @@
 {
+  "type": "module",
+  "scripts": {
+    "test": "npm run test:frontend && npm run test:backend",
+    "test:backend": ".\\.venv\\Scripts\\python.exe -m unittest discover -s tests -p \"test_*.py\"",
+    "test:frontend": "node --test tests/*.test.mjs"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.0"
   }

@@ -5,6 +5,7 @@ import {
   getUserDisplayName,
   getUserInitial,
   isAnonymousUser,
+  signOut,
 } from "./src/auth-client.js";
 import { fetchUserWorkspaceSnapshot } from "./src/cloud-workspace.js";
 import {
@@ -51,6 +52,7 @@ const elements = {
   booksRow: document.querySelector("#user-books-row"),
   tabs: Array.from(document.querySelectorAll("[data-tab]")),
   panels: Array.from(document.querySelectorAll(".shelf-panel")),
+  logoutButton: document.querySelector("#logout-button"),
 };
 
 function getQueryFlag(name) {
@@ -183,6 +185,12 @@ function renderProfile() {
     elements.authAction.href = buildAuthUrl("/create?stage=basic");
   } else {
     elements.authAction.removeAttribute("href");
+  }
+
+  const showLogout = !isGuestProfile && Boolean(state.currentUser);
+  if (elements.logoutButton) {
+    elements.logoutButton.classList.toggle("hidden", !showLogout);
+    elements.logoutButton.setAttribute("aria-hidden", showLogout ? "false" : "true");
   }
 }
 
@@ -337,8 +345,24 @@ function bindTabs() {
   });
 }
 
+function bindLogout() {
+  if (!elements.logoutButton) {
+    return;
+  }
+  elements.logoutButton.addEventListener("click", async () => {
+    elements.logoutButton.disabled = true;
+    try {
+      await signOut();
+      window.location.replace("/auth");
+    } catch {
+      elements.logoutButton.disabled = false;
+    }
+  });
+}
+
 async function init() {
   bindTabs();
+  bindLogout();
   const ready = await bootstrapAuth();
   if (!ready) {
     render();

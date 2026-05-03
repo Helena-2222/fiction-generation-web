@@ -929,10 +929,10 @@ function syncNeuroInputState() {
     return;
   }
 
-  elements.neuroInputLabel.textContent = "改进意见";
-  elements.neuroInputHint.textContent = hasOutline
-    ? "在这里补充修改方向，然后点击“重新生成”。"
-    : "首版大纲生成后，你可以在这里填写改进意见。";
+  // elements.neuroInputLabel.textContent = "改进意见";
+  // elements.neuroInputHint.textContent = hasOutline
+  //   ? "在这里补充修改方向，然后点击“重新生成”。"
+  //   : "首版大纲生成后，你可以在这里填写改进意见。";
   elements.outlineFeedback.placeholder = hasOutline
     ? "如果想调整大纲，可以在这里补充方向，例如：加强情感张力、减少支线、增加悬疑误导。"
     : "生成首版大纲后，可在这里填写改进意见。";
@@ -5910,6 +5910,7 @@ async function handleStoryGenerate() {
         const storyPayload = response?.chapters ? response : response?.story || response;
         state.generatedStory = normalizeGeneratedStory(storyPayload, state.outline?.title || "");
         state.activeChapterNumber = state.generatedStory?.chapters?.[0]?.chapter_number || null;
+        updateOutputActionState();
         appendLlmActivityStep("解析正文结果", "正在校验章节列表、摘要和正文内容。");
         appendLlmActivityStep("渲染章节内容", "正在把生成结果写入正文展示区。");
         renderStory();

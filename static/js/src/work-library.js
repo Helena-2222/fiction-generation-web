@@ -260,7 +260,7 @@ export function getWorkTitleFromSnapshot(snapshot = {}) {
     return DEFAULT_TITLE;
   }
 
-  return value.replace(/\s+/g, " ").slice(0, 28) || DEFAULT_TITLE;
+  return value.replace(/\s+/g, " ").slice(0, 28).trim() || DEFAULT_TITLE;
 }
 
 export function getWorkGenreFromSnapshot(snapshot = {}) {
