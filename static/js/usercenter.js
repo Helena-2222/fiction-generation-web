@@ -171,12 +171,13 @@ function renderProfile() {
   const initial = isGuestProfile ? "游" : getUserInitial(state.currentUser);
   const contact = isGuestProfile ? "未登录" : getUserContact(state.currentUser);
 
+  document.body.classList.toggle("is-guest-profile", isGuestProfile);
   elements.avatar.textContent = initial;
   elements.name.textContent = displayName;
   elements.status.textContent = isGuestProfile ? "游客模式" : "创作者";
   elements.contact.textContent = contact;
   elements.bio.textContent = isGuestProfile
-    ? "当前内容只保存在这个浏览器的 localStorage 中，登录后可以继续迁移。"
+    ? "当前内容只保存在这个浏览器的本地缓存中，登录保存您的作品"
     : "你的作品和创作进度会跟随当前账号持续保存。";
   elements.authAction.classList.toggle("hidden", !isGuestProfile);
   elements.authAction.setAttribute("aria-hidden", isGuestProfile ? "false" : "true");
@@ -336,7 +337,7 @@ function bindTabs() {
       elements.panels.forEach((panel) => {
         panel.classList.toggle("active", panel.id === `panel-${target}`);
       });
-      if (target === "subscriptions") {
+      if (target === "subscriptions" && !(state.guestMode || isAnonymousUser(state.currentUser))) {
         setMessage("订阅功能正在开发中");
       } else {
         setMessage("");

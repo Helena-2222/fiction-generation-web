@@ -52,7 +52,7 @@ a {
   flex: 1;
   display: flex;
   justify-content: center;
-  padding: 52px 40px 80px;
+  padding: 100px 40px 80px;
   overflow-y: auto;
 }
 
@@ -133,6 +133,10 @@ a {
   justify-content: center;
 }
 
+.is-guest-profile .profile-tags {
+  display: none;
+}
+
 .tag-pill {
   height: 24px;
   padding: 0 12px;
@@ -195,6 +199,25 @@ a {
 .edit-btn:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.is-guest-profile .edit-btn {
+  min-height: 44px;
+  padding: 0 32px;
+  background: linear-gradient(135deg, #f5b86e 0%, #ff934d 100%);
+  border-color: #f4ab5e;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: 0 10px 24px rgba(244, 146, 71, 0.28);
+}
+
+.is-guest-profile .edit-btn:hover {
+  background: linear-gradient(135deg, #f7c27d 0%, #ff8640 100%);
+  border-color: #f29a4a;
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(244, 146, 71, 0.34);
+  transform: translateY(-1px);
 }
 
 .milestones {
@@ -302,6 +325,27 @@ a {
 
 .shelf-panel.active {
   display: block;
+}
+
+.is-guest-profile .shelf-panel {
+  position: relative;
+  min-height: 172px;
+}
+
+.is-guest-profile .shelf-panel::after {
+  content: "登陆后查看我的作品";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  color: var(--ink-soft);
+  font-size: 16px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  text-align: center;
+  letter-spacing: 0.02em;
 }
 
 .books-row {
