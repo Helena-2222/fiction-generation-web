@@ -228,6 +228,58 @@ test("work library create and delete use scoped Supabase writes", async () => {
   assert.deepEqual(updateQuery.calls.filter((call) => call.method === "eq")[1].args, ["id", "uuid-1"]);
 });
 
+test("work library getWork keeps newer local task snapshots over older cloud rows", async () => {
+  const { localStorage } = setupBrowserEnv();
+  localStorage.setItem(
+    "story-generation-works-v1:user-1",
+    JSON.stringify({
+      activeWorkId: "w1",
+      works: [
+        {
+          id: "w1",
+          userId: "user-1",
+          title: "Local Running",
+          status: "active",
+          snapshot: {
+            form: { synopsis: "local story" },
+            llmTask: {
+              taskId: "task-local",
+              kind: "outline",
+              status: "running",
+              operation: "outline_generate",
+            },
+            updatedAt: "2026-05-03T10:00:00.000Z",
+          },
+          createdAt: "2026-05-01T00:00:00.000Z",
+          updatedAt: "2026-05-03T10:00:00.000Z",
+        },
+      ],
+    }),
+  );
+  installSupabaseClient(() => ({
+    maybeSingleResult: {
+      data: {
+        id: "w1",
+        user_id: "user-1",
+        title: "Cloud Older",
+        genre: "",
+        style: "",
+        status: "active",
+        snapshot: { form: { synopsis: "cloud story" }, updatedAt: "2026-05-02T10:00:00.000Z" },
+        created_at: "2026-05-01T00:00:00.000Z",
+        updated_at: "2026-05-02T10:00:00.000Z",
+      },
+      error: null,
+    },
+  }));
+  const { getWork } = await importFresh("static/js/src/work-library.js");
+
+  const work = await getWork({ userId: "user-1" }, "w1");
+
+  assert.equal(work.title, "Local Running");
+  assert.equal(work.snapshot.llmTask.taskId, "task-local");
+});
+
 test("user activity merges cloud rows with local cache and writes the merged stats", async () => {
   const { localStorage } = setupBrowserEnv();
   localStorage.setItem(

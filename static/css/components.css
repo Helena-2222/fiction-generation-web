@@ -1239,6 +1239,9 @@ button:disabled {
 }
 
 .relation-save-state {
+  align-self: stretch;
+  width: 100%;
+  box-sizing: border-box;
   margin-top: 16px;
   padding: 12px 14px;
   border-radius: var(--radius-md);
@@ -1734,8 +1737,7 @@ button:disabled {
 
 .synopsis-display,
 .arc-card-copy,
-.status-box,
-.relation-save-state {
+.status-box {
   max-width: var(--line-length-body);
 }
 

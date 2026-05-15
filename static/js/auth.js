@@ -95,7 +95,7 @@ function syncUserView() {
   }
   state.redirectTimer = window.setTimeout(() => {
     window.location.replace(state.nextPath);
-  }, 3000);
+  }, 0);
 }
 
 function render() {

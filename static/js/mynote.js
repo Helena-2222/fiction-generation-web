@@ -16,6 +16,7 @@ import {
 import { escapeHtml, formatFavoriteTime, normalizeFavoriteQuote } from "./src/utils.js";
 
 const BOOK_COLORS = ["#3f68a4", "#e55a5a", "#b98c4e", "#6bcb8c", "#2b6035", "#AC4A2A", "#A03A60", "#28487A", "#527035"];
+const SHOW_WORK_NOTE_FILTERS = false;
 
 const state = {
   currentUser: null,
@@ -174,9 +175,7 @@ function applyFavoriteSyncPayload(payload = {}) {
   }
 
   state.notes = collectNotes(state.works);
-  if (state.activeFilter !== "all" && !state.works.some((work) => work.id === state.activeFilter)) {
-    state.activeFilter = "all";
-  }
+  normalizeActiveFilter();
   renderNotes();
 }
 
@@ -231,6 +230,15 @@ function collectNotes(works) {
   }).sort((left, right) => Date.parse(right.createdAt || "") - Date.parse(left.createdAt || ""));
 }
 
+function normalizeActiveFilter() {
+  if (state.activeFilter === "all") {
+    return;
+  }
+  if (!SHOW_WORK_NOTE_FILTERS || !state.works.some((work) => work.id === state.activeFilter)) {
+    state.activeFilter = "all";
+  }
+}
+
 function groupNotes(notes) {
   const storyMap = new Map();
 
@@ -271,19 +279,22 @@ function renderFilters() {
     return;
   }
 
-  const workOptions = state.works
-    .map((work) => ({
-      id: work.id,
-      label: work.title || getWorkTitleFromSnapshot(work.snapshot),
-      count: state.notes.filter((note) => note.workId === work.id).length,
-      color: getWorkColor(work.id),
-    }))
-    .filter((item) => item.count > 0);
-
   const chips = [
     { id: "all", label: "全部", count: state.notes.length, color: "#6f5b45" },
-    ...workOptions,
   ];
+
+  if (SHOW_WORK_NOTE_FILTERS) {
+    const workOptions = state.works
+      .map((work) => ({
+        id: work.id,
+        label: work.title || getWorkTitleFromSnapshot(work.snapshot),
+        count: state.notes.filter((note) => note.workId === work.id).length,
+        color: getWorkColor(work.id),
+      }))
+      .filter((item) => item.count > 0);
+
+    chips.push(...workOptions);
+  }
 
   elements.filterBar.innerHTML = chips
     .map((chip) => `
@@ -301,6 +312,7 @@ function renderNotes() {
     return;
   }
 
+  normalizeActiveFilter();
   const filteredNotes = state.activeFilter === "all"
     ? state.notes
     : state.notes.filter((note) => note.workId === state.activeFilter);
@@ -450,7 +462,8 @@ function handleFilterClick(event) {
   if (!button) {
     return;
   }
-  state.activeFilter = button.dataset.filter || "all";
+  const nextFilter = button.dataset.filter || "all";
+  state.activeFilter = !SHOW_WORK_NOTE_FILTERS && nextFilter !== "all" ? "all" : nextFilter;
   renderNotes();
 }
 
@@ -532,9 +545,7 @@ async function loadNotes() {
   }
 
   state.notes = collectNotes(state.works);
-  if (state.activeFilter !== "all" && !state.works.some((work) => work.id === state.activeFilter)) {
-    state.activeFilter = "all";
-  }
+  normalizeActiveFilter();
   syncNavLinks();
   renderNotes();
 }

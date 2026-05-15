@@ -33,6 +33,7 @@ function buildInitialWorkspaceSnapshot() {
     isStorySaved: false,
     outline: null,
     generatedStory: null,
+    llmTask: null,
     favoriteQuotes: [],
     workspaceLock: {
       locked: false,
@@ -167,9 +168,11 @@ const llmActivity = {
 };
 const llmTaskController = {
   currentTask: null,
+  persistedTask: null,
   pollTimer: null,
   pollInFlight: false,
 };
+const ACTIVE_LLM_TASK_KINDS = new Set(["relations_supplement", "outline", "story", "story_chapter"]);
 const workspaceLockState = {
   locked: false,
   lockedAt: "",
@@ -1445,6 +1448,7 @@ async function init() {
     scroll: Boolean(requestedStageOverride),
     keepSelection: true,
   });
+  resumePersistedLlmTaskIfNeeded();
   if (requestedStageOverride) {
     clearStageOverrideFromUrl();
   }
@@ -3197,6 +3201,7 @@ function buildWorkspaceSnapshot() {
     isStorySaved: state.isStorySaved,
     outline: state.outline,
     generatedStory: state.generatedStory,
+    llmTask: serializeCurrentLlmTask(),
     favoriteQuotes: state.favoriteQuotes.map((item) => ({ ...item })),
     workspaceLock: normalizeWorkspaceLock(workspaceLockState),
     form: {
@@ -3269,6 +3274,8 @@ function applyWorkspaceSnapshot(snapshot) {
   state.generatedStory = snapshot.generatedStory && typeof snapshot.generatedStory === "object"
     ? normalizeGeneratedStory(snapshot.generatedStory, state.outline?.title || "")
     : null;
+  llmTaskController.currentTask = null;
+  llmTaskController.persistedTask = normalizePersistedLlmTask(snapshot.llmTask);
   state.favoriteQuotes = Array.isArray(snapshot.favoriteQuotes)
     ? snapshot.favoriteQuotes.map((item) => normalizeFavoriteQuote(item)).filter(Boolean)
     : [];
@@ -3772,6 +3779,51 @@ function hasBlockingLlmTask() {
   return ["running", "paused"].includes(status);
 }
 
+function normalizePersistedLlmTask(task) {
+  if (!task || typeof task !== "object") {
+    return null;
+  }
+
+  const taskId = String(task.taskId || task.task_id || "").trim();
+  const kind = String(task.kind || "").trim();
+  const status = String(task.status || "").trim();
+  if (!taskId || !ACTIVE_LLM_TASK_KINDS.has(kind) || !["running", "paused"].includes(status)) {
+    return null;
+  }
+
+  return {
+    taskId,
+    kind,
+    status,
+    operation: String(task.operation || "").trim(),
+    createdAt: String(task.createdAt || task.created_at || "").trim(),
+    updatedAt: String(task.updatedAt || task.updated_at || "").trim(),
+    workId: String(task.workId || "").trim(),
+    metadata: task.metadata && typeof task.metadata === "object" ? { ...task.metadata } : {},
+  };
+}
+
+function serializeCurrentLlmTask() {
+  const task = llmTaskController.currentTask;
+  if (!task && llmTaskController.persistedTask) {
+    return llmTaskController.persistedTask;
+  }
+  if (!task || !["running", "paused"].includes(task.status)) {
+    return null;
+  }
+
+  return {
+    taskId: task.taskId,
+    kind: task.kind,
+    status: task.status,
+    operation: task.operation || task.kind,
+    createdAt: task.createdAt || "",
+    updatedAt: task.updatedAt || new Date().toISOString(),
+    workId: currentWorkId,
+    metadata: task.metadata && typeof task.metadata === "object" ? { ...task.metadata } : {},
+  };
+}
+
 function ensureNoBlockingLlmTask() {
   if (!hasBlockingLlmTask()) {
     return true;
@@ -3826,6 +3878,10 @@ function registerLlmTask(taskStatus, taskConfig) {
     taskId: taskStatus.task_id,
     kind: taskStatus.kind,
     status: taskStatus.status,
+    operation: taskConfig.operation || taskStatus.kind,
+    metadata: taskConfig.metadata && typeof taskConfig.metadata === "object" ? { ...taskConfig.metadata } : {},
+    createdAt: taskStatus.created_at || new Date().toISOString(),
+    updatedAt: taskStatus.updated_at || new Date().toISOString(),
     busyMessage: taskConfig.busyMessage,
     runningSummary: taskConfig.runningSummary,
     waitingMessages: taskConfig.waitingMessages,
@@ -3836,14 +3892,18 @@ function registerLlmTask(taskStatus, taskConfig) {
     onCompleted: taskConfig.onCompleted,
     actionPending: false,
   };
+  llmTaskController.persistedTask = null;
   updateLlmTaskActionState();
   startLlmTaskPolling();
+  saveWorkspaceSnapshot({ immediate: true });
 }
 
 function finalizeCurrentLlmTask() {
   stopLlmTaskPolling();
   llmTaskController.currentTask = null;
+  llmTaskController.persistedTask = null;
   updateLlmTaskActionState();
+  saveWorkspaceSnapshot({ immediate: true });
 }
 
 async function handleCurrentLlmTaskStatus(taskStatus) {
@@ -3851,11 +3911,13 @@ async function handleCurrentLlmTaskStatus(taskStatus) {
   if (!task || task.taskId !== taskStatus.task_id) {
     return;
   }
+  task.updatedAt = taskStatus.updated_at || new Date().toISOString();
 
   if (taskStatus.status === "running") {
     task.status = "running";
     task.actionPending = false;
     updateLlmTaskActionState();
+    saveWorkspaceSnapshot();
     return;
   }
 
@@ -3869,6 +3931,7 @@ async function handleCurrentLlmTaskStatus(taskStatus) {
     elements.llmActivitySummary.textContent = task.pausedSummary;
     updateLlmTaskActionState();
     syncLlmActivityPanelState();
+    saveWorkspaceSnapshot({ immediate: true });
     appendLlmActivityStep(
       "本次生成已暂停",
       "你可以先返回编辑；若继续，将按暂停前的输入重新发起本次 LLM 调用。",
@@ -3908,6 +3971,90 @@ async function handleCurrentLlmTaskStatus(taskStatus) {
 async function createManagedLlmTask(createUrl, payload, taskConfig) {
   const taskStatus = await postJson(createUrl, payload);
   registerLlmTask(taskStatus, taskConfig);
+}
+
+function registerPersistedLlmTask(persistedTask, taskConfig) {
+  llmTaskController.currentTask = {
+    taskId: persistedTask.taskId,
+    kind: persistedTask.kind,
+    status: persistedTask.status,
+    operation: taskConfig.operation || persistedTask.operation || persistedTask.kind,
+    metadata: taskConfig.metadata && typeof taskConfig.metadata === "object" ? { ...taskConfig.metadata } : {},
+    createdAt: persistedTask.createdAt || "",
+    updatedAt: persistedTask.updatedAt || "",
+    busyMessage: taskConfig.busyMessage,
+    runningSummary: taskConfig.runningSummary,
+    waitingMessages: taskConfig.waitingMessages,
+    pausedSummary: taskConfig.pausedSummary,
+    discardSummary: taskConfig.discardSummary,
+    discardStatusMessage: taskConfig.discardStatusMessage,
+    restoreUi: taskConfig.restoreUi,
+    onCompleted: taskConfig.onCompleted,
+    actionPending: false,
+  };
+  llmTaskController.persistedTask = null;
+  updateLlmTaskActionState();
+}
+
+function resumePersistedLlmTaskIfNeeded() {
+  const persistedTask = llmTaskController.persistedTask;
+  if (!persistedTask) {
+    return false;
+  }
+  if (persistedTask.workId && currentWorkId && persistedTask.workId !== currentWorkId) {
+    llmTaskController.persistedTask = null;
+    return false;
+  }
+
+  const operation = persistedTask.operation || (
+    persistedTask.kind === "relations_supplement"
+      ? "relations_supplement"
+      : persistedTask.kind === "outline"
+        ? "outline_generate"
+        : persistedTask.kind === "story"
+          ? "story_generate"
+          : "story_chapter_regenerate"
+  );
+  const taskConfig = buildLlmTaskConfig(operation, persistedTask.metadata || {});
+  if (!taskConfig) {
+    llmTaskController.persistedTask = null;
+    saveWorkspaceSnapshot({ immediate: true });
+    return false;
+  }
+
+  registerPersistedLlmTask(persistedTask, taskConfig);
+  openLlmActivityPanel();
+  llmActivity.active = persistedTask.status === "running";
+  llmActivity.runId += 1;
+  setLlmActivityStatus(
+    persistedTask.status === "paused" ? "已暂停" : "运行中",
+    persistedTask.status === "paused" ? { paused: true } : { busy: true },
+  );
+  elements.llmActivityTitle.textContent = taskConfig.activityTitle || "AI 运行任务";
+  elements.llmActivityLog.innerHTML = "";
+  appendLlmActivityStep(
+    persistedTask.status === "paused" ? "恢复已暂停任务" : "接回后台任务",
+    persistedTask.status === "paused"
+      ? "这个任务在你离开创作台前已暂停，可以继续或放弃。"
+      : "你离开创作台期间，后端仍在执行该任务；现在继续跟踪结果。",
+    "info",
+  );
+  if (persistedTask.status === "running") {
+    setBusyState(taskConfig.busyMessage);
+    startLlmActivityWaitingLoop(taskConfig.runningSummary, taskConfig.waitingMessages);
+    taskConfig.restoreUi();
+    startLlmTaskPolling();
+    void pollCurrentLlmTask();
+  } else {
+    llmActivity.active = false;
+    setPausedState(taskConfig.pausedSummary);
+    taskConfig.restoreUi();
+    openLlmTaskPauseModal(taskConfig.pausedSummary);
+  }
+  updateRelationActionState();
+  updateOutputActionState();
+  syncLlmActivityPanelState();
+  return true;
 }
 
 async function handlePauseCurrentLlmTask() {
@@ -4073,6 +4220,207 @@ function buildStoryWaitingMessages(chapterCount) {
   );
 
   return messages;
+}
+
+function buildLlmTaskConfig(operation, metadata = {}) {
+  if (operation === "relations_supplement") {
+    return {
+      operation,
+      metadata,
+      activityTitle: "AI 补充角色关系",
+      busyMessage: "正在根据已保存的梗概、角色卡与关系网补充角色关系...",
+      runningSummary: "LLM 正在推断可能的角色互动关系。",
+      waitingMessages: buildRelationSupplementWaitingMessages(),
+      pausedSummary: "角色关系补充已暂停。你可以先回去调整梗概、角色卡或关系网；若继续，将按暂停前的输入重新补充关系。",
+      discardSummary: "本次角色关系补充已放弃，你可以修改后重新发起。",
+      discardStatusMessage: "本次角色关系补充已放弃。你可以继续编辑并重新发起补充。",
+      restoreUi: restoreRelationTaskActions,
+      onCompleted: handleRelationSupplementCompleted,
+    };
+  }
+
+  if (operation === "outline_regenerate" || operation === "outline_generate") {
+    const isRegeneration = operation === "outline_regenerate";
+    return {
+      operation,
+      metadata,
+      activityTitle: isRegeneration ? "AI 重生成大纲" : "AI 生成大纲",
+      busyMessage: isRegeneration ? "正在根据反馈重生成大纲..." : "Neuro AI 正在生成故事大纲...",
+      runningSummary: isRegeneration
+        ? "Neuro AI 正在按反馈重组故事结构。"
+        : "Neuro AI 正在规划故事结构与章节节奏。",
+      waitingMessages: buildOutlineWaitingMessages(isRegeneration),
+      pausedSummary: isRegeneration
+        ? "大纲重生成已暂停。你可以先回去修改设定或反馈；若继续，将按暂停前的输入重新生成本次大纲。"
+        : "大纲生成已暂停。你可以先回去修改设定；若继续，将按暂停前的输入重新生成本次大纲。",
+      discardSummary: isRegeneration
+        ? "本次大纲重生成已放弃，你可以修改后重新发起。"
+        : "本次大纲生成已放弃，你可以修改后重新发起。",
+      discardStatusMessage: isRegeneration
+        ? "本次大纲重生成已放弃。你可以继续编辑后重新生成大纲。"
+        : "本次大纲生成已放弃。你可以继续编辑后重新生成大纲。",
+      restoreUi: restoreOutlineTaskActions,
+      onCompleted: (response) => {
+        handleOutlineTaskCompleted(response, {
+          historyType: isRegeneration ? "重生成" : "首次生成",
+          isRegeneration,
+        });
+      },
+    };
+  }
+
+  if (operation === "story_generate") {
+    const chapterCount = metadata.chapterCount || state.outline?.chapter_count || state.outline?.chapters?.length || 1;
+    return {
+      operation,
+      metadata: { ...metadata, chapterCount },
+      activityTitle: "AI 生成正文",
+      busyMessage: "正在依次生成章节正文，这一步可能需要一些时间...",
+      runningSummary: "Neuro AI 正在逐章创作正文，这一步可能会持续一段时间。",
+      waitingMessages: buildStoryWaitingMessages(chapterCount),
+      pausedSummary: "正文生成已暂停。你可以先返回调整梗概、关系或大纲；若继续，将按暂停前的输入重新生成本次正文。",
+      discardSummary: "本次正文生成已放弃，你可以调整后重新发起。",
+      discardStatusMessage: "本次正文生成已放弃。你可以继续编辑并重新生成正文。",
+      restoreUi: restoreStoryTaskActions,
+      onCompleted: handleStoryTaskCompleted,
+    };
+  }
+
+  if (operation === "story_chapter_regenerate") {
+    const chapterNumber = Number(metadata.chapterNumber) || 0;
+    return {
+      operation,
+      metadata: { ...metadata, chapterNumber },
+      activityTitle: `AI 重生成第 ${chapterNumber || ""} 章`.trim(),
+      busyMessage: `正在重生成第 ${chapterNumber} 章...`,
+      runningSummary: `Neuro AI 正在重写第 ${chapterNumber} 章。`,
+      waitingMessages: [
+        { title: "读取章节上下文", detail: "正在对齐当前章节、大纲阶段和前后章节摘要。" },
+        { title: "重写单章正文", detail: "模型会保留全书连续性，并吸收你的本章建议。" },
+        { title: "整理单章结果", detail: "正在校验正文段落、乱码字符和 JSON 结构。" },
+      ],
+      pausedSummary: `第 ${chapterNumber} 章重生成已暂停。若继续，将按刚才的建议重新生成本章。`,
+      discardSummary: `第 ${chapterNumber} 章重生成已放弃，原正文未被替换。`,
+      discardStatusMessage: `第 ${chapterNumber} 章重生成已放弃。`,
+      restoreUi: restoreStoryTaskActions,
+      onCompleted: (response) => handleStoryChapterTaskCompleted(response, chapterNumber),
+    };
+  }
+
+  return null;
+}
+
+function handleRelationSupplementCompleted(response) {
+  const addedRelations = Array.isArray(response.added_relations) ? response.added_relations : [];
+  let mergedCount = 0;
+
+  addedRelations.forEach((relation) => {
+    if (appendAiRelation(relation)) {
+      mergedCount += 1;
+    }
+  });
+
+  appendLlmActivityStep("解析关系 JSON", "正在校验模型返回的关系结构与角色指向。");
+  syncRelationNames();
+  appendLlmActivityStep("合并到关系图", "正在把新关系写回当前关系网并更新可视化。");
+  renderGraph();
+  state.savedStoryDraft = buildStoryPayload();
+  state.isStorySaved = true;
+  updateRelationActionState();
+  saveWorkspaceSnapshot();
+  pushCharacterHistoryEntry(mergedCount ? "AI补充角色关系" : "同步角色关系", { force: mergedCount > 0 });
+  setStatus(
+    mergedCount
+      ? `AI 已补充 ${mergedCount} 条新关系，并同步到当前关系网。`
+      : "AI 没有补充新的关系，已保留你当前保存的关系网。",
+    false,
+  );
+  finishLlmActivityRun(
+    mergedCount
+      ? `已补充 ${mergedCount} 条角色关系，并同步到关系网。`
+      : "没有检测到适合新增的角色关系，当前关系网已保持不变。",
+  );
+}
+
+function handleOutlineTaskCompleted(response, { historyType, isRegeneration = false } = {}) {
+  const autoNamedCharacters = Array.isArray(response?.auto_named_characters) ? response.auto_named_characters : [];
+  const outlinePayload = response?.outline || response;
+  if (response?.story) {
+    applyServerStoryDraft(response.story);
+  }
+  state.outline = normalizeOutline(outlinePayload);
+  state.generatedStory = null;
+  state.activeChapterNumber = null;
+  pushOutlineHistoryEntry(state.outline, historyType || (isRegeneration ? "重生成" : "首次生成"));
+  if (autoNamedCharacters.length) {
+    appendLlmActivityStep("回写角色姓名", "已将 AI 生成的角色姓名同步到角色卡与关系网。");
+  }
+  appendLlmActivityStep(isRegeneration ? "解析重生成结果" : "解析大纲 JSON", "正在校验章节结构、字数规划与返回字段。");
+  if (isRegeneration) {
+    appendLlmActivityStep("清理旧正文结果", "由于大纲已变更，旧正文会被清空以避免混用。");
+    renderStory();
+  } else {
+    appendLlmActivityStep("整理篇章范围", "正在规范化四段式结构与章节范围。");
+  }
+  renderOutline();
+  renderStory();
+  appendLlmActivityStep(isRegeneration ? "渲染新大纲" : "渲染页面结果", "正在把大纲内容写回页面。");
+  saveWorkspaceSnapshot();
+  setCurrentStage("outline", { showGuide: false });
+  if (autoNamedCharacters.length) {
+    const namedSummary = formatAutoNamedCharacters(autoNamedCharacters);
+    setStatus(
+      isRegeneration
+        ? `${namedSummary ? `已先为未命名角色补全姓名：${namedSummary}。` : "已先为未命名角色补全姓名。"}新的大纲已经生成，可以继续调整，或开始逐章创作。`
+        : `${namedSummary ? `已先为未命名角色补全姓名：${namedSummary}。` : "已先为未命名角色补全姓名。"}大纲已生成，可以继续重生成，或直接按当前大纲生成全文。`,
+      false,
+    );
+    finishLlmActivityRun(
+      namedSummary
+        ? `已补全角色姓名：${namedSummary}，并${isRegeneration ? "完成大纲重生成" : "生成故事大纲"}。`
+        : `已补全未命名角色姓名，并${isRegeneration ? "完成大纲重生成" : "生成故事大纲"}。`,
+    );
+  } else {
+    setStatus(isRegeneration ? "新的大纲已经生成，可以继续调整，或开始逐章创作。" : "大纲已生成，可以继续重生成，或直接按当前大纲生成全文。", false);
+    finishLlmActivityRun(isRegeneration ? "新的大纲已经生成，可以继续调整后再生成正文。" : "大纲已生成完成，可以继续调整或直接生成正文。");
+  }
+  if (isRegeneration) {
+    syncTutorialGuidance(true);
+  } else {
+    unlockOutlineToolsGuide();
+  }
+}
+
+function handleStoryTaskCompleted(response) {
+  const storyPayload = response?.chapters ? response : response?.story || response;
+  state.generatedStory = normalizeGeneratedStory(storyPayload, state.outline?.title || "");
+  state.activeChapterNumber = state.generatedStory?.chapters?.[0]?.chapter_number || null;
+  updateOutputActionState();
+  appendLlmActivityStep("解析正文结果", "正在校验章节列表、摘要和正文内容。");
+  appendLlmActivityStep("渲染章节内容", "正在把生成结果写入正文展示区。");
+  renderStory();
+  saveWorkspaceSnapshot();
+  setCurrentStage("story", { showGuide: false });
+  setStatus("全文生成完成。你可以继续修改设定后重新走一次流程。", false);
+  finishLlmActivityRun("正文已生成完成，现在可以导出设定、导出全书或导出全部。");
+  unlockStoryGuide();
+}
+
+function handleStoryChapterTaskCompleted(response, chapterNumber) {
+  const chapter = findGeneratedChapter(chapterNumber);
+  if (!chapter) {
+    setStatus("未找到要替换的章节，无法回写单章重生成结果。", false, true);
+    finishLlmActivityRun("单章结果已返回，但当前作品中找不到对应章节。", "error");
+    return;
+  }
+  const regenerated = normalizeRegeneratedChapterPayload(response, chapter);
+  replaceGeneratedChapter(regenerated);
+  state.activeChapterNumber = regenerated.chapter_number;
+  appendLlmActivityStep("替换章节内容", `第 ${regenerated.chapter_number} 章已更新到正文区。`);
+  renderStory();
+  saveWorkspaceSnapshot();
+  setStatus(`第 ${regenerated.chapter_number} 章已重新生成。`, false);
+  finishLlmActivityRun(`第 ${regenerated.chapter_number} 章已重新生成完成。`);
 }
 
 function renderChipGroup(container, options, key) {
@@ -5530,6 +5878,8 @@ async function handleAiRelationSupplement() {
     await createManagedLlmTask("/api/llm-tasks/relations/supplement", {
       story: state.savedStoryDraft,
     }, {
+      operation: "relations_supplement",
+      metadata: {},
       busyMessage: "正在根据已保存的梗概、角色卡与关系网补充角色关系...",
       runningSummary: "LLM 正在推断可能的角色互动关系。",
       waitingMessages: buildRelationSupplementWaitingMessages(),
@@ -5727,6 +6077,8 @@ async function handleOutlineSubmit(event) {
       feedback: "",
       previous_outline: null,
     }, {
+      operation: "outline_generate",
+      metadata: {},
       busyMessage: "Neuro AI 正在生成故事大纲...",
       runningSummary: "Neuro AI 正在规划故事结构与章节节奏。",
       waitingMessages: buildOutlineWaitingMessages(false),
@@ -5814,6 +6166,8 @@ async function handleOutlineRegenerate() {
       feedback: elements.outlineFeedback.value.trim(),
       previous_outline: state.outline,
     }, {
+      operation: "outline_regenerate",
+      metadata: {},
       busyMessage: "正在根据反馈重生成大纲...",
       runningSummary: "Neuro AI 正在按反馈重组故事结构。",
       waitingMessages: buildOutlineWaitingMessages(true),
@@ -5899,6 +6253,10 @@ async function handleStoryGenerate() {
       story: buildStoryPayload(),
       outline: state.outline,
     }, {
+      operation: "story_generate",
+      metadata: {
+        chapterCount: state.outline?.chapter_count || state.outline?.chapters?.length || 1,
+      },
       busyMessage: "正在依次生成章节正文，这一步可能需要一些时间...",
       runningSummary: "Neuro AI 正在逐章创作正文，这一步可能会持续一段时间。",
       waitingMessages: buildStoryWaitingMessages(state.outline?.chapter_count || state.outline?.chapters?.length || 1),
@@ -6374,6 +6732,10 @@ async function regenerateStoryChapter(chapterNumber, feedback) {
       feedback,
       current_chapters: buildCurrentGeneratedChaptersPayload(),
     }, {
+      operation: "story_chapter_regenerate",
+      metadata: {
+        chapterNumber,
+      },
       busyMessage: `正在重生成第 ${chapterNumber} 章...`,
       runningSummary: `Neuro AI 正在重写第 ${chapterNumber} 章。`,
       waitingMessages: [

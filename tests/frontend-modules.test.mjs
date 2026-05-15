@@ -200,6 +200,12 @@ test("work library creates, lists, renames, duplicates and deletes local works",
         { content: "beta" },
       ],
     },
+    llmTask: {
+      taskId: "llm-task-active",
+      kind: "story",
+      status: "running",
+      operation: "story_generate",
+    },
   };
 
   assert.equal(getWorkTitleFromSnapshot(snapshot), "Clockwork rain over the old");
@@ -219,6 +225,7 @@ test("work library creates, lists, renames, duplicates and deletes local works",
   assert.notEqual(duplicated.id, created.id);
   assert.ok(duplicated.title.startsWith("Renamed Story"));
   assert.equal(duplicated.snapshot.workspaceLock.locked, false);
+  assert.equal(duplicated.snapshot.llmTask, null);
 
   assert.equal(await deleteWork(options, created.id), true);
   listed = await listWorks(options);

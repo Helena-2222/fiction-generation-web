@@ -235,6 +235,7 @@ export function buildEmptyWorkSnapshot() {
     isStorySaved: false,
     outline: null,
     generatedStory: null,
+    llmTask: null,
     favoriteQuotes: [],
     workspaceLock: {
       locked: false,
@@ -344,6 +345,18 @@ export async function getWork(options = {}, workId) {
 
       const cloudWork = normalizeWork(data);
       if (cloudWork && cloudWork.status !== "deleted") {
+        const localWork = readLocalLibrary(options).works.find(
+          (work) => work.id === normalizedWorkId && work.status !== "deleted",
+        );
+        const localTime = Date.parse(localWork?.updatedAt || "");
+        const cloudTime = Date.parse(cloudWork.updatedAt || "");
+        if (
+          localWork
+          && Number.isFinite(localTime)
+          && localTime > (Number.isFinite(cloudTime) ? cloudTime : 0) + WORK_TIMESTAMP_TOLERANCE_MS
+        ) {
+          return localWork;
+        }
         upsertLocalWork(options, cloudWork, { active: true });
         return cloudWork;
       }
@@ -497,6 +510,7 @@ export async function duplicateWork(options = {}, workId) {
   return createWork(options, {
     snapshot: {
       ...existing.snapshot,
+      llmTask: null,
       workspaceLock: {
         locked: false,
         lockedAt: null,
