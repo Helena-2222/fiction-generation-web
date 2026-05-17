@@ -578,10 +578,6 @@ function getCharacterGraphColorByIndex(index) {
 }
 
 function getCharacterGraphColor(character, index) {
-  if (character.graph_color) {
-    return character.graph_color;
-  }
-
   const colorIndex = Number.isInteger(character.graph_color_index)
     ? character.graph_color_index
     : index;
@@ -3430,7 +3426,7 @@ function normalizePersistedCharacter(character, index, total) {
     graph_y: Number.isFinite(Number(character?.graph_y)) ? Number(character.graph_y) : fallbackPosition.y,
     graph_position_locked: Boolean(character?.graph_position_locked),
     graph_color_index: colorIndex,
-    graph_color: character?.graph_color || getCharacterGraphColorByIndex(colorIndex),
+    graph_color: getCharacterGraphColorByIndex(colorIndex),
   };
 }
 
@@ -4765,7 +4761,7 @@ function renderCharacters() {
   addButton.type = "button";
   addButton.className = "character-tab character-tab-add";
   addButton.textContent = "+";
-  addButton.style.background = "#e3f6d2";
+  addButton.style.background = "#DDF2DE";//新建角色标签颜色
   addButton.style.zIndex = "1";
   addButton.addEventListener("click", () => {
     elements.addCharacter.click();
@@ -5266,7 +5262,7 @@ function renderCharacterNode(character, index) {
   node.style.left = `${character.graph_x}px`;
   node.style.top = `${character.graph_y}px`;
   node.style.background = "#fffefb";
-  node.style.borderColor = color.stroke;
+  node.style.borderColor = color.fill;
   node.style.color = color.text;
   node.style.boxShadow = isSource || isTarget
     ? `0 16px 30px ${color.shadow}`

@@ -128,13 +128,14 @@ export const GRAPH = {
   wheelZoomStrength: 0.0015,
   labelOffset: 30,
   panPadding: 72,
+  // 角色标签颜色
   nodeColors: [
-    { fill: "#ffe27d", stroke: "#f1c94c", text: "#614b12", shadow: "rgba(241, 201, 76, 0.24)" },
-    { fill: "#ff9aa1", stroke: "#ff7c85", text: "#662c33", shadow: "rgba(255, 124, 133, 0.24)" },
-    { fill: "#89c8f6", stroke: "#6cb6ef", text: "#244863", shadow: "rgba(108, 182, 239, 0.24)" },
-    { fill: "#c8f3b0", stroke: "#aee487", text: "#365024", shadow: "rgba(174, 228, 135, 0.24)" },
-    { fill: "#f6d7a8", stroke: "#e4bb79", text: "#6b4b1c", shadow: "rgba(228, 187, 121, 0.24)" },
-    { fill: "#d7c5ff", stroke: "#b9a1ef", text: "#49366d", shadow: "rgba(185, 161, 239, 0.24)" },
+    { fill: "#F5DA9F", stroke: "#E1BE70", text: "#5F4A22", shadow: "rgba(245, 218, 159, 0.32)" },
+    { fill: "#ADD2ED", stroke: "#76ABD1", text: "#244B63", shadow: "rgba(173, 210, 237, 0.32)" },
+    { fill: "#F4DCCA", stroke: "#C9927D", text: "#5F3F34", shadow: "rgba(230, 193, 178, 0.32)" },
+    { fill: "#BBDED2", stroke: "#82BFAF", text: "#2F584D", shadow: "rgba(187, 222, 210, 0.32)" },
+    { fill: "#F2C0C3", stroke: "#D98E95", text: "#67363B", shadow: "rgba(244, 189, 193, 0.32)" },
+    { fill: "#DBEAF6", stroke: "#B5A4DA", text: "#4D4168", shadow: "rgba(220, 211, 240, 0.32)" },
   ],
 };
 
