@@ -377,6 +377,10 @@
   gap: var(--space-card-sm);
 }
 
+#top-stage-tabs {
+  transform: translateX(-35px);
+}
+
 .step-tab,
 .chip,
 .btn-primary,
@@ -605,6 +609,10 @@
 
 .stage-toolbar .form-hint {
   margin-bottom: 0;
+}
+
+#stage-basic .stage-toolbar {
+  margin-bottom: 40px;
 }
 
 .section-stage-title {
@@ -1281,16 +1289,28 @@ button:disabled {
 }
 
 .outline-actions-row {
+  --outline-action-gap: 0px;
   display: flex;
-  align-items: flex-end;
-  gap: 20px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--outline-action-gap);
+  margin-left: auto;
 }
 
 .outline-icons,
 .stage-icon-actions {
   display: flex;
-  gap: 8px;
   align-items: center;
+}
+
+#outline-tools-anchor {
+  align-self: center;
+  justify-content: flex-end;
+  gap: var(--outline-action-gap);
+}
+
+.stage-icon-actions {
+  gap: 8px;
 }
 
 .icon-btn-wrap {
@@ -1329,6 +1349,11 @@ button:disabled {
 .outline-result,
 .story-result {
   min-height: 240px;
+}
+
+#story-result {
+  margin-left: 60px;
+  margin-right: 60px;
 }
 
 .outline-result.empty-state,
@@ -1640,6 +1665,7 @@ button:disabled {
 .prose-main {
   display: flex;
   flex-direction: column;
+  gap: 24px;
 }
 
 .story-reader-shell {
@@ -1671,6 +1697,18 @@ button:disabled {
   font-weight: 400;
   font-style: normal;
   letter-spacing: 0.02em;
+}
+
+.section-stage-title,
+.outline-synopsis-label > span:first-child,
+.prose-title {
+  font-family: var(--font-serif);
+  font-size: var(--text-title);
+  font-weight: 600;
+  line-height: var(--leading-title);
+  letter-spacing: var(--tracking-title);
+  color: var(--nav-ink, var(--accent-hover));
+  text-transform: none;
 }
 
 .prose-chapter-sub,
@@ -1743,6 +1781,9 @@ button:disabled {
 
 .prose-title-bar-static {
   flex-shrink: 0;
+  padding: 48px 60px 0;
+  margin-bottom: 0;
+  border-bottom: 0;
 }
 
 .story-chapter-tab {
@@ -2197,6 +2238,16 @@ body.neuro-panel-open #stage-story .prose-content {
   font-weight: 500;
 }
 
+#llm-activity-title {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  word-break: keep-all;
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
+}
+
 .neuro-stage {
   display: inline-flex;
   align-items: center;
@@ -2590,6 +2641,15 @@ body.neuro-panel-open #stage-story .prose-content {
     padding: 16px 32px;
   }
 
+  .prose-title-bar-static {
+    padding: 32px 40px 0;
+  }
+
+  #story-result {
+    margin-left: 40px;
+    margin-right: 40px;
+  }
+
   .outline-stage-grid,
   .outline-chapter-grid,
   .arc-tracks,
@@ -2645,6 +2705,10 @@ body.neuro-panel-open #stage-story .prose-content {
     max-width: calc(100% - 52px);
     overflow-x: auto;
     padding-right: 10px;
+  }
+
+  #top-stage-tabs {
+    transform: none;
   }
 
   .content-area,
@@ -2750,6 +2814,16 @@ body.neuro-panel-open #stage-story .prose-content {
     padding-right: 18px;
   }
 
+  .prose-title-bar-static {
+    padding-top: 24px;
+    padding-bottom: 0;
+  }
+
+  #story-result {
+    margin-left: 18px;
+    margin-right: 18px;
+  }
+
   .chapter-block,
   .story-chapter-card {
     padding: 26px 20px;
@@ -2774,6 +2848,11 @@ body.neuro-panel-open #stage-story .prose-content {
   .outline-icons,
   .story-chapter-tabs {
     flex-wrap: wrap;
+  }
+
+  .outline-actions-row {
+    align-self: flex-end;
+    align-items: center;
   }
 }
 

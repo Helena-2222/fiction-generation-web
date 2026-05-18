@@ -4,12 +4,12 @@
   --bg-panel: #ebe5df;
   --bg-input: #eee9e4;
   --bg-sidebar: #ebe5df;
-  --text-primary: #222222;
+  --text-primary: #342a2a;
   --text-secondary: #7a6f64;
   --text-hint: #a69076;
   --text-on-dark: #f7f3f0;
   --accent: #5e503f;
-  --accent-hover: #4a3c2e;
+  --accent-hover: #4a4136;
   --accent-light: #ede5da;
   --accent-mid: #a69076;
   --tab-active-bg: #5e503f;
@@ -34,7 +34,7 @@
   --topbar-h: 64px;
   --sidebar-w: 64px;
   --sidebar-open-w: 364px;
-  --neuro-width: 288px;
+  --neuro-width: 345px;
   --space-card-sm: 16px;
   --space-card-md: 24px;
   --space-card-lg: 32px;

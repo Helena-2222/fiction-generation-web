@@ -1434,7 +1434,7 @@ async function init() {
   if (createGuestMode) {
     initialStatusMessage = restoredGeneratedContent
       ? "已恢复游客模式下的本地内容，当前数据只保存在这个浏览器中。"
-      : "当前为游客模式，创作内容会保存在这个浏览器的 localStorage 中。";
+      : "当前为游客模式，创作内容会暂存在浏览器缓存中，长久保存请登录";
   } else if (guestWorkspaceRecoveredForSession) {
     initialStatusMessage = "已恢复你在游客模式下保存在本地的内容，并会同步到当前账号。";
   }
@@ -3494,7 +3494,7 @@ function updateRelationActionState() {
   if (elements.relationSaveState) {
     elements.relationSaveState.textContent = state.isStorySaved
       ? "当前梗概、角色卡和关系网已保存，AI 只会在空白关系位上继续补充。（可以试试增加空白角色卡片~）"
-      : "编辑完故事梗概、角色卡和关系网后，请先点击“保存关系”，再使用 AI 补充关系。";
+      : "编辑完故事梗概、角色卡和关系网后，请先点击“保存关系”，再使用 AI 补充关系";
     elements.relationSaveState.classList.toggle("saved", state.isStorySaved);
   }
   elements.saveRelations.disabled = relationTaskRunning;
@@ -7025,7 +7025,7 @@ async function downloadDocxFile(filename, title, content) {
 function renderOutline() {
   if (!state.outline) {
     elements.outlineResult.className = "outline-result empty-state";
-    elements.outlineResult.textContent = "还没有生成大纲。";
+    elements.outlineResult.textContent = "快去角色设定里生成大纲吧！";
     renderOutlineHistory();
     return;
   }
@@ -7277,13 +7277,13 @@ function renderStory() {
 
   if (!state.generatedStory) {
     elements.storyResult.className = "story-result empty-state";
-    elements.storyResult.textContent = "大纲确认后，这里会依次展示每个篇章的正文。";
+    elements.storyResult.textContent = "大纲确认后，这里会依次展示每章节的正文";
     if (staticStoryTitle) {
       staticStoryTitle.textContent = "正文生成";
     }
-    if (staticStorySubtitle) {
-      staticStorySubtitle.textContent = "大纲确认后，可继续润色、局部重写与导出。";
-    }
+    // if (staticStorySubtitle) {
+    //   staticStorySubtitle.textContent = "大纲确认后，可继续润色、局部重写与导出。";
+    // }
     closeStorySelectionToolbar({ preserveSelection: false });
     return;
   }
