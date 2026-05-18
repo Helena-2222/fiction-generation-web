@@ -514,7 +514,7 @@
 }
 
 .char-editor {
-  padding: 40px 48px 32px;
+  padding: 32px 48px 32px;
 }
 
 .prose-main {
@@ -588,6 +588,10 @@
 
 .stage-header-compact {
   margin-bottom: var(--space-card-md);
+}
+
+#stage-characters .stage-header-compact {
+  margin-bottom: 0;
 }
 
 .stage-header-actions {
@@ -811,12 +815,13 @@
 }
 
 .metrics-stack {
-  max-width: 560px;
+  width: calc((100% - (2 * var(--space-card-sm))) / 3);
+  max-width: none;
 }
 
 .metrics-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 160px));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-card-sm);
   align-items: end;
 }
@@ -826,12 +831,12 @@
   align-items: center;
   gap: var(--space-card-sm);
   width: 100%;
-  max-width: 156px;
+  max-width: none;
 }
 
 .metric-display-shell {
   width: 100%;
-  max-width: 156px;
+  max-width: none;
   min-height: 44px;
   padding: 0 14px;
   border-radius: var(--radius-md);
@@ -1115,7 +1120,7 @@ button:disabled {
   min-width: 220px;
   flex-shrink: 0;
   border-left: 0.5px solid var(--border);
-  padding: 24px 20px;
+  padding: 35px 20px 24px;
   display: flex;
   flex-direction: column;
   background: var(--bg);
@@ -1139,10 +1144,19 @@ button:disabled {
 }
 
 .rel-label {
-  font-size: 14px;
-  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin-bottom: 33px;
+}
+
+.rel-label-meta {
+  display: block;
+  font-size: var(--text-note);
+  font-weight: 400;
+  line-height: 1.4;
   color: var(--text-hint);
-  margin-bottom: 12px;
 }
 
 .graph-wrap {
@@ -1709,6 +1723,17 @@ button:disabled {
   letter-spacing: var(--tracking-title);
   color: var(--nav-ink, var(--accent-hover));
   text-transform: none;
+}
+
+#stage-characters .section-stage-title,
+.rel-label-title {
+  font-family: var(--font-serif);
+  font-size: var(--text-note);
+  font-weight: 600;
+  line-height: var(--leading-body);
+  letter-spacing: var(--tracking-caps);
+  color: var(--text-secondary);
+  text-transform: uppercase;
 }
 
 .prose-chapter-sub,
@@ -2634,7 +2659,11 @@ body.neuro-panel-open #stage-story .prose-content {
   }
 
   .char-editor {
-    padding: 30px 30px 24px;
+    padding: 32px 30px 24px;
+  }
+
+  .relationship-area {
+    padding-top: 35px;
   }
 
   .prose-title-bar {
@@ -2656,6 +2685,10 @@ body.neuro-panel-open #stage-story .prose-content {
   .worldview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .metrics-stack {
+    width: calc((100% - var(--space-card-sm)) / 2);
+  }
 }
 
 @media (max-width: 1100px) {
@@ -2670,6 +2703,10 @@ body.neuro-panel-open #stage-story .prose-content {
   .outline-meta-grid,
   .outline-title-row {
     grid-template-columns: 1fr;
+  }
+
+  .metrics-stack {
+    width: 100%;
   }
 
   .character-dossier-scroll {
@@ -2746,6 +2783,11 @@ body.neuro-panel-open #stage-story .prose-content {
     width: 100%;
     border-left: none;
     border-top: 0.5px solid var(--border);
+    padding: 24px 18px;
+  }
+
+  .rel-label {
+    margin-bottom: 12px;
   }
 
   .rel-resize-handle,
