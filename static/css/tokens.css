@@ -4,7 +4,7 @@
   --bg-panel: #ebe5df;
   --bg-input: #eee9e4;
   --bg-sidebar: #ebe5df;
-  --text-primary: #342a2a;
+  --text-primary: #222222;
   --text-secondary: #7a6f64;
   --text-hint: #a69076;
   --text-on-dark: #f7f3f0;
@@ -43,7 +43,7 @@
   --text-subtitle: 20px;
   --text-body-lg: 18px;
   --text-body-sm: 16px;
-  --text-note: 14px;
+  --text-note: 16px;
   --tracking-body: -0.02em;
   --tracking-title: -0.06em;
   --tracking-caps: 0.01em;
