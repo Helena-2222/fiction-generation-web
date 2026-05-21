@@ -39,6 +39,10 @@ class Settings:
     deepseek_base_url: str = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     deepseek_model: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
     request_timeout_seconds: float = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "180"))
+    image_api_key: str = os.getenv("IMAGE_API_KEY", "")
+    image_api_base_url: str = os.getenv("IMAGE_API_BASE_URL", "https://dashscope.aliyuncs.com/api/v1")
+    image_model: str = os.getenv("IMAGE_MODEL", "wan2.7-image")
+    image_api_timeout_seconds: float = float(os.getenv("IMAGE_API_TIMEOUT_SECONDS", "180"))
     supabase_url: str = os.getenv("VITE_SUPABASE_URL", "")
     supabase_anon_key: str = os.getenv("VITE_SUPABASE_ANON_KEY", "")
     deepseek_json_max_tokens: int = _get_bounded_int_env(
