@@ -27,6 +27,7 @@ class DashScopeImageProvider:
         count: int,
         quality: str,
         negative_prompt: str = "",
+        reference_images: list[bytes] | None = None,
     ) -> list[bytes]:
         if not self.api_key:
             raise ImageProviderError("未配置 IMAGE_API_KEY")
@@ -35,17 +36,19 @@ class DashScopeImageProvider:
         if negative_prompt.strip():
             merged_prompt = f"{merged_prompt}\n\n额外约束：避免出现以下内容：{negative_prompt.strip()}"
 
+        content: list[dict] = []
+        for image_bytes in reference_images or []:
+            encoded = base64.b64encode(image_bytes).decode("utf-8")
+            content.append({"image": f"data:image/png;base64,{encoded}"})
+        content.append({"text": merged_prompt})
+
         payload = {
             "model": self.model,
             "input": {
                 "messages": [
                     {
                         "role": "user",
-                        "content": [
-                            {
-                                "text": merged_prompt,
-                            }
-                        ],
+                        "content": content,
                     }
                 ]
             },

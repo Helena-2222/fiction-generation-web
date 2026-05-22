@@ -221,26 +221,23 @@
                   章节提示词
                   <textarea id="chapterPromptInput"></textarea>
                 </label>
-                <div class="chapter-generate-row">
-                  <label class="compact-field">
-                    生成张数（1-4）
-                    <input id="chapterImageCountInput" type="number" min="1" max="4" value="1" />
-                  </label>
-                  <div class="card-actions chapter-actions-row">
-                    <button id="generateChapterBtn" type="button" class="image-btn image-btn-brand">生成本章配图</button>
-                  </div>
+                <div class="card-footer chapter-main-footer">
+                  <button id="generateChapterBtn" type="button" class="image-btn image-btn-brand">生成本章配图</button>
                 </div>
               </div>
 
               <div class="image-card image-col-result">
                 <h2>结果预览</h2>
-                <div id="chapterResultGrid" class="chapter-result-grid">
-                  <div class="chapter-placeholder">当前章节配图会显示在这里</div>
+                <div id="chapterResultBox" class="result-box chapter-result-box">
+                  <button id="previewChapterBtn" type="button" class="icon-button chapter-preview-button" title="放大查看" aria-label="放大查看" disabled>⤢</button>
+                  <div id="chapterResultGrid" class="chapter-result-grid">
+                    <div class="chapter-placeholder">当前章节配图会显示在这里</div>
+                  </div>
                 </div>
                 <p id="chapterTaskStatus" class="result-status">状态：待生成</p>
                 <div class="card-footer">
-                  <button id="downloadChapterBtn" type="button" class="image-btn image-btn-ghost">下载本章图片</button>
-                  <button id="regenerateChapterBtn" type="button" class="image-btn image-btn-ghost">重生成本章</button>
+                  <button id="downloadChapterBtn" type="button" class="image-btn image-btn-ghost" disabled>下载本章配图</button>
+                  <button id="regenerateChapterBtn" type="button" class="image-btn image-btn-ghost">重生成</button>
                 </div>
               </div>
             </div>

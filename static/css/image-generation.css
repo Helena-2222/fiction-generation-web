@@ -150,9 +150,11 @@ body {
 }
 
 .docx-actions-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   margin: 0 0 10px;
-  flex-wrap: nowrap;
+  gap: 10px;
 }
 
 .docx-actions-half {
@@ -161,12 +163,12 @@ body {
 }
 
 .docx-actions-inline input[type="file"] {
-  flex: 1 1 auto;
   min-width: 0;
+  width: 100%;
 }
 
 .docx-actions-inline .image-btn {
-  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .card-footer {
@@ -271,6 +273,12 @@ textarea:-webkit-autofill:focus {
   opacity: 0.45;
 }
 
+.image-btn:disabled {
+  pointer-events: none;
+  opacity: 0.45;
+  cursor: default;
+}
+
 .image-columns {
   display: grid;
   grid-template-columns: 290px minmax(420px, 1fr) 360px;
@@ -295,6 +303,13 @@ textarea:-webkit-autofill:focus {
 .item-list li.is-selected {
   background: #f0ebe4;
   border-color: #d1c0ac;
+}
+
+.chapter-preview-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
 }
 
 .result-box {
@@ -339,9 +354,16 @@ textarea:-webkit-autofill:focus {
 }
 
 .chapter-result-grid {
+  width: 100%;
+  height: 100%;
+  position: relative;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.chapter-result-box {
+  padding: 0;
 }
 
 .chapter-placeholder,
@@ -357,7 +379,7 @@ textarea:-webkit-autofill:focus {
 
 .chapter-placeholder {
   grid-column: 1 / -1;
-  min-height: 320px;
+  min-height: 100%;
   width: 100%;
 }
 
@@ -396,20 +418,27 @@ textarea:-webkit-autofill:focus {
   margin-top: 8px;
 }
 
-.chapter-generate-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 14px;
-  flex-wrap: wrap;
+.chapter-result-grid {
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.chapter-actions-row {
-  margin-top: 0;
+.chapter-result-grid.has-multiple {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.chapter-result-grid .chapter-image-card img {
+  display: block;
+  cursor: default;
+}
+
+.chapter-preview-button.is-inactive {
+  opacity: 0.72;
+}
+
+.chapter-main-footer {
+  justify-content: flex-end;
   align-items: center;
-}
-
-.chapter-actions-row .image-btn {
-  white-space: nowrap;
+  margin-top: 22px;
 }
 
 .image-modal {
@@ -470,7 +499,7 @@ textarea:-webkit-autofill:focus {
   }
 
   .character-main-footer,
-  .chapter-generate-row {
+  .chapter-main-footer {
     align-items: stretch;
   }
 
@@ -480,10 +509,6 @@ textarea:-webkit-autofill:focus {
 
   .docx-actions-half {
     max-width: 100%;
-  }
-
-  .chapter-actions-row {
-    margin-top: 10px;
   }
 
   .image-topbar {

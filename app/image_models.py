@@ -29,6 +29,18 @@ class CharacterTurnaroundRequest(BaseModel):
     quality: Literal["fast", "standard", "fine"] = "standard"
 
 
+class ChapterCharacterConstraint(BaseModel):
+    name: str
+    gender: str = ""
+    ethnicity: str = ""
+    age: str = ""
+    job: str = ""
+    appearance: str = ""
+    costume: str = ""
+    personality: str = ""
+    asset_id: str = ""
+
+
 class ChapterIllustrationRequest(BaseModel):
     project_id: str = "novel_demo_001"
     novel_title: str = ""
@@ -40,6 +52,8 @@ class ChapterIllustrationRequest(BaseModel):
     chapter_title: str
     key_events: str = ""
     prompt: str
+    reference_asset_ids: list[str] = Field(default_factory=list)
+    involved_characters: list[ChapterCharacterConstraint] = Field(default_factory=list)
     aspect_ratio: str = "3:4"
     quality: Literal["fast", "standard", "fine"] = "standard"
     image_count: int = Field(default=1, ge=1, le=4)

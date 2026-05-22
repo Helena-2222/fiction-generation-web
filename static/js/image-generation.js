@@ -25,6 +25,53 @@ function currentChapterKey() {
   return normalizeEmpty(document.getElementById("chapterIdInput").value);
 }
 
+function collectChapterReferenceAssetIds() {
+  return collectChapterCharacterConstraints()
+    .map((character) => character.asset_id)
+    .filter(Boolean);
+}
+
+function collectChapterCharacterConstraints() {
+  const chapter = getCurrentChapter();
+  if (!chapter || !characterData.length) return [];
+
+  const sourceText = [
+    normalizeEmpty(chapter.title),
+    normalizeEmpty(chapter.events),
+    normalizeEmpty(chapter.prompt),
+  ]
+    .join(" ")
+    .trim();
+
+  if (!sourceText) return [];
+
+  const constraints = [];
+  const seen = new Set();
+
+  characterData.forEach((character) => {
+    const name = normalizeEmpty(character.name);
+    if (!name || !sourceText.includes(name)) return;
+    const result = characterResults.get(name);
+    const assetId = result?.assetId;
+    const dedupeKey = assetId || name;
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+    constraints.push({
+      name,
+      gender: normalizeEmpty(character.gender),
+      ethnicity: normalizeEmpty(character.ethnicity),
+      age: normalizeEmpty(character.age),
+      job: normalizeEmpty(character.job),
+      appearance: normalizeEmpty(character.appearance),
+      costume: normalizeEmpty(character.costume),
+      personality: normalizeEmpty(character.personality),
+      asset_id: assetId || "",
+    });
+  });
+
+  return constraints;
+}
+
 function setTab(targetId) {
   document.querySelectorAll(".image-tab").forEach((tab) => {
     tab.classList.toggle("is-active", tab.dataset.target === targetId);
@@ -175,6 +222,18 @@ function setChapterStatus(text, className = "") {
   node.className = `result-status ${className}`.trim();
 }
 
+function setChapterDownloadEnabled(enabled) {
+  const button = document.getElementById("downloadChapterBtn");
+  button.disabled = !enabled;
+}
+
+function setChapterPreviewEnabled(enabled) {
+  const button = document.getElementById("previewChapterBtn");
+  button.disabled = false;
+  button.classList.toggle("is-inactive", !enabled);
+  button.setAttribute("aria-disabled", enabled ? "false" : "true");
+}
+
 function resetCharacterResultView() {
   const img = document.getElementById("characterResultImage");
   const placeholder = document.getElementById("characterResultPlaceholder");
@@ -207,7 +266,7 @@ function renderCharacterResult() {
   setCharacterStatus(taskState?.text || result.statusText || "状态：success", taskState?.className || "success");
 }
 
-function renderChapterResult() {
+function renderChapterResultLegacy() {
   const grid = document.getElementById("chapterResultGrid");
   const key = currentChapterKey();
   const result = chapterResults.get(key);
@@ -219,6 +278,8 @@ function renderChapterResult() {
     placeholder.className = "chapter-placeholder";
     placeholder.textContent = "当前章节配图会显示在这里";
     grid.appendChild(placeholder);
+    setChapterDownloadEnabled(false);
+    setChapterPreviewEnabled(false);
     setChapterStatus(taskState?.text || "状态：待生成", taskState?.className || "");
     return;
   }
@@ -253,6 +314,8 @@ function renderChapterResult() {
     grid.appendChild(card);
   });
 
+  setChapterDownloadEnabled(true);
+  setChapterPreviewEnabled(true);
   setChapterStatus(taskState?.text || result.statusText || "状态：success", taskState?.className || "success");
 }
 
@@ -421,6 +484,7 @@ async function runCharacterGeneration() {
     }
 
     characterResults.set(key, {
+      assetId: item.asset_id || "",
       previewUrl: item.file_url,
       downloadUrl: item.asset_id ? `${API_BASE}/assets/${item.asset_id}/download` : item.file_url,
       statusText: "状态：success",
@@ -439,6 +503,7 @@ async function runCharacterGeneration() {
 }
 
 async function submitChapterGeneration() {
+  const involvedCharacters = collectChapterCharacterConstraints();
   const payload = {
     project_id: "novel_demo_001",
     novel_title: document.getElementById("novelTitleInput").value.trim(),
@@ -450,7 +515,9 @@ async function submitChapterGeneration() {
     chapter_title: document.getElementById("chapterTitleInput").value.trim(),
     key_events: document.getElementById("chapterEventsInput").value.trim(),
     prompt: document.getElementById("chapterPromptInput").value.trim(),
-    image_count: Number(document.getElementById("chapterImageCountInput").value || 1),
+    reference_asset_ids: involvedCharacters.map((character) => character.asset_id).filter(Boolean),
+    involved_characters: involvedCharacters,
+    image_count: 1,
     aspect_ratio: document.getElementById("aspectRatioInput").value,
     quality: document.getElementById("qualityInput").value,
   };
@@ -560,8 +627,56 @@ document.getElementById("downloadChapterBtn").addEventListener("click", () => {
     }, index * 250);
   });
 });
+document.getElementById("previewChapterBtn").addEventListener("click", () => {
+  const key = currentChapterKey();
+  const result = chapterResults.get(key);
+  const firstImage = result?.images?.[0];
+  if (!firstImage?.previewUrl) return;
+  openPreview(firstImage.previewUrl);
+});
+
+function renderChapterResult() {
+  const grid = document.getElementById("chapterResultGrid");
+  const key = currentChapterKey();
+  const result = chapterResults.get(key);
+  const taskState = chapterTaskStates.get(key);
+
+  grid.innerHTML = "";
+  grid.classList.toggle("has-multiple", Boolean(result?.images?.length > 1));
+
+  if (!result || !result.images.length) {
+    const placeholder = document.createElement("div");
+    placeholder.className = "chapter-placeholder";
+    placeholder.textContent = "当前章节配图会显示在这里";
+    grid.appendChild(placeholder);
+    setChapterDownloadEnabled(false);
+    setChapterPreviewEnabled(false);
+    setChapterStatus(taskState?.text || "状态：待生成", taskState?.className || "");
+    return;
+  }
+
+  result.images.forEach((image) => {
+    const card = document.createElement("div");
+    card.className = "chapter-image-card";
+
+    const img = document.createElement("img");
+    img.src = image.previewUrl;
+    img.alt = "章节配图";
+    img.loading = "lazy";
+    img.addEventListener("click", () => openPreview(image.previewUrl));
+
+    card.appendChild(img);
+    grid.appendChild(card);
+  });
+
+  setChapterDownloadEnabled(true);
+  setChapterPreviewEnabled(true);
+  setChapterStatus(taskState?.text || result.statusText || "状态：success", taskState?.className || "success");
+}
 
 renderCharacterList();
 renderChapterList();
 resetCharacterResultView();
+setChapterDownloadEnabled(false);
+setChapterPreviewEnabled(false);
 renderChapterResult();
