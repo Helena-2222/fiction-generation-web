@@ -369,7 +369,9 @@ def _chapter_negative_prompt(req: ChapterIllustrationRequest) -> str:
         "real person face, celebrity face, 3d render, cgi, octane render, hyperrealistic, glossy skin, "
         "sketch, pencil drawing, line art, monochrome, collage, comic panel, split screen, "
         "multiple moments in one frame, duplicated person, inconsistent hairstyle, inconsistent clothes, "
-        "inconsistent shoes, text, title, typography, caption, label, watermark, chinese characters, english letters, digits"
+        "inconsistent shoes, text, title, typography, caption, label, watermark, chinese characters, english letters, digits, "
+        "poster, movie poster, book cover, novel cover, chapter title page, title card, credits, logo, slogan, advertisement, "
+        "subtitle, speech bubble, signboard text, newspaper text, letter text, document text, handwritten text, readable handwriting"
     )
 
 
@@ -399,6 +401,120 @@ def _build_involved_characters_part(req: ChapterIllustrationRequest) -> str:
         f"本章涉及角色如下：{joined}；"
         "以上角色设定必须被严格遵守，尤其不要画错性别，不要把女性画成男性，也不要把男性画成女性；"
     )
+
+
+def _build_offscreen_character_part(
+    req: ChapterIllustrationRequest,
+    primary_moment: str,
+    primary_characters: list[ChapterCharacterConstraint],
+) -> str:
+    primary_names = {character.name for character in primary_characters if character.name}
+    offscreen_names = [
+        character.name
+        for character in req.involved_characters
+        if character.name
+        and character.name not in primary_names
+    ]
+    if not offscreen_names:
+        return ""
+
+    return (
+        f"以下相关角色不属于当前主画面应出镜的人物：{'、'.join(offscreen_names)}；"
+        "这些角色不能以人物实体出镜，不能站在现场，不能额外补画成人物；"
+        "如果剧情需要提到他们，只能通过信件、纸条、电报、留言或其他间接线索表现；"
+    )
+
+
+def _is_non_visual_character_mention(primary_moment: str, character_name: str) -> bool:
+    mention_patterns = (
+        f"{character_name}的信",
+        f"{character_name}来信",
+        f"{character_name}的来信",
+        f"来自{character_name}的信",
+        f"收到{character_name}的信",
+        f"{character_name}的字条",
+        f"{character_name}的纸条",
+        f"{character_name}留言",
+        f"{character_name}的留言",
+        f"{character_name}的电报",
+        f"来自{character_name}的电报",
+        f"{character_name}的消息",
+    )
+    return any(pattern in primary_moment for pattern in mention_patterns)
+
+
+def _chapter_text_suppression_part(
+    req: ChapterIllustrationRequest,
+    primary_moment: str,
+    supporting_details: list[str],
+) -> str:
+    combined = " ".join(
+        part for part in [primary_moment, *supporting_details, req.key_events, req.prompt] if part
+    )
+    has_text_carrier = any(
+        token in combined
+        for token in ("信", "来信", "纸条", "字条", "电报", "文件", "档案", "报告", "报纸", "纸张", "纸页", "letter", "note", "telegram", "document", "newspaper")
+    )
+
+    base_rule = (
+        "这是一张小说正文内页使用的单幅叙事插图，不是小说封面，不是章节标题页，不是海报，不是宣传图，不是信息图；"
+        "画面任何位置都绝对不要出现可读文字，不要出现大标题、副标题、章节号、对白框、招牌文字、水印、落款或任何排版设计元素；"
+    )
+    if not has_text_carrier:
+        return base_rule
+
+    return (
+        f"{base_rule}"
+        "如果画面中必须出现信件、纸张、档案、文件、报纸或电报，只能把它们画成无可读内容的道具；"
+        "纸面上不要出现任何可辨认的汉字、英文字母、数字、署名或成段字迹，最多只允许模糊且不可识别的笔迹纹理；"
+    )
+
+
+def _pick_fallback_primary_characters(
+    req: ChapterIllustrationRequest,
+    excluded_names: set[str],
+) -> list[ChapterCharacterConstraint]:
+    if not req.involved_characters:
+        return []
+
+    source_text = " ".join(
+        part for part in ((req.key_events or "").strip(), (req.prompt or "").strip()) if part
+    )
+    scores: list[tuple[int, ChapterCharacterConstraint]] = []
+    for character in req.involved_characters:
+        if not character.name or character.name in excluded_names:
+            continue
+        score = source_text.count(character.name)
+        if score > 0:
+            scores.append((score, character))
+
+    if not scores:
+        return []
+
+    max_score = max(score for score, _ in scores)
+    return [character for score, character in scores if score == max_score]
+
+
+def _pick_characters_for_primary_moment(req: ChapterIllustrationRequest, primary_moment: str) -> list[ChapterCharacterConstraint]:
+    if not req.involved_characters:
+        return []
+
+    selected = [
+        character
+        for character in req.involved_characters
+        if character.name
+        and character.name in primary_moment
+        and not _is_non_visual_character_mention(primary_moment, character.name)
+    ]
+    if selected:
+        return selected
+
+    offscreen_names = {
+        character.name
+        for character in req.involved_characters
+        if character.name and _is_non_visual_character_mention(primary_moment, character.name)
+    }
+    return _pick_fallback_primary_characters(req, offscreen_names)
 
 
 def _split_text_fragments(text: str) -> list[str]:
@@ -490,30 +606,34 @@ def _build_chapter_prompt(req: ChapterIllustrationRequest) -> str:
 
     style_part = _explicit_style_part(req.visual_style) or _default_story_style(req)
     chapter_summary = _cleanup_prompt_source(req.prompt) or "未提供"
-    key_events = (req.key_events or "").strip() or "未提供"
     primary_moment = _pick_primary_moment(req)
     supporting_details = _pick_supporting_details(req, primary_moment)
     supporting_part = f"辅助线索：{'，'.join(supporting_details)}；" if supporting_details else ""
-    involved_characters_part = _build_involved_characters_part(req)
+    primary_characters = _pick_characters_for_primary_moment(req, primary_moment)
+    involved_characters_part = _build_involved_characters_part(
+        req.model_copy(update={"involved_characters": primary_characters})
+    )
+    offscreen_character_part = _build_offscreen_character_part(req, primary_moment, primary_characters)
+    text_suppression_part = _chapter_text_suppression_part(req, primary_moment, supporting_details)
     reference_part = (
-        "随附的角色三视图是本次生成的人物设定依据，章节插图中出现的相关人物必须与参考图保持同一角色；"
+        "随附的角色三视图是本次主画面角色的人物设定依据，章节插图中出现的相关人物必须与参考图保持同一角色；"
         "必须沿用参考图中的脸型、五官比例、发型、发色、服装、鞋子、身材比例与整体气质，不要改成另一张脸、另一套穿搭或另一种人物造型；"
         "如果本章涉及多名角色，请分别对应各自的参考三视图与角色设定，不要把A角色的外观套到B角色身上；"
         "如果本章出现主角，请将其画成参考三视图里的同一人物，而不是只根据文字重新自由发挥；"
-        if req.reference_asset_ids
+        "如果某个角色没有出现在主画面瞬间中，就不要仅因为它出现在章节其他事件里而把它画进当前插图。"
+        if primary_characters
         else ""
     )
 
     return (
         "请为小说章节绘制一张单幅叙事插图。"
         f"{'；'.join(story_context)}；"
-        f"小说标题：{req.novel_title or '未提供'}；"
-        f"章节标题：{req.chapter_title}；"
-        f"关键事件参考：{key_events}；"
         f"章节摘要参考：{chapter_summary}；"
         f"主画面瞬间：{primary_moment}；"
         f"{supporting_part}"
         f"{involved_characters_part}"
+        f"{offscreen_character_part}"
+        f"{text_suppression_part}"
         f"{style_part}"
         f"{reference_part}"
         "请先从章节信息中选择一个最有画面感、最适合定格成插图的决定性瞬间；"
@@ -616,12 +736,27 @@ async def _run_character_task(task_id: str, req: CharacterTurnaroundRequest) -> 
 async def _run_chapter_task(task_id: str, req: ChapterIllustrationRequest) -> None:
     try:
         image_store.update_task(task_id, status="running", progress=15, updated_at=datetime.utcnow())
-        prompt = _build_chapter_prompt(req)
-        reference_asset_ids = list(req.reference_asset_ids)
+        primary_moment = _pick_primary_moment(req)
+        primary_characters = _pick_characters_for_primary_moment(req, primary_moment)
+        primary_names = {character.name for character in primary_characters if character.name}
+        filtered_reference_asset_ids = list(req.reference_asset_ids)
+        if primary_names:
+            filtered_reference_asset_ids = [
+                character.asset_id
+                for character in primary_characters
+                if character.asset_id
+            ]
+        filtered_req = req.model_copy(
+            update={
+                "reference_asset_ids": filtered_reference_asset_ids,
+            }
+        )
+        prompt = _build_chapter_prompt(filtered_req)
+        reference_asset_ids = list(filtered_req.reference_asset_ids)
         if not reference_asset_ids:
             reference_asset_ids = [
                 character.asset_id
-                for character in req.involved_characters
+                for character in primary_characters
                 if character.asset_id
             ]
 
