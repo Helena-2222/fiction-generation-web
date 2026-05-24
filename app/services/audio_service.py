@@ -1,0 +1,332 @@
+"""Audio generation service using HF Transformers (MusicGen / AudioGen).
+CPU-first design with GPU auto-detection when available.
+"""
+
+import gc, logging, os, sys, time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
+import numpy as np
+import soundfile as sf
+import torch
+
+
+logger = logging.getLogger(__name__)
+
+def _cuda_ok():
+    """Check CUDA is usable, including compute-capability compatibility."""
+    if not torch.cuda.is_available():
+        return False
+    try:
+        cc = torch.cuda.get_device_capability(0)
+        cc_ver = cc[0] * 10 + cc[1]
+        # torch 2.8 supports max sm_90 (CC 9.0). Check if GPU is too new.
+        if cc_ver > 90:
+            logger.warning(
+                "GPU CC %d.%d exceeds torch max (9.0). Falling back to CPU.",
+                cc[0], cc[1]
+            )
+            return False
+        t = torch.randn(10, 10, device="cuda")
+        _ = t @ t
+        del t
+        torch.cuda.empty_cache()
+        return True
+    except Exception as e:
+        logger.warning("CUDA test failed: %s", e)
+        return False
+
+def _best_dev():
+    if _cuda_ok():
+        logger.info("CUDA: %s", torch.cuda.get_device_properties(0).name)
+        return "cuda"
+    logger.info("Using CPU")
+    return "cpu"
+
+_AC_OK = False
+_AC_ERR = ""
+try:
+    sys.path.insert(0, "F:/AudioCraft/audiocraft")
+    from audiocraft.models import MusicGen as _ACM  # noqa
+    _AC_OK = True
+except ImportError as e:
+    _AC_ERR = str(e)
+    logger.info("AudioCraft skip: %s", e)
+
+_TF_OK = None  # None=not tested, True=available, False=unavailable
+
+class _HFMG:
+    def __init__(self, mn="facebook/musicgen-small", dev="cpu"):
+        self.mn, self.dev = mn, dev
+        self._m, self._p, self._sr = None, None, 32000
+
+    def _load(self):
+        global _TF_OK
+        if self._m is not None:
+            return
+        if _TF_OK is None:
+            try:
+                global AutoProcessor, MusicgenForConditionalGeneration
+                from transformers import AutoProcessor, MusicgenForConditionalGeneration
+                _TF_OK = True
+            except ImportError:
+                _TF_OK = False
+        if not _TF_OK:
+            raise RuntimeError("HF Transformers not installed")
+
+        load_kwargs = {
+            "torch_dtype": torch.float16,
+            "low_cpu_mem_usage": True,
+        }
+
+        # Try local-only first, fall back to allowing download
+        for local_only in (True, False):
+            try:
+                logger.info(
+                    "Loading %s on %s (float16, low_cpu_mem, local=%s)...",
+                    self.mn, self.dev, local_only
+                )
+                self._p = AutoProcessor.from_pretrained(
+                    self.mn, local_files_only=local_only
+                )
+                self._m = MusicgenForConditionalGeneration.from_pretrained(
+                    self.mn,
+                    local_files_only=local_only,
+                    **load_kwargs,
+                ).to(self.dev)
+                break
+            except (OSError, IOError) as e:
+                if local_only:
+                    logger.warning(
+                        "Local-only load failed (%s), retrying with network...", e
+                    )
+                    continue
+                raise
+
+        self._m.eval()
+        self._sr = getattr(
+            getattr(self._m.config, "audio_encoder", None), "sampling_rate", 32000
+        )
+        logger.info("Loaded. sr=%s", self._sr)
+        self._m.eval()
+        cfg = self._m.config
+        self._sr = getattr(getattr(cfg, "audio_encoder", None), "sampling_rate", 32000)
+        logger.info("Loaded. sr=%s", self._sr)
+
+    def gen(self, desc, dur=30.0, gs=3.0):
+        self._load()
+        mt = max(64, int(dur * 50))
+        inp = self._p(text=[desc], padding=True, return_tensors="pt").to(self.dev)
+        with torch.no_grad():
+            aud = self._m.generate(
+                **inp, max_new_tokens=mt, guidance_scale=gs,
+                do_sample=True, temperature=1.0
+            )
+        arr = aud[0].cpu().float().numpy()
+        if arr.ndim == 2:
+            arr = arr.T
+        return arr
+
+    @property
+    def sr(self):
+        return self._sr
+
+    def unload(self):
+        self._m = None
+        self._p = None
+        gc.collect()
+        if self.dev == "cuda":
+            torch.cuda.empty_cache()
+
+    @property
+    def loaded(self):
+        return self._m is not None
+
+
+class AudioService:
+    _POOL = None
+
+    def __init__(
+        self, device=None,
+        music_model_name="facebook/musicgen-small",
+        audio_model_name="facebook/audiogen-medium",
+        cache_dir=None
+    ):
+        self.device = device or _best_dev()
+        self.mmn = music_model_name
+        self.amn = audio_model_name
+        self.cd = cache_dir
+        self._mg = None
+        self._ag = None
+        self._ac = _AC_OK
+        be = "AudioCraft" if self._ac else "HF-Transformers"
+        logger.info(
+            "AudioService: dev=%s be=%s music=%s audio=%s",
+            self.device, be, music_model_name, audio_model_name
+        )
+
+    @classmethod
+    def _ex(cls):
+        if cls._POOL is None:
+            cls._POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="audio")
+        return cls._POOL
+
+    def _gmg(self):
+        if self._mg is None:
+            self._mg = _HFMG(self.mmn, self.device)
+        return self._mg
+
+    def _gag(self):
+        if self._ag is None:
+            self._ag = _HFMG(self.amn, self.device)
+        return self._ag
+
+    async def generate_background_music(
+        self, description, duration=30.0, output_path=None,
+        guidance_scale=3.0, progress_callback=None
+    ):
+        import asyncio
+        loop = asyncio.get_running_loop()
+        gen = self._gmg()
+
+        if progress_callback:
+            progress_callback(0.1, "Loading model...")
+
+        await loop.run_in_executor(self._ex(), gen._load)
+
+        if progress_callback:
+            progress_callback(0.2, f"Generating: {description[:60]}...")
+
+        arr = await loop.run_in_executor(
+            self._ex(), gen.gen, description, duration, guidance_scale
+        )
+
+        if progress_callback:
+            progress_callback(0.8, "Saving...")
+
+        if output_path is None:
+            d = Path("static/audio/music")
+            d.mkdir(parents=True, exist_ok=True)
+            ts = int(time.time() * 1000)
+            output_path = str(d / f"music_{ts}.wav")
+
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        sr = gen.sr
+        if arr.ndim == 2 and arr.shape[1] > arr.shape[0]:
+            arr = arr.T
+        sf.write(output_path, arr, sr)
+
+        ad = len(arr) / sr if arr.ndim == 1 else arr.shape[0] / sr
+
+        if progress_callback:
+            progress_callback(1.0, "Done!")
+
+        logger.info("Music: %s (%.1fs)", output_path, ad)
+
+        return {
+            "audio_path": output_path,
+            "duration": ad,
+            "sample_rate": sr,
+            "description": description,
+            "device": self.device,
+            "backend": "AudioCraft" if self._ac else "HF-Transformers",
+        }
+
+    async def generate_sound_effects(
+        self, descriptions, duration=5.0, output_dir=None,
+        guidance_scale=3.0, progress_callback=None
+    ):
+        import asyncio
+        loop = asyncio.get_running_loop()
+        gen = self._gag()
+
+        od = Path(output_dir) if output_dir else Path("static/audio/effects")
+        od.mkdir(parents=True, exist_ok=True)
+
+        if progress_callback:
+            progress_callback(0.05, "Loading model...")
+
+        await loop.run_in_executor(self._ex(), gen._load)
+
+        results = []
+        total = len(descriptions)
+
+        for i, d in enumerate(descriptions):
+            if progress_callback:
+                pct = 0.1 + 0.8 * (i / max(total, 1))
+                progress_callback(pct, f"Effect {i+1}/{total}: {d[:40]}...")
+
+            try:
+                arr = await loop.run_in_executor(
+                    self._ex(), gen.gen, d, duration, guidance_scale
+                )
+                ts = int(time.time() * 1000)
+                fp = str(od / f"effect_{i}_{ts}.wav")
+                sr = gen.sr
+                if arr.ndim == 2 and arr.shape[1] > arr.shape[0]:
+                    arr = arr.T
+                sf.write(fp, arr, sr)
+
+                ad = len(arr) / sr if arr.ndim == 1 else arr.shape[0] / sr
+                results.append({
+                    "audio_path": fp, "duration": ad,
+                    "sample_rate": sr, "description": d,
+                })
+                logger.info("Effect: %s", fp)
+
+            except Exception as e:
+                logger.error("Effect %d fail: %s", i, e)
+                results.append({
+                    "audio_path": None, "duration": 0,
+                    "sample_rate": 0, "description": d, "error": str(e),
+                })
+
+        if progress_callback:
+            progress_callback(1.0, f"{len(results)} done")
+
+        return results
+
+    def unload_models(self):
+        for a in ("_mg", "_ag"):
+            g = getattr(self, a, None)
+            if g:
+                g.unload()
+                setattr(self, a, None)
+        gc.collect()
+        if self.device == "cuda":
+            torch.cuda.empty_cache()
+
+    def get_device_info(self):
+        info = {
+            "device": self.device,
+            "device_name": "CPU",
+            "memory_total": 0,
+            "memory_available": 0,
+            "backend": "AudioCraft" if self._ac else "HF-Transformers",
+            "cuda_usable": _cuda_ok(),
+            "audiocraft_available": _AC_OK,
+            "music_model_loaded": self._mg is not None and self._mg.loaded,
+            "audio_model_loaded": self._ag is not None and self._ag.loaded,
+        }
+        if self.device == "cuda" and torch.cuda.is_available():
+            try:
+                p = torch.cuda.get_device_properties(0)
+                info["device_name"] = p.name
+                info["memory_total"] = p.total_memory
+                info["memory_available"] = p.total_memory - torch.cuda.memory_allocated()
+            except Exception:
+                pass
+        return info
+
+    @staticmethod
+    def get_available_models():
+        return {
+            "music_models": [
+                {"id": "facebook/musicgen-small", "size": "300M", "recommended": True},
+                {"id": "facebook/musicgen-medium", "size": "1.5B"},
+                {"id": "facebook/musicgen-large", "size": "3.3B"},
+            ],
+            "audio_models": [
+                {"id": "facebook/audiogen-medium", "size": "1B", "recommended": True},
+            ],
+        }

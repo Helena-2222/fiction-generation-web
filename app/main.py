@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import mimetypes
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -8,7 +9,18 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.routers import outline_router, story_router, character_router, export_router, task_router, image_router
+from app.routers import outline_router, story_router, character_router, export_router, task_router, image_router, audio_router
+
+
+# ==============================================================================
+# Fix MIME types for Windows
+# On some Windows systems, .js / .css MIME types are not registered properly
+# causing browsers to reject JavaScript files (especially with type="module")
+# ==============================================================================
+mimetypes.add_type('application/javascript', '.js')
+mimetypes.add_type('text/css', '.css')
+mimetypes.add_type('image/svg+xml', '.svg')
+mimetypes.add_type('application/json', '.json')
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -35,6 +47,7 @@ app.include_router(character_router.router)
 app.include_router(export_router.router)
 app.include_router(task_router.router)
 app.include_router(image_router.router)
+app.include_router(audio_router.router)
 
 
 @app.get("/")
@@ -55,6 +68,11 @@ async def create_page() -> FileResponse:
 @app.get("/images")
 async def images_page() -> FileResponse:
     return FileResponse(HTML_DIR / "image-generation.html")
+
+
+@app.get("/audio")
+async def audio_page() -> FileResponse:
+    return FileResponse(HTML_DIR / "audio-generation.html")
 
 
 @app.get("/works")

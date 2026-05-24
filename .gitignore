@@ -7,3 +7,8 @@ __pycache__/
 *.py[cod]
 test/
 data/generated_images/
+# HuggingFace model cache
+models/
+# Generated audio files
+static/audio/music/*.wav
+static/audio/effects/*.wav

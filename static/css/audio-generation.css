@@ -1,0 +1,474 @@
+:root {
+  --audio-bg: #f5f2ee;
+  --audio-panel: #ffffff;
+  --audio-border: rgba(94, 80, 63, 0.18);
+  --audio-ink: #1f2f46;
+  --audio-sub: #8a7a67;
+  --audio-brand: #6b5a45;
+  --audio-shadow: 0 4px 12px rgba(57, 42, 28, 0.05);
+  --audio-radius: 20px;
+  --audio-radius-md: 14px;
+}
+
+body {
+  background: var(--audio-bg);
+  color: var(--audio-ink);
+}
+
+.audio-app {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.audio-app .main-col {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.audio-app .main-col::-webkit-scrollbar {
+  width: 6px;
+}
+
+.audio-app .main-col::-webkit-scrollbar-thumb {
+  background: rgba(107, 90, 69, 0.18);
+  border-radius: 999px;
+}
+
+.audio-topbar {
+  height: 82px;
+  border-bottom: 1px solid var(--audio-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 28px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(10px);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  flex-shrink: 0;
+}
+
+.audio-tabs {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.audio-tab {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 999px;
+  padding: 10px 18px;
+  color: var(--audio-sub);
+  font: inherit;
+  cursor: pointer;
+}
+
+.audio-tab.is-active {
+  background: var(--audio-brand);
+  color: #fff;
+}
+
+.audio-topbar-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 1px solid rgba(132, 108, 83, 0.25);
+  display: grid;
+  place-items: center;
+  color: var(--audio-brand);
+  background: #f6efe6;
+  position: absolute;
+  right: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.audio-main {
+  flex: 1 0 auto;
+  min-height: min-content;
+  padding: 28px;
+}
+
+.audio-panel {
+  display: none;
+}
+
+.audio-panel.is-active {
+  display: block;
+}
+
+.audio-page-title h1,
+.section-title {
+  margin: 0 0 8px;
+  font-size: 52px;
+  line-height: 1.1;
+}
+
+.audio-page-title p {
+  margin: 0 0 18px;
+  color: var(--audio-sub);
+  font-size: 16px;
+}
+
+.audio-card {
+  background: var(--audio-panel);
+  border: 1px solid var(--audio-border);
+  border-radius: var(--audio-radius);
+  box-shadow: var(--audio-shadow);
+  padding: 22px;
+  margin-bottom: 18px;
+}
+
+.audio-card h2 {
+  margin: 0 0 16px;
+  font-size: 22px;
+}
+
+.card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.audio-actions,
+.card-footer {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.audio-actions-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  margin: 0 0 10px;
+  gap: 10px;
+}
+
+.audio-actions-inline input[type="file"] {
+  min-width: 0;
+  width: 100%;
+}
+
+.audio-actions-inline .audio-btn {
+  white-space: nowrap;
+}
+
+.card-footer {
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.micro-status {
+  min-height: 22px;
+  margin: 10px 0 0;
+  color: var(--audio-sub);
+}
+
+.audio-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.audio-grid-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.audio-grid-full {
+  grid-template-columns: 1fr;
+}
+
+.audio-divider {
+  height: 1px;
+  background: var(--audio-border);
+  margin: 18px 0;
+}
+
+.audio-analysis-result {
+  margin: 16px 0;
+}
+
+.analysis-section {
+  margin-bottom: 16px;
+}
+
+.analysis-section h3 {
+  font-size: 16px;
+  margin: 0 0 8px;
+  color: var(--audio-sub);
+}
+
+.analysis-section p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.audio-result-list {
+  display: grid;
+  gap: 14px;
+}
+
+.audio-result-item {
+  background: var(--audio-panel);
+  border: 1px solid var(--audio-border);
+  border-radius: var(--audio-radius-md);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.audio-result-item .audio-player {
+  flex: 1;
+  min-width: 0;
+}
+
+.audio-result-item .audio-actions {
+  flex-shrink: 0;
+}
+
+.audio-effects-list {
+  display: grid;
+  gap: 14px;
+  margin: 16px 0;
+}
+
+.audio-effect-item {
+  background: var(--audio-panel);
+  border: 1px solid var(--audio-border);
+  border-radius: var(--audio-radius-md);
+  padding: 16px;
+}
+
+.audio-effect-item label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.audio-export-options {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+
+/* 按钮样式 */
+.audio-btn {
+  border: 1px solid var(--audio-border);
+  background: transparent;
+  border-radius: 999px;
+  padding: 10px 18px;
+  color: var(--audio-ink);
+  font: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.audio-btn:hover {
+  border-color: var(--audio-brand);
+  color: var(--audio-brand);
+}
+
+.audio-btn-brand {
+  background: var(--audio-brand);
+  color: #fff;
+  border-color: var(--audio-brand);
+}
+
+.audio-btn-brand:hover {
+  opacity: 0.9;
+  color: #fff;
+}
+
+.audio-btn-ghost {
+  background: transparent;
+  border: 1px solid var(--audio-border);
+}
+
+.audio-btn-ghost:hover {
+  border-color: var(--audio-brand);
+  color: var(--audio-brand);
+}
+
+.audio-btn-secondary {
+  background: var(--audio-panel);
+  border: 1px solid var(--audio-border);
+}
+
+.audio-btn-danger {
+  background: #e74c3c;
+  color: #fff;
+  border-color: #e74c3c;
+}
+
+/* 表单元素 */
+.audio-card label,
+.audio-effect-item label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: var(--audio-sub);
+}
+
+.audio-card input[type="text"],
+.audio-card input[type="number"],
+.audio-card select,
+.audio-effect-item input[type="text"] {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--audio-border);
+  border-radius: var(--audio-radius-md);
+  background: var(--audio-panel);
+  color: var(--audio-ink);
+  font: inherit;
+  font-size: 14px;
+}
+
+.audio-card textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--audio-border);
+  border-radius: var(--audio-radius-md);
+  background: var(--audio-panel);
+  color: var(--audio-ink);
+  font: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+
+/* 隐藏类 */
+.hidden {
+  display: none !important;
+}
+
+/* ============================================================
+   分析结果增强样式 (mood badge, music tags, emotion bars)
+   ============================================================ */
+
+/* --- 情绪标签 --- */
+.mood-badge {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 6px;
+  text-transform: capitalize;
+}
+
+.mood-peaceful  { background: #e8f5e9; color: #2e7d32; }
+.mood-tense     { background: #fce4ec; color: #c62828; }
+.mood-sad       { background: #e3f2fd; color: #1565c0; }
+.mood-joyful    { background: #fff8e1; color: #f57f17; }
+.mood-neutral   { background: #f5f5f5; color: #616161; }
+.mood-mysterious{ background: #ede7f6; color: #4527a0; }
+.mood-dark      { background: #263238; color: #eceff1; }
+.mood-heroic    { background: #fff3e0; color: #e65100; }
+.mood-romantic  { background: #fce4ec; color: #ad1457; }
+.mood-eerie     { background: #e0f7fa; color: #00695c; }
+
+/* --- 音乐标签行 --- */
+.audio-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.audio-tag {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.tag-style     { background: #ede7f6; color: #5e35b1; }
+.tag-tempo     { background: #e8eaf6; color: #283593; }
+.tag-instrument{ background: #e0f2f1; color: #00695c; }
+
+/* --- 情绪曲线条 --- */
+.emotion-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 6px 0;
+}
+
+.emotion-label {
+  width: 70px;
+  font-size: 13px;
+  color: var(--audio-sub);
+  flex-shrink: 0;
+}
+
+.emotion-mood {
+  width: 60px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--audio-ink);
+  flex-shrink: 0;
+}
+
+.emotion-fill {
+  flex: 1;
+  height: 8px;
+  background: rgba(107, 90, 69, 0.12);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.emotion-fill-inner {
+  height: 100%;
+  background: var(--audio-brand);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+/* --- 音效项增强 --- */
+.effect-prompt-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.effect-idx {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--audio-brand);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.effect-time {
+  font-size: 12px;
+  color: var(--audio-sub);
+  background: rgba(107, 90, 69, 0.08);
+  padding: 2px 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.effect-prompt-input {
+  flex: 1;
+}
