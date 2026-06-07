@@ -1,6 +1,63 @@
 // audio-generation.js - 音频生成页面前端逻辑
 
 document.addEventListener('DOMContentLoaded', () => {
+  // ========== 0. 模型选择逻辑 ==========
+  const modelTypeSelect = document.getElementById('modelTypeSelect');
+  const modelVariantSelect = document.getElementById('modelVariantSelect');
+  const modelSwitchStatus = document.getElementById('modelSwitchStatus');
+
+  const modelVariants = {
+    'musicgen': [
+      { value: 'facebook/musicgen-small', label: 'musicgen-small (300M)' },
+      { value: 'facebook/musicgen-medium', label: 'musicgen-medium (1.5B)' },
+      { value: 'facebook/musicgen-large', label: 'musicgen-large (3.3B)' },
+    ],
+    'stable-audio': [
+      { value: 'stabilityai/stable-audio-open-1.0', label: 'stable-audio-open-1.0 (~1B)' },
+    ],
+  };
+
+  // Update variant dropdown when model type changes
+  if (modelTypeSelect && modelVariantSelect) {
+    modelTypeSelect.addEventListener('change', () => {
+      const type = modelTypeSelect.value;
+      const variants = modelVariants[type] || [];
+      modelVariantSelect.innerHTML = '';
+      variants.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.value;
+        opt.textContent = v.label;
+        modelVariantSelect.appendChild(opt);
+      });
+    });
+
+    // Switch model on variant change
+    modelVariantSelect.addEventListener('change', async () => {
+      const type = modelTypeSelect.value;
+      if (modelSwitchStatus) {
+        modelSwitchStatus.textContent = '正在切换模型...';
+      }
+      try {
+        const resp = await fetch('/api/audio/switch-model', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model_type: type }),
+        });
+        const data = await resp.json();
+        if (resp.ok && modelSwitchStatus) {
+          modelSwitchStatus.textContent = '已切换: ' + data.message;
+        } else if (modelSwitchStatus) {
+          modelSwitchStatus.textContent = '切换失败: ' + (data.detail || '');
+        }
+      } catch (err) {
+        if (modelSwitchStatus) {
+          modelSwitchStatus.textContent = '切换失败: ' + err.message;
+        }
+      }
+    });
+  }
+
+
   // ========== 1. 标签切换逻辑 ==========
   const tabs = document.querySelectorAll('.audio-tab');
   const panels = document.querySelectorAll('.audio-panel');

@@ -80,6 +80,30 @@
 
             <div class="audio-card">
               <div class="card-heading">
+                <h2>模型选择</h2>
+              </div>
+              <div class="audio-grid audio-grid-two">
+                <label>
+                  音频生成模型
+                  <select id="modelTypeSelect">
+                    <option value="musicgen" selected>MusicGen (Meta) — 快速、轻量</option>
+                    <option value="stable-audio">Stable Audio 3 (Stability AI) — 高质量</option>
+                  </select>
+                </label>
+                <label>
+                  模型变体
+                  <select id="modelVariantSelect">
+                    <option value="facebook/musicgen-small" selected>musicgen-small (300M)</option>
+                    <option value="facebook/musicgen-medium">musicgen-medium (1.5B)</option>
+                    <option value="facebook/musicgen-large">musicgen-large (3.3B)</option>
+                  </select>
+                </label>
+              </div>
+              <p id="modelSwitchStatus" class="micro-status"></p>
+            </div>
+
+            <div class="audio-card">
+              <div class="card-heading">
                 <h2>小说内容导入</h2>
               </div>
               <div class="audio-actions audio-actions-inline audio-actions-half">

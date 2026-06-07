@@ -5,6 +5,7 @@ from app.llm.llm_task_manager import LlmTaskManager
 from app.services.story_service import StoryService
 from app.services.summary_service import SummaryService
 from app.services.audio_service import AudioService
+from app.services.tts_service import TtsService
 
 _client = DeepSeekClient()
 story_service = StoryService(_client)
@@ -14,6 +15,10 @@ llm_task_manager = LlmTaskManager(story_service)
 summary_service = SummaryService(_client)
 audio_service = AudioService(
     device=None,  # let _best_dev() decide (handles CC mismatch)
-    music_model_name="facebook/musicgen-small",  # Start with small model
-    audio_model_name="facebook/musicgen-small"  # AudioGen not in transformers, use MusicGen
+    music_model_name="facebook/musicgen-small",
+    audio_model_name="facebook/musicgen-small",
+    model_type="musicgen",  # "musicgen" or "stable-audio"
 )
+
+# TTS service for novel dialogue voicing
+tts_service = TtsService(llm_client=_client)

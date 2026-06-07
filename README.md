@@ -34,7 +34,7 @@
 - 调用阿里云 DashScope (Wan2.7) 生成场景插图
 - 支持导入 Word 文档批量生成章节插图
 
-### 音频生成 (NEW)
+### 音频生成
 - 智能分析章节内容，通过 DeepSeek 提炼情绪、场景和音频提示词
 - 基于 Meta MusicGen 模型生成匹配的背景音乐
 - 生成环境音效（风声、雨声、脚步声等场景音效）
@@ -61,11 +61,11 @@
 |------|------|
 | 后端 | FastAPI, httpx, uvicorn |
 | 前端 | 原生 HTML / CSS / JavaScript |
-| 大模型 | DeepSeek (文本分析), MusicGen (音频生成) |
+| 大模型 | DeepSeek, MusicGen, Stable-Audio-3 |
 | 图像生成 | 阿里云 DashScope Wan2.7 |
 | 鉴权与账户 | Supabase Auth |
 | 导出 | 后端直接生成 OpenXML `.docx` |
-| 深度学习 | PyTorch, HuggingFace Transformers, Accelerate |
+| 深度学习 | PyTorch, HuggingFace Transformers, Diffusers, Accelerate |
 
 ## 项目结构
 
@@ -216,17 +216,31 @@ uvicorn app.main:app --reload
 
 ### 模型说明
 
-- **音乐生成**: `facebook/musicgen-small`（300M 参数）
-- **音效生成**: 复用音乐模型（节省内存）
-- **推理精度**: float16 半精度，约 1.2GB 内存
-- **CPU 推理**: 30 秒音乐约 3-5 分钟（视 CPU 性能）
-- **GPU 推理**: CUDA 兼容时约 10-30 秒
+支持两种模型，可在前端页面顶部切换：
+
+| 模型 | 来源 | 特点 | 推荐场景 |
+|------|------|------|----------|
+| **MusicGen** | Meta | 快速、轻量 (300M-3.3B)，CPU 可用 | 快速音乐/音效生成 |
+| **Stable Audio 3** | Stability AI | 高质量立体声 (~1B)，需更多资源 | 高品质背景音乐 |
+
+- **推理精度**: float16 半精度
+- **MusicGen 内存**: 约 1.2GB (small) ~ 6GB (large)
+- **Stable Audio 3 内存**: 约 2-4GB
+- **CPU 推理**: 30 秒音乐约 3-15 分钟（视模型和 CPU）
+- **GPU 推理**: CUDA 兼容时约 10-60 秒
+
+安装 Stable Audio 3 支持:
+```bash
+pip install diffusers
+```
+首次使用会自动下载模型（约 2-4GB）。
 
 ### 已知限制
 
 - AudioCraft 原生集成需要 Python 3.10 + xformers <0.0.23，当前使用 HF Transformers 后端
 - RTX 50 系列 GPU (Blackwell) 需 PyTorch >= 2.6 + CUDA 12.8
-- 首次运行需下载模型（约 2.3GB），模型缓存于 `~/.cache/huggingface/`
+- 首次运行需下载模型（MusicGen: ~2.3GB, Stable Audio 3: ~2-4GB），缓存于 `~/.cache/huggingface/`
+- Stable Audio 3 需要 `diffusers` 库，模型较大，CPU 推理较慢
 
 ## 主要接口
 
@@ -275,6 +289,7 @@ uvicorn app.main:app --reload
 | POST | `/api/audio/generate-from-prompts` | 从提示词生成音乐和音效 |
 | GET | `/api/audio/models` | 可用模型列表 |
 | GET | `/api/audio/device-info` | 设备信息 |
+| POST | `/api/audio/switch-model` | 切换模型 (musicgen/stable-audio) |
 | POST | `/api/audio/unload-models` | 卸载模型释放内存 |
 
 ### 导出
@@ -297,6 +312,61 @@ uvicorn app.main:app --reload
 
 - Supabase 配置说明：[SUPABASE_SETUP.md](./SUPABASE_SETUP.md)
 - 技术逻辑文档：[docs/technical-logic.md](./docs/technical-logic.md)
+
+
+### TTS 配音生成 (NEW)
+
+基于 indexTTS2 + DeepSeek 的小说对白智能配音，支持角色自定义音色和自动情感分析。
+
+**前提条件**: 需要本地启动 indexTTS2 服务（监听 `http://127.0.0.1:9800`），参见 [indexTTS2 项目](https://github.com/IndexTeam/IndexTTS2)。
+
+**工作流程**:
+```
+章节文本 -> DeepSeek 情感分析 -> 角色音色匹配 -> indexTTS2 合成 -> WAV 输出
+```
+
+1. **角色管理**: 创建角色、上传参考音频（支持 7 种情感标签）
+2. **语音合成**: 选择角色 + 输入台词 -> AI 自动分析情绪 -> 合成语音
+3. **章节批量配音**: 粘贴章节文本 -> 自动检测说话者 -> 映射角色 -> 批量合成
+
+**API 接口**:
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET/POST/DELETE | `/api/tts/characters` | 角色 CRUD |
+| POST | `/api/tts/characters/{id}/voices` | 上传参考音频 |
+| POST | `/api/tts/analyze-emotion` | 情感分析 |
+| GET | `/api/tts/health` | indexTTS2 健康检查 |
+| POST | `/api/tts/synthesize` | 单句合成 |
+| POST | `/api/tts/synthesize-chapter` | 章节批量合成 |
+
+
+
+### TTS 配音生成 (NEW)
+
+基于 indexTTS2 + DeepSeek 的小说对白智能配音，支持角色自定义音色和自动情感分析。
+
+**前提条件**: 需要本地启动 indexTTS2 服务（监听 http://127.0.0.1:9800）。
+
+**工作流程**:
+`
+章节文本 -> DeepSeek 情感分析 -> 角色音色匹配 -> indexTTS2 合成 -> WAV 输出
+`
+
+1. **角色管理**: 创建角色、上传参考音频（支持 7 种情感：高兴/愤怒/悲伤/恐惧/惊讶/反感/平静）
+2. **语音合成**: 选择角色 + 输入台词 -> AI 自动分析情绪 -> 合成语音
+3. **章节批量配音**: 粘贴章节文本 -> 自动检测说话者 -> 映射角色 -> 批量合成
+
+**API 接口**:
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET/POST/DELETE | /api/tts/characters | 角色 CRUD |
+| POST | /api/tts/characters/{id}/voices | 上传参考音频 |
+| POST | /api/tts/analyze-emotion | DeepSeek 情感分析 |
+| GET | /api/tts/health | indexTTS2 健康检查 |
+| POST | /api/tts/synthesize | 单句合成 |
+| POST | /api/tts/synthesize-chapter | 章节批量合成 |
 
 ## 当前边界
 

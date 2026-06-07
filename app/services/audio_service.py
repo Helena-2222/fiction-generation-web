@@ -143,26 +143,121 @@ class _HFMG:
         return self._m is not None
 
 
+
+# =============================================================================
+# Stable Audio 3 Wrapper (Stability AI)
+# =============================================================================
+
+_HAS_STABLE_AUDIO = False
+try:
+    from diffusers import StableAudioPipeline
+    _HAS_STABLE_AUDIO = True
+    logger.info("Stable Audio 3 pipeline available")
+except ImportError:
+    logger.info("Stable Audio 3 not available (install: pip install diffusers)")
+
+
+class _StableAudioGen:
+    """Stable Audio 3 wrapper using diffusers pipeline."""
+
+    def __init__(self, model_name="stabilityai/stable-audio-open-1.0", device="cpu"):
+        self.model_name = model_name
+        self.device = device
+        self._pipe = None
+        self._sample_rate = 44100
+
+    def _load(self):
+        global _HAS_STABLE_AUDIO
+        if self._pipe is not None:
+            return
+        if not _HAS_STABLE_AUDIO:
+            # Try late import
+            try:
+                global StableAudioPipeline
+                from diffusers import StableAudioPipeline
+                _HAS_STABLE_AUDIO = True
+            except ImportError:
+                raise RuntimeError(
+                    "Stable Audio 3 requires diffusers. "
+                    "Install with: pip install diffusers"
+                )
+
+        logger.info("Loading Stable Audio 3: %s on %s ...", self.model_name, self.device)
+        self._pipe = StableAudioPipeline.from_pretrained(
+            self.model_name,
+            torch_dtype=torch.float16,
+            low_cpu_mem_usage=True,
+        )
+        if self.device == "cuda":
+            self._pipe = self._pipe.to(self.device)
+        self._sample_rate = getattr(self._pipe, "sample_rate", 44100)
+        logger.info("Stable Audio 3 loaded. sr=%s", self._sample_rate)
+
+    def gen(self, desc, dur=30.0, gs=3.0):
+        self._load()
+        # Stable Audio uses negative prompts and inference steps
+        negative = "low quality, noisy, distorted"
+        steps = min(200, max(50, int(dur * 6)))
+
+        with torch.no_grad():
+            result = self._pipe(
+                desc,
+                negative_prompt=negative,
+                num_inference_steps=steps,
+                audio_end_in_s=dur,
+                guidance_scale=gs,
+            )
+
+        arr = result.audios[0]  # (channels, samples) or (samples,)
+        if isinstance(arr, torch.Tensor):
+            arr = arr.cpu().float().numpy()
+        if arr.ndim == 2 and arr.shape[0] < arr.shape[1]:
+            arr = arr.T  # -> (samples, channels)
+        return arr
+
+    @property
+    def sr(self):
+        return self._sample_rate
+
+    def unload(self):
+        if self._pipe is not None:
+            del self._pipe
+            self._pipe = None
+        gc.collect()
+        if self.device == "cuda":
+            torch.cuda.empty_cache()
+
+    @property
+    def loaded(self):
+        return self._pipe is not None
+
+
 class AudioService:
     _POOL = None
 
     def __init__(
         self, device=None,
         music_model_name="facebook/musicgen-small",
-        audio_model_name="facebook/audiogen-medium",
+        audio_model_name="facebook/musicgen-small",
+        model_type="musicgen",
         cache_dir=None
     ):
         self.device = device or _best_dev()
         self.mmn = music_model_name
         self.amn = audio_model_name
+        self.model_type = model_type
         self.cd = cache_dir
         self._mg = None
         self._ag = None
         self._ac = _AC_OK
-        be = "AudioCraft" if self._ac else "HF-Transformers"
+        be = (
+            "AudioCraft" if self._ac
+            else "StableAudio" if model_type == "stable-audio"
+            else "HF-MusicGen"
+        )
         logger.info(
-            "AudioService: dev=%s be=%s music=%s audio=%s",
-            self.device, be, music_model_name, audio_model_name
+            "AudioService: dev=%s be=%s type=%s music=%s audio=%s",
+            self.device, be, model_type, music_model_name, audio_model_name
         )
 
     @classmethod
@@ -172,7 +267,12 @@ class AudioService:
         return cls._POOL
 
     def _gmg(self):
-        if self._mg is None:
+        """Get music generator based on model_type."""
+        if self._mg is not None:
+            return self._mg
+        if self.model_type == "stable-audio":
+            self._mg = _StableAudioGen(self.mmn, self.device)
+        else:
             self._mg = _HFMG(self.mmn, self.device)
         return self._mg
 
@@ -286,6 +386,15 @@ class AudioService:
 
         return results
 
+    def set_model_type(self, model_type):
+        """Switch between "musicgen" and "stable-audio" models."""
+        if model_type not in ("musicgen", "stable-audio"):
+            raise ValueError(f"Unknown model_type: {model_type}")
+        if model_type != self.model_type:
+            logger.info("Switching model: %s -> %s", self.model_type, model_type)
+            self.unload_models()
+            self.model_type = model_type
+
     def unload_models(self):
         for a in ("_mg", "_ag"):
             g = getattr(self, a, None)
@@ -302,9 +411,15 @@ class AudioService:
             "device_name": "CPU",
             "memory_total": 0,
             "memory_available": 0,
-            "backend": "AudioCraft" if self._ac else "HF-Transformers",
+            "model_type": self.model_type,
+            "backend": (
+                "AudioCraft" if self._ac
+                else "StableAudio" if self.model_type == "stable-audio"
+                else "HF-MusicGen"
+            ),
             "cuda_usable": _cuda_ok(),
             "audiocraft_available": _AC_OK,
+            "stable_audio_available": _HAS_STABLE_AUDIO,
             "music_model_loaded": self._mg is not None and self._mg.loaded,
             "audio_model_loaded": self._ag is not None and self._ag.loaded,
         }
@@ -321,12 +436,29 @@ class AudioService:
     @staticmethod
     def get_available_models():
         return {
-            "music_models": [
-                {"id": "facebook/musicgen-small", "size": "300M", "recommended": True},
-                {"id": "facebook/musicgen-medium", "size": "1.5B"},
-                {"id": "facebook/musicgen-large", "size": "3.3B"},
+            "model_types": [
+                {
+                    "id": "musicgen",
+                    "name": "MusicGen (Meta)",
+                    "description": "Fast, lightweight, good for music and effects",
+                    "recommended": True,
+                    "models": [
+                        {"id": "facebook/musicgen-small", "size": "300M", "recommended": True},
+                        {"id": "facebook/musicgen-medium", "size": "1.5B"},
+                        {"id": "facebook/musicgen-large", "size": "3.3B"},
+                    ],
+                },
+                {
+                    "id": "stable-audio",
+                    "name": "Stable Audio 3 (Stability AI)",
+                    "description": "Higher quality, longer generation, needs more VRAM",
+                    "recommended": False,
+                    "models": [
+                        {"id": "stabilityai/stable-audio-open-1.0", "size": "~1B", "recommended": True},
+                    ],
+                },
             ],
             "audio_models": [
-                {"id": "facebook/audiogen-medium", "size": "1B", "recommended": True},
+                {"id": "facebook/musicgen-small", "size": "300M", "recommended": True},
             ],
         }

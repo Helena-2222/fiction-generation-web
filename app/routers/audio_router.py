@@ -301,20 +301,37 @@ async def analyze_chapter(request: ChapterAudioRequest):
 @router.get("/models")
 async def get_available_models():
     """
-    Get list of available audio generation models.
+    Get available audio generation models and current configuration.
     """
-    return {
-        "music_models": [
-            "facebook/musicgen-small",
-            "facebook/musicgen-medium",
-            "facebook/musicgen-large"
-        ],
-        "audio_models": [
-            "facebook/audiogen-medium"
-        ],
-        "current_music_model": "facebook/musicgen-small",
-        "current_audio_model": "facebook/audiogen-medium"
-    }
+    from app.dependencies import audio_service
+    models = audio_service.get_available_models()
+    models["current_model_type"] = audio_service.model_type
+    models["current_music_model"] = audio_service.mmn
+    return models
+
+
+class ModelSwitchRequest(BaseModel):
+    """Request model for switching audio generation model."""
+    model_type: str  # "musicgen" or "stable-audio"
+
+
+@router.post("/switch-model")
+async def switch_model(request: ModelSwitchRequest):
+    """
+    Switch the active audio generation model.
+    Unloads current model and loads the selected one on next generation.
+    """
+    from app.dependencies import audio_service
+
+    try:
+        audio_service.set_model_type(request.model_type)
+        return {
+            "status": "ok",
+            "model_type": audio_service.model_type,
+            "message": f"Switched to {request.model_type}. Model will load on next generation.",
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/unload-models")
