@@ -10,11 +10,9 @@ from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, UploadFile, File
 from pydantic import BaseModel
 
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/audio", tags=["audio"])
-
 
 # Import endpoint for docx files
 @router.post("/import-docx")
@@ -53,7 +51,6 @@ async def import_docx(file: UploadFile = File(...)):
         logger.error(f"Error importing docx: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
 
-
 # Request/Response Models
 
 class ChapterAudioRequest(BaseModel):
@@ -65,7 +62,6 @@ class ChapterAudioRequest(BaseModel):
     music_duration: float = 30.0
     generate_effects: bool = True
 
-
 class AudioPromptRequest(BaseModel):
     """Request model for generating audio from prompts."""
     music_prompt: Optional[str] = None
@@ -73,20 +69,17 @@ class AudioPromptRequest(BaseModel):
     music_duration: float = 30.0
     effect_duration: float = 5.0
 
-
 class MusicGenerationRequest(BaseModel):
     """Request model for generating background music."""
     description: str
     duration: float = 30.0
     guidance_scale: float = 3.0
 
-
 class EffectGenerationRequest(BaseModel):
     """Request model for generating sound effects."""
     descriptions: List[str]
     duration: float = 5.0
     guidance_scale: float = 3.0
-
 
 class AudioResponse(BaseModel):
     """Response model for audio generation."""
@@ -95,14 +88,12 @@ class AudioResponse(BaseModel):
     sample_rate: int
     description: Optional[str] = None
 
-
 class ChapterAudioResponse(BaseModel):
     """Response model for chapter audio generation."""
     chapter_number: int
     summary: Dict[str, Any]
     music: Optional[AudioResponse] = None
     effects: Optional[List[AudioResponse]] = None
-
 
 # API Endpoints
 
@@ -185,7 +176,6 @@ async def generate_chapter_audio(request: ChapterAudioRequest):
         logger.error(f"Error generating chapter audio: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
 
-
 @router.post("/generate-music", response_model=AudioResponse)
 async def generate_music(request: MusicGenerationRequest):
     """
@@ -209,7 +199,6 @@ async def generate_music(request: MusicGenerationRequest):
         logger.error(f"Error generating music: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
 
-
 @router.post("/generate-effects", response_model=List[AudioResponse])
 async def generate_effects(request: EffectGenerationRequest):
     """
@@ -232,7 +221,6 @@ async def generate_effects(request: EffectGenerationRequest):
     except Exception as exc:
         logger.error(f"Error generating effects: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
-
 
 @router.post("/generate-from-prompts")
 async def generate_from_prompts(request: AudioPromptRequest):
@@ -266,7 +254,6 @@ async def generate_from_prompts(request: AudioPromptRequest):
         logger.error(f"Error generating from prompts: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
 
-
 @router.post("/analyze-chapter")
 async def analyze_chapter(request: ChapterAudioRequest):
     """
@@ -297,7 +284,6 @@ async def analyze_chapter(request: ChapterAudioRequest):
         logger.error(f"Error analyzing chapter: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
 
-
 @router.get("/models")
 async def get_available_models():
     """
@@ -309,11 +295,10 @@ async def get_available_models():
     models["current_music_model"] = audio_service.mmn
     return models
 
-
 class ModelSwitchRequest(BaseModel):
+    model_name: Optional[str] = None  # specific model ID
     """Request model for switching audio generation model."""
     model_type: str  # "musicgen" or "stable-audio"
-
 
 @router.post("/switch-model")
 async def switch_model(request: ModelSwitchRequest):
@@ -324,16 +309,16 @@ async def switch_model(request: ModelSwitchRequest):
     from app.dependencies import audio_service
 
     try:
-        audio_service.set_model_type(request.model_type)
+        audio_service.set_model_type(request.model_type, request.model_name)
         return {
             "status": "ok",
             "model_type": audio_service.model_type,
+            "music_model": audio_service.stable_music_model,
+            "sfx_model": audio_service.stable_sfx_model,
             "message": f"Switched to {request.model_type}. Model will load on next generation.",
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-
 @router.post("/unload-models")
 async def unload_models():
     """
@@ -348,6 +333,26 @@ async def unload_models():
         logger.error(f"Error unloading models: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
 
+
+# --- HF Token for gated models ---
+
+class HfTokenRequest(BaseModel):
+    token: str
+
+@router.post("/hf-token")
+async def set_hf_token(request: HfTokenRequest):
+    """Save HuggingFace token for downloading gated models (Stable Audio 3)."""
+    from app.services.audio_service import _set_hf_token, _get_hf_token
+    _set_hf_token(request.token)
+    current = _get_hf_token()
+    return {"status": "ok", "token_set": bool(current), "message": "HF Token 已保存"}
+
+@router.get("/hf-token")
+async def get_hf_token_status():
+    """Check if HF token is configured."""
+    from app.services.audio_service import _get_hf_token
+    token = _get_hf_token()
+    return {"token_set": bool(token), "token_preview": (token[:6] + "..." + token[-4:]) if token and len(token) > 10 else None}
 
 @router.get("/device-info")
 async def get_device_info():

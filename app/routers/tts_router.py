@@ -360,3 +360,146 @@ async def synthesize_chapter(req: SynthesizeChapterRequest):
         "failed": sum(1 for r in results if "error" in r),
         "results": results,
     }
+
+# ============================================================
+# Cloud TTS (EmotionTTS external API)
+# ============================================================
+
+class CloudTokenSet(BaseModel):
+    token: str
+
+
+class CloudSynthesizeRequest(BaseModel):
+    text: str
+    character_id: Optional[str] = None
+    character_name: Optional[str] = None
+    ref_audio_filename: Optional[str] = None  # local file in character dir
+    emo_vector: Optional[List[float]] = None
+    emo_alpha: float = 1.0
+    speed: float = 1.0
+    auto_emotion: bool = False  # if True, analyze text via DeepSeek first
+
+
+@router.get("/cloud/health")
+async def cloud_health():
+    """Check EmotionTTS cloud API status and token validity."""
+    from app.dependencies import tts_cloud_service
+    result = await tts_cloud_service.check_health()
+    return result
+
+
+@router.post("/cloud/token")
+async def cloud_set_token(req: CloudTokenSet):
+    """Save EmotionTTS cloud API token."""
+    from app.dependencies import tts_cloud_service
+    tts_cloud_service.set_token(req.token)
+    # Quick validation
+    result = await tts_cloud_service.check_health()
+    return {
+        "status": "saved",
+        "token_valid": result.get("token_valid", False),
+        "message": result.get("message", ""),
+    }
+
+
+@router.get("/cloud/token")
+async def cloud_get_token():
+    """Get current token status (masked)."""
+    from app.dependencies import tts_cloud_service
+    has = tts_cloud_service.has_token()
+    token = tts_cloud_service.api_token
+    masked = ""
+    if token:
+        masked = token[:8] + "****" + token[-4:] if len(token) > 12 else "****"
+    return {
+        "has_token": has,
+        "masked": masked,
+        "platform_url": tts_cloud_service.platform_url,
+    }
+
+
+@router.get("/cloud/characters")
+async def cloud_list_characters():
+    """Fetch character list from EmotionTTS cloud."""
+    from app.dependencies import tts_cloud_service
+    if not tts_cloud_service.has_token():
+        raise HTTPException(status_code=400, detail="请先配置云端 API 令牌")
+    chars = await tts_cloud_service.fetch_cloud_characters()
+    return {"characters": chars}
+
+
+@router.post("/cloud/synthesize")
+async def cloud_synthesize(req: CloudSynthesizeRequest):
+    """
+    Synthesize via EmotionTTS cloud API.
+    Supports local character library reference audio.
+    """
+    from app.dependencies import tts_cloud_service, tts_service as local_tts
+
+    if not tts_cloud_service.has_token():
+        raise HTTPException(status_code=400, detail="请先配置云端 API 令牌")
+
+    emo_vector = req.emo_vector
+    emo_alpha = req.emo_alpha
+
+    # Auto emotion analysis
+    if req.auto_emotion and local_tts.llm:
+        try:
+            emotion = await local_tts.analyze_emotion(req.text)
+            emo_vector = emotion["emo_vector"]
+            emo_alpha = emotion["emo_alpha"]
+        except Exception as e:
+            logger.warning(f"Auto emotion failed: {e}")
+
+    # Determine voice source
+    ref_audio_path = None
+    char_name = req.character_name
+
+    # If character_id + ref_audio_filename given, use local file
+    if req.character_id and req.ref_audio_filename:
+        char_dir = _get_char_dir(req.character_id)
+        ref_audio_path = str(char_dir / req.ref_audio_filename)
+
+    # If character_id given but no filename, try to match from library
+    if req.character_id and not ref_audio_path:
+        try:
+            lib = _load_library(req.character_id)
+            items = lib.get("items", [])
+            char_name = lib.get("char_name", req.character_name or "")
+            if items:
+                ref_audio_path = str(_get_char_dir(req.character_id) / items[0]["filename"])
+        except HTTPException:
+            pass
+
+    # Synthesize
+    out_name = f"tts_cloud_{uuid.uuid4().hex[:8]}.wav"
+    out_path = str(OUTPUT_DIR / out_name)
+
+    if ref_audio_path and os.path.exists(ref_audio_path):
+        result = await tts_cloud_service.synthesize_with_ref_audio(
+            text=req.text,
+            ref_audio_path=ref_audio_path,
+            emo_vector=emo_vector,
+            emo_alpha=emo_alpha,
+            speed=req.speed,
+            output_path=out_path,
+        )
+    else:
+        result = await tts_cloud_service.synthesize(
+            text=req.text,
+            character_id=req.character_id,
+            character_name=char_name,
+            emo_vector=emo_vector,
+            emo_alpha=emo_alpha,
+            speed=req.speed,
+            output_path=out_path,
+        )
+
+    return {
+        "audio_path": result["audio_path"],
+        "audio_url": f"/static/audio/tts/{out_name}",
+        "text": req.text,
+        "character": char_name or req.character_id or "default",
+        "emo_vector": emo_vector,
+        "emo_alpha": emo_alpha,
+    }

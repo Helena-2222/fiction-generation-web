@@ -38,7 +38,7 @@
 - 智能分析章节内容，通过 DeepSeek 提炼情绪、场景和音频提示词
 - 基于 Meta MusicGen 模型生成匹配的背景音乐
 - 生成环境音效（风声、雨声、脚步声等场景音效）
-- 音乐和音效共用同一模型实例，节省内存
+- 音乐和音效共用同一模型实例，节省内存；音效在 Stable Audio 3 模式下同样使用该引擎
 - 支持 CPU 推理（float16 半精度），约 1.2GB 显存/内存
 - 分析结果可视化展示：情绪标签、音乐风格标签、情绪曲线
 
@@ -220,8 +220,8 @@ uvicorn app.main:app --reload
 
 | 模型 | 来源 | 特点 | 推荐场景 |
 |------|------|------|----------|
-| **MusicGen** | Meta | 快速、轻量 (300M-3.3B)，CPU 可用 | 快速音乐/音效生成 |
-| **Stable Audio 3** | Stability AI | 高质量立体声 (~1B)，需更多资源 | 高品质背景音乐 |
+| **MusicGen** | Meta | 快速、轻量 (300M-3.3B)，CPU 可用 | 音乐与音效 |
+| **Stable Audio 3** | Stability AI | 高质量立体声 (~1B)，需更多资源 | 音乐与音效（推荐高品质场景） |
 
 - **推理精度**: float16 半精度
 - **MusicGen 内存**: 约 1.2GB (small) ~ 6GB (large)
@@ -373,4 +373,4 @@ pip install diffusers
 - 登录用户的工作区云同步依赖 `user_workspaces` 表；如果是旧环境，请先按 `SUPABASE_SETUP.md` 补充该表
 - 导出当前仅提供 `.docx`
 - 项目默认面向中文创作场景
-- 音效生成与音乐生成共用 MusicGen 模型，非专用 AudioGen 模型（transformers 无内置支持）
+- 音效在 MusicGen 模式下复用同一生成器，Stable Audio 3 模式下使用相同 pipeline 实例生成音效

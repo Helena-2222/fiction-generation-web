@@ -13,6 +13,15 @@ import torch
 
 logger = logging.getLogger(__name__)
 
+# --- HF Mirror for mainland China users ---
+# Set HF_ENDPOINT to a mirror if not already configured
+if not os.environ.get("HF_ENDPOINT"):
+    _mirror = os.environ.get("HF_MIRROR", "https://hf-mirror.com")
+    os.environ["HF_ENDPOINT"] = _mirror
+    logger.info("HF endpoint set to mirror: %s", _mirror)
+else:
+    logger.info("HF endpoint: %s", os.environ["HF_ENDPOINT"])
+
 def _cuda_ok():
     """Check CUDA is usable, including compute-capability compatibility."""
     if not torch.cuda.is_available():
@@ -42,6 +51,32 @@ def _best_dev():
         return "cuda"
     logger.info("Using CPU")
     return "cpu"
+
+
+# --- HF Token for gated models (Stable Audio 3) ---
+_HF_TOKEN_FILE = Path(__file__).resolve().parents[2] / "data" / "hf_token.txt"
+
+def _get_hf_token():
+    """Get HF token from env or stored file."""
+    token = os.environ.get("HF_TOKEN", "").strip()
+    if token:
+        return token
+    try:
+        if _HF_TOKEN_FILE.exists():
+            token = _HF_TOKEN_FILE.read_text().strip()
+            if token:
+                return token
+    except Exception:
+        pass
+    return None
+
+def _set_hf_token(token: str):
+    """Save HF token to file and set env var."""
+    token = token.strip()
+    os.environ["HF_TOKEN"] = token
+    _HF_TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _HF_TOKEN_FILE.write_text(token)
+    logger.info("HF token saved")
 
 _AC_OK = False
 _AC_ERR = ""
@@ -75,7 +110,7 @@ class _HFMG:
             raise RuntimeError("HF Transformers not installed")
 
         load_kwargs = {
-            "torch_dtype": torch.float16,
+            "dtype": torch.float16 if self.dev == "cuda" else torch.float32,
             "low_cpu_mem_usage": True,
         }
 
@@ -83,8 +118,8 @@ class _HFMG:
         for local_only in (True, False):
             try:
                 logger.info(
-                    "Loading %s on %s (float16, low_cpu_mem, local=%s)...",
-                    self.mn, self.dev, local_only
+                    "Loading %s on %s (dtype=%s, low_cpu_mem, local=%s)...",
+                    self.mn, self.dev, "float16" if self.dev=="cuda" else "float32", local_only
                 )
                 self._p = AutoProcessor.from_pretrained(
                     self.mn, local_files_only=local_only
@@ -160,7 +195,7 @@ except ImportError:
 class _StableAudioGen:
     """Stable Audio 3 wrapper using diffusers pipeline."""
 
-    def __init__(self, model_name="stabilityai/stable-audio-open-1.0", device="cpu"):
+    def __init__(self, model_name="stabilityai/stable-audio-3-small-music", device="cpu"):
         self.model_name = model_name
         self.device = device
         self._pipe = None
@@ -183,11 +218,26 @@ class _StableAudioGen:
                 )
 
         logger.info("Loading Stable Audio 3: %s on %s ...", self.model_name, self.device)
-        self._pipe = StableAudioPipeline.from_pretrained(
-            self.model_name,
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-        )
+        try:
+            _dtype = torch.float16 if self.device == "cuda" else torch.float32
+            _token = _get_hf_token()
+            self._pipe = StableAudioPipeline.from_pretrained(
+                self.model_name,
+                dtype=_dtype,
+                low_cpu_mem_usage=True,
+                token=_token if _token else None,
+            )
+        except Exception as e:
+            err = str(e).lower()
+            if "gated" in err or "401" in err or "403" in err or "restricted" in err:
+                raise RuntimeError(
+                    "Stable Audio 3 模型需要 HuggingFace 授权。请在页面顶部 HF Token 输入框中填入你的 HuggingFace Token。"
+                ) from e
+            if "ssl" in err or "connection" in err or "max retries" in err:
+                raise RuntimeError(
+                    "无法连接 HuggingFace。已自动使用镜像站 hf-mirror.com，如仍失败请检查网络。"
+                ) from e
+            raise
         if self.device == "cuda":
             self._pipe = self._pipe.to(self.device)
         self._sample_rate = getattr(self._pipe, "sample_rate", 44100)
@@ -238,21 +288,25 @@ class AudioService:
     def __init__(
         self, device=None,
         music_model_name="facebook/musicgen-small",
-        audio_model_name="facebook/musicgen-small",
+        audio_model_name="facebook/audiogen-medium",
         model_type="musicgen",
+        stable_music_model="stabilityai/stable-audio-3-small-music",
+        stable_sfx_model="stabilityai/stable-audio-3-small-sfx",
         cache_dir=None
     ):
         self.device = device or _best_dev()
         self.mmn = music_model_name
         self.amn = audio_model_name
         self.model_type = model_type
+        self.stable_music_model = stable_music_model
+        self.stable_sfx_model = stable_sfx_model
         self.cd = cache_dir
         self._mg = None
         self._ag = None
         self._ac = _AC_OK
         be = (
             "AudioCraft" if self._ac
-            else "StableAudio" if model_type == "stable-audio"
+            else "StableAudio3" if model_type == "stable-audio"
             else "HF-MusicGen"
         )
         logger.info(
@@ -271,14 +325,24 @@ class AudioService:
         if self._mg is not None:
             return self._mg
         if self.model_type == "stable-audio":
-            self._mg = _StableAudioGen(self.mmn, self.device)
+            self._mg = _StableAudioGen(self.stable_music_model, self.device)
         else:
             self._mg = _HFMG(self.mmn, self.device)
         return self._mg
 
     def _gag(self):
+        """Get audio/sfx generator. For Stable Audio 3, uses a dedicated SFX model."""
         if self._ag is None:
-            self._ag = _HFMG(self.amn, self.device)
+            if self.model_type == "stable-audio":
+                import gc
+                # Try to unload music model first to free memory, then load SFX model
+                if self._mg is not None and self._mg.loaded:
+                    self._mg.unload()
+                    self._mg = None
+                    gc.collect()
+                self._ag = _StableAudioGen(self.stable_sfx_model, self.device)
+            else:
+                self._ag = _HFMG(self.amn, self.device)
         return self._ag
 
     async def generate_background_music(
@@ -386,19 +450,11 @@ class AudioService:
 
         return results
 
-    def set_model_type(self, model_type):
-        """Switch between "musicgen" and "stable-audio" models."""
-        if model_type not in ("musicgen", "stable-audio"):
-            raise ValueError(f"Unknown model_type: {model_type}")
-        if model_type != self.model_type:
-            logger.info("Switching model: %s -> %s", self.model_type, model_type)
-            self.unload_models()
-            self.model_type = model_type
-
     def unload_models(self):
+        """Unload all loaded model instances."""
         for a in ("_mg", "_ag"):
             g = getattr(self, a, None)
-            if g:
+            if g and hasattr(g, "unload"):
                 g.unload()
                 setattr(self, a, None)
         gc.collect()
@@ -414,7 +470,7 @@ class AudioService:
             "model_type": self.model_type,
             "backend": (
                 "AudioCraft" if self._ac
-                else "StableAudio" if self.model_type == "stable-audio"
+                else "StableAudio3" if self.model_type == "stable-audio"
                 else "HF-MusicGen"
             ),
             "cuda_usable": _cuda_ok(),
@@ -445,20 +501,43 @@ class AudioService:
                     "models": [
                         {"id": "facebook/musicgen-small", "size": "300M", "recommended": True},
                         {"id": "facebook/musicgen-medium", "size": "1.5B"},
-                        {"id": "facebook/musicgen-large", "size": "3.3B"},
+                        {"id": "facebook/musicgen-large", "size": "3.3B"}
                     ],
                 },
                 {
                     "id": "stable-audio",
                     "name": "Stable Audio 3 (Stability AI)",
-                    "description": "Higher quality, longer generation, needs more VRAM",
+                    "description": "Higher quality music and SFX, separate music/sfx models",
                     "recommended": False,
                     "models": [
-                        {"id": "stabilityai/stable-audio-open-1.0", "size": "~1B", "recommended": True},
+                        {"id": "stabilityai/stable-audio-3-small-music", "size": "~1B", "recommended": True, "type": "music"},
+                        {"id": "stabilityai/stable-audio-3-medium", "size": "~3B", "recommended": False, "type": "music"},
+                        {"id": "stabilityai/stable-audio-3-small-sfx", "size": "~1B", "recommended": True, "type": "sfx"}
                     ],
                 },
             ],
             "audio_models": [
                 {"id": "facebook/musicgen-small", "size": "300M", "recommended": True},
+                {"id": "facebook/audiogen-medium", "size": "~1.5B", "recommended": False},
             ],
         }
+    def set_model_type(self, model_type, model_name=None):
+        """Switch between musicgen and stable-audio models. Optionally set specific model name."""
+        if model_type not in ("musicgen", "stable-audio"):
+            raise ValueError(f"Unknown model_type: {model_type}")
+        if model_name:
+            if model_type == "stable-audio":
+                if "sfx" in (model_name or ""):
+                    self.stable_sfx_model = model_name
+                    logger.info("Stable Audio SFX model set to: %s", model_name)
+                else:
+                    self.stable_music_model = model_name
+                    logger.info("Stable Audio music model set to: %s", model_name)
+            else:
+                self.mmn = model_name
+                self.amn = model_name
+                logger.info("MusicGen model set to: %s", model_name)
+        if model_type != self.model_type:
+            logger.info("Switching model type: %s -> %s", self.model_type, model_type)
+            self.unload_models()
+            self.model_type = model_type

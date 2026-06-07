@@ -1,239 +1,259 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>TTS 配音生成 | 非凡故事</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&amp;family=Noto+Sans+SC:wght@300;400;500;600&amp;display=swap" />
-    <link rel="stylesheet" href="/static/css/tokens.css" />
-    <link rel="stylesheet" href="/static/css/base.css" />
-    <link rel="stylesheet" href="/static/css/components.css" />
-    <link rel="stylesheet" href="/static/css/app-nav.css" />
-    <link rel="stylesheet" href="/static/css/tts-generation.css" />
-  </head>
-  <body>
-    <div class="app tts-app">
-      <aside class="sidebar app-sidebar rail-shell" aria-label="主导航">
-        <a class="app-logo-link" href="/create?stage=basic" aria-label="回到创作台" title="回到创作台">
-          <img class="app-logo" src="/static/assets/images/logo2.png" alt="非凡故事" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&amp;family=Noto+Sans+SC:wght@300;400;500;600&amp;display=swap">
+    <link rel="stylesheet" href="/static/css/tokens.css">
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/app-nav.css">
+    <link rel="stylesheet" href="/static/css/tts-generation.css">
+</head>
+<body>
+<div class="app tts-app">
+
+    <!-- ============ Sidebar ============ -->
+    <aside class="sidebar app-sidebar rail-shell" aria-label="主导航">
+        <a class="app-logo-link" href="/create?stage=basic" title="回到创作台">
+            <img class="app-logo" src="/static/assets/images/logo2.png" alt="非凡故事">
         </a>
-
-        <nav class="nav-items" aria-label="主导航">
-          <a class="nav-item" href="/create?stage=basic" aria-label="创作台" title="创作台">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-              <path d="M5.4 15.6c2.6-.7 4.8-2 6.6-3.9 2-2.1 3-4.6 3.3-7.4-2.8.3-5.3 1.4-7.4 3.3-1.9 1.8-3.2 4-3.9 6.6l1.4 1.4Z"></path>
-              <path d="M8.2 11.8 4 16"></path>
-            </svg>
-            <span class="nav-label">创作台</span>
-          </a>
-          <a class="nav-item" href="/images" aria-label="生成图片" title="生成图片">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-              <path d="M4 14.5V5.8A1.8 1.8 0 0 1 5.8 4h8.4A1.8 1.8 0 0 1 16 5.8v8.4A1.8 1.8 0 0 1 14.2 16H5.8A1.8 1.8 0 0 1 4 14.2Z"></path>
-              <path d="m6.2 12.8 2.3-2.7 2.1 1.9 3.2-4"></path>
-              <circle cx="7.2" cy="7.3" r="1"></circle>
-            </svg>
-            <span class="nav-label">生成图片</span>
-          </a>
-          <a class="nav-item" href="/audio" aria-label="音频生成" title="音频生成">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-              <path d="M10 3v14M7 6v8M4 8v4M13 6v8M16 8v4"></path>
-            </svg>
-            <span class="nav-label">音频生成</span>
-          </a>
-          <a class="nav-item is-active" href="/tts" aria-label="TTS 配音" title="TTS 配音">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-              <path d="M8 3.5a5.5 5.5 0 0 0 0 13M12 3.5a5.5 5.5 0 0 1 0 13M3.5 8a6.5 6.5 0 0 0 0 4M16.5 8a6.5 6.5 0 0 1 0 4"></path>
-            </svg>
-            <span class="nav-label">TTS 配音</span>
-          </a>
-          <a class="nav-item" href="/works" aria-label="作品管理" title="作品管理">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-              <rect x="4" y="3" width="12" height="14" rx="1.4"></rect>
-              <path d="M7 3v14M9 7h4"></path>
-            </svg>
-            <span class="nav-label">作品管理</span>
-          </a>
-          <a class="nav-item" href="/mynote" aria-label="我的笔记" title="我的笔记">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
-              <path d="M10 16.2 4.7 11.5a3.5 3.5 0 0 1 5-4.9L10 7l.3-.4a3.5 3.5 0 0 1 5 4.9L10 16.2Z"></path>
-            </svg>
-            <span class="nav-label">我的笔记</span>
-          </a>
-          <a class="nav-item app-nav-user" href="/usercenter" aria-label="用户中心" title="用户中心">
-            <span class="nav-user-avatar" aria-hidden="true">客</span>
-          </a>
+        <nav class="nav-items">
+            <a class="nav-item" href="/create?stage=basic" title="创作台">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5.4 15.6c2.6-.7 4.8-2 6.6-3.9 2-2.1 3-4.6 3.3-7.4-2.8.3-5.3 1.4-7.4 3.3-1.9 1.8-3.2 4-3.9 6.6l1.4 1.4Z"/><path d="M8.2 11.8 4 16"/></svg>
+                <span class="nav-label">创作台</span>
+            </a>
+            <a class="nav-item" href="/images" title="生成图片">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 14.5V5.8A1.8 1.8 0 0 1 5.8 4h8.4A1.8 1.8 0 0 1 16 5.8v8.4A1.8 1.8 0 0 1 14.2 16H5.8A1.8 1.8 0 0 1 4 14.2Z"/><path d="m6.2 12.8 2.3-2.7 2.1 1.9 3.2-4"/><circle cx="7.2" cy="7.3" r="1"/></svg>
+                <span class="nav-label">生成图片</span>
+            </a>
+            <a class="nav-item" href="/audio" title="音频生成">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3v14M7 6v8M4 8v4M13 6v8M16 8v4"/></svg>
+                <span class="nav-label">音频生成</span>
+            </a>
+            <a class="nav-item is-active" href="/tts" title="TTS 配音">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3.5a5.5 5.5 0 0 0 0 13M12 3.5a5.5 5.5 0 0 1 0 13M3.5 8a6.5 6.5 0 0 0 0 4M16.5 8a6.5 6.5 0 0 1 0 4"/></svg>
+                <span class="nav-label">TTS 配音</span>
+            </a>
+            <a class="nav-item" href="/works" title="作品管理">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="12" height="14" rx="1.4"/><path d="M7 3v14M9 7h4"/></svg>
+                <span class="nav-label">作品管理</span>
+            </a>
+            <a class="nav-item" href="/mynote" title="我的笔记">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 16.2 4.7 11.5a3.5 3.5 0 0 1 5-4.9L10 7l.3-.4a3.5 3.5 0 0 1 5 4.9L10 16.2Z"/></svg>
+                <span class="nav-label">我的笔记</span>
+            </a>
+            <a class="nav-item app-nav-user" href="/usercenter" title="用户中心">
+                <span class="nav-user-avatar">客</span>
+            </a>
         </nav>
-      </aside>
+    </aside>
 
-      <div class="main-col">
+    <!-- ============ Main ============ -->
+    <div class="main-col">
+
+        <!-- Top bar with tabs -->
         <header class="tts-topbar">
-          <nav class="tts-tabs" aria-label="TTS 配音页面分区">
-            <button type="button" class="tts-tab is-active" data-target="characters-panel">角色音色管理</button>
-            <button type="button" class="tts-tab" data-target="synthesize-panel">语音合成</button>
-            <button type="button" class="tts-tab" data-target="chapter-panel">章节批量配音</button>
-          </nav>
-          <div class="tts-topbar-avatar">N</div>
+            <div class="tts-topbar-left">
+                <span class="tts-logo-text">TTS 配音工作站</span>
+            </div>
+            <nav class="tts-tabs" id="mainTabs">
+                <button class="tts-tab is-active" data-tab="synth">单句配音</button>
+                <button class="tts-tab" data-tab="chapter">长文本配音</button>
+                <button class="tts-tab" data-tab="library">角色库</button>
+            </nav>
+            <div class="tts-topbar-right">
+                <button id="openConfigBtn" class="tts-btn tts-btn-ghost tts-btn-sm" title="云端配置">
+                    <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="3"/><path d="M17.4 10a7.5 7.5 0 0 1-1.3 4.2l1.5 1.5a9.2 9.2 0 0 0 0-11.4l-1.5 1.5A7.5 7.5 0 0 1 17.4 10zM2.6 10a7.5 7.5 0 0 1 1.3-4.2L2.4 4.3a9.2 9.2 0 0 0 0 11.4l1.5-1.5A7.5 7.5 0 0 1 2.6 10z"/></svg>
+                    配置
+                </button>
+                <span id="serverStatus" class="tts-server-badge" title="服务状态">检测中...</span>
+            </div>
         </header>
 
+        <!-- ========== Config Modal ========== -->
+        <div id="configModal" class="tts-modal-overlay">
+            <div class="tts-modal tts-modal-wide">
+                <div class="tts-modal-header">
+                    <h2>系统引擎配置</h2>
+                    <button class="tts-modal-close" id="closeConfigBtn">&times;</button>
+                </div>
+
+                <!-- Engine selector -->
+                <div class="tts-config-section">
+                    <h3>TTS 引擎</h3>
+                    <div class="tts-engine-cards">
+                        <label class="tts-engine-card" id="engineCardLocal">
+                            <input type="radio" name="ttsEngine" value="local" checked>
+                            <div class="engine-card-body">
+                                <strong>本地 indexTTS2</strong>
+                                <span>需要本地运行 indexTTS2 服务 (端口 9800)</span>
+                            </div>
+                        </label>
+                        <label class="tts-engine-card" id="engineCardCloud">
+                            <input type="radio" name="ttsEngine" value="cloud">
+                            <div class="engine-card-body">
+                                <strong>EmotionTTS 云端</strong>
+                                <span>使用云端 GPU 算力，需获取 API 令牌</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Cloud config -->
+                <div id="cloudConfigSection" class="tts-config-section hidden">
+                    <h3>云端 API 令牌</h3>
+                    <p class="tts-config-hint">
+                        前往 <a href="http://101.201.246.121:3000/" target="_blank" class="tts-link">EmotionTTS 云端平台</a> 注册并获取 API Key，粘贴到下方即可启用云端配音。
+                    </p>
+                    <div class="tts-input-row">
+                        <input id="cloudTokenInput" type="password" placeholder="粘贴 API 令牌 (sk-...)" class="tts-input-full">
+                        <button id="saveTokenBtn" class="tts-btn tts-btn-brand">保存并验证</button>
+                    </div>
+                    <p id="tokenStatus" class="micro-status"></p>
+                </div>
+
+                <!-- LLM config for emotion analysis -->
+                <div class="tts-config-section">
+                    <h3>情感分析 (DeepSeek)</h3>
+                    <p class="tts-config-hint">用于自动分析文本情感，驱动配音的情绪表达。使用项目已配置的 DeepSeek 模型。</p>
+                </div>
+
+                <div class="tts-modal-footer">
+                    <button id="closeConfigBtn2" class="tts-btn tts-btn-ghost">关闭</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== Tab: 单句配音 ========== -->
         <main class="tts-main">
-          <!-- ======== 角色音色管理面板 ======== -->
-          <section id="characters-panel" class="tts-panel is-active">
-            <div class="tts-page-title">
-              <h1>角色音色管理</h1>
-              <p>创建角色、上传参考音频，为小说角色定制专属声音</p>
-            </div>
+            <section id="tab-synth" class="tts-panel is-active">
+                <div class="tts-split">
+                    <!-- Left: Input -->
+                    <div class="tts-split-left">
+                        <div class="tts-card">
+                            <h3>配音设置</h3>
+                            <label>选择角色
+                                <select id="synthCharSelect">
+                                    <option value="">-- 请先在角色库中创建角色 --</option>
+                                </select>
+                            </label>
+                            <label>情感模式
+                                <select id="synthEmotionMode">
+                                    <option value="auto">AI 自动分析情感</option>
+                                    <option value="manual">手动指定情感</option>
+                                </select>
+                            </label>
+                            <div id="synthManualEmotionRow" style="display:none">
+                                <label>选择情感
+                                    <select id="synthManualEmotion">
+                                        <option value="喜">喜</option>
+                                        <option value="怒">怒</option>
+                                        <option value="哀">哀</option>
+                                        <option value="惧">惧</option>
+                                        <option value="惊">惊</option>
+                                        <option value="厌">厌</option>
+                                        <option value="平">平</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <label>语速
+                                <select id="synthSpeed">
+                                    <option value="0.8">0.8x 慢速</option>
+                                    <option value="1.0" selected>1.0x 正常</option>
+                                    <option value="1.2">1.2x 快速</option>
+                                </select>
+                            </label>
+                        </div>
+                    </div>
 
-            <div class="tts-card">
-              <div class="card-heading">
-                <h2>创建角色</h2>
-              </div>
-              <div class="tts-grid tts-grid-two">
-                <label>
-                  角色名称
-                  <input id="newCharName" type="text" placeholder="输入角色名称，如：张三" />
-                </label>
-                <label>
-                  角色描述
-                  <input id="newCharDesc" type="text" placeholder="简要描述角色性格特点" />
-                </label>
-              </div>
-              <div class="card-footer">
-                <button id="createCharBtn" type="button" class="tts-btn tts-btn-brand">创建角色</button>
-              </div>
-            </div>
+                    <!-- Right: Text + Result -->
+                    <div class="tts-split-right">
+                        <div class="tts-card">
+                            <h3>配音文本</h3>
+                            <textarea id="synthText" class="tts-textarea" rows="4" placeholder="输入需要配音的文本，如对话内容...&#10;&#10;例如：你今天看起来气色不错嘛。"></textarea>
+                            <div class="tts-card-footer">
+                                <button id="synthesizeBtn" class="tts-btn tts-btn-brand">生成配音</button>
+                            </div>
+                            <p id="synthStatus" class="micro-status"></p>
+                        </div>
 
-            <div class="tts-card">
-              <div class="card-heading">
-                <h2>角色列表</h2>
-              </div>
-              <div id="characterList" class="tts-char-list">
-                <p class="micro-status">暂无角色，请先创建</p>
-              </div>
-            </div>
-          </section>
+                        <div id="synthResult" class="tts-card hidden">
+                            <h3>生成结果</h3>
+                            <div id="synthResultList"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
 
-          <!-- ======== 语音合成面板 ======== -->
-          <section id="synthesize-panel" class="tts-panel">
-            <div class="tts-page-title">
-              <h1>语音合成</h1>
-              <p>选择角色音色、输入文本，生成带情感的配音</p>
-            </div>
+            <!-- ========== Tab: 长文本配音 ========== -->
+            <section id="tab-chapter" class="tts-panel">
+                <div class="tts-card">
+                    <h3>说话者映射</h3>
+                    <p class="card-sub">系统会自动检测文本中的说话者，请为每个说话者选择对应角色</p>
+                    <div id="speakerMapping">
+                        <p class="micro-status">请先粘贴章节文本，系统将自动检测说话者</p>
+                    </div>
+                </div>
+                <div class="tts-card">
+                    <h3>章节文本</h3>
+                    <p class="card-sub">格式：说话者: 对话内容（每行一句）</p>
+                    <textarea id="chapterText" class="tts-textarea" rows="12" placeholder="张三: 你好啊，今天天气真不错。&#10;李四: 是啊，好久不见。&#10;张三: 你最近在忙什么呢？&#10;李四: 也没什么，就是工作上的事。&#10;旁白: 两人边走边聊，渐渐消失在街道尽头。"></textarea>
+                    <div class="tts-card-footer">
+                        <button id="detectSpeakersBtn" class="tts-btn tts-btn-ghost">检测说话者</button>
+                        <button id="synthesizeChapterBtn" class="tts-btn tts-btn-brand">批量生成</button>
+                    </div>
+                    <p id="chapterStatus" class="micro-status"></p>
+                </div>
+                <div id="chapterResult" class="tts-card hidden">
+                    <h3>批量生成结果</h3>
+                    <div id="chapterResultSummary" class="tts-chapter-summary"></div>
+                    <div id="chapterResultList"></div>
+                </div>
+            </section>
 
-            <div class="tts-card">
-              <div class="card-heading">
-                <h2>合成设置</h2>
-              </div>
-              <div class="tts-grid tts-grid-two">
-                <label>
-                  选择角色
-                  <select id="synthCharSelect">
-                    <option value="">-- 请先创建角色 --</option>
-                  </select>
-                </label>
-                <label>
-                  情感模式
-                  <select id="synthEmotionMode">
-                    <option value="auto">AI 自动分析</option>
-                    <option value="manual">手动指定</option>
-                  </select>
-                </label>
-                <label id="synthManualEmotionLabel" style="display:none">
-                  手动情感
-                  <select id="synthManualEmotion">
-                    <option value="happy">高兴</option>
-                    <option value="angry">愤怒</option>
-                    <option value="sad">悲伤</option>
-                    <option value="fearful">恐惧</option>
-                    <option value="surprised">惊讶</option>
-                    <option value="disgusted">反感</option>
-                    <option value="neutral">平静</option>
-                  </select>
-                </label>
-                <label>
-                  语速
-                  <select id="synthSpeed">
-                    <option value="0.8">慢速 (0.8x)</option>
-                    <option value="1.0" selected>正常 (1.0x)</option>
-                    <option value="1.2">快速 (1.2x)</option>
-                  </select>
-                </label>
-              </div>
-              <div class="tts-grid tts-grid-full">
-                <label>
-                  配音文本
-                  <textarea id="synthText" class="textarea-field" rows="3" placeholder="输入需要配音的文本，如对话内容..."></textarea>
-                </label>
-              </div>
-              <div class="card-footer">
-                <button id="synthesizeBtn" type="button" class="tts-btn tts-btn-brand">生成配音</button>
-              </div>
-            </div>
+            <!-- ========== Tab: 角色库 ========== -->
+            <section id="tab-library" class="tts-panel">
+                <div class="tts-card">
+                    <div class="card-heading">
+                        <h3>创建角色</h3>
+                    </div>
+                    <div class="tts-grid tts-grid-two">
+                        <label>角色名称 <input id="newCharName" type="text" placeholder="如：张三"></label>
+                        <label>角色描述 <input id="newCharDesc" type="text" placeholder="如：中年男性，沉稳大气"></label>
+                    </div>
+                    <div class="tts-card-footer">
+                        <button id="createCharBtn" class="tts-btn tts-btn-brand">创建角色</button>
+                    </div>
+                </div>
 
-            <div id="synthStatus" class="micro-status"></div>
+                <div class="tts-card">
+                    <div class="card-heading">
+                        <h3>角色列表</h3>
+                        <span class="card-meta" id="charCount">0 个角色</span>
+                    </div>
+                    <div id="characterGrid" class="tts-char-grid">
+                        <p class="micro-status">暂无角色，请先创建</p>
+                    </div>
+                </div>
 
-            <div id="synthResult" class="tts-card hidden">
-              <div class="card-heading">
-                <h2>生成结果</h2>
-              </div>
-              <div id="synthResultList"></div>
-            </div>
-          </section>
-
-          <!-- ======== 章节批量配音面板 ======== -->
-          <section id="chapter-panel" class="tts-panel">
-            <div class="tts-page-title">
-              <h1>章节批量配音</h1>
-              <p>粘贴章节文本，系统自动识别说话者并为之配音</p>
-            </div>
-
-            <div class="tts-card">
-              <div class="card-heading">
-                <h2>说话者映射</h2>
-                <p class="card-sub">将文本中的说话者名称映射到已创建的角色</p>
-              </div>
-              <div id="speakerMapping" class="tts-speaker-mapping">
-                <p class="micro-status">请先在下方粘贴章节文本，系统将自动检测说话者</p>
-              </div>
-            </div>
-
-            <div class="tts-card">
-              <div class="card-heading">
-                <h2>章节文本</h2>
-              </div>
-              <div class="tts-grid tts-grid-full">
-                <label>
-                  粘贴章节内容（格式：说话者: 对话内容）
-                  <textarea id="chapterText" class="textarea-field" rows="10" placeholder="张三: 你好啊，今天天气真不错。&#10;李四: 是啊，好久不见。&#10;张三: 你最近在忙什么呢？"></textarea>
-                </label>
-              </div>
-              <div class="card-footer">
-                <button id="detectSpeakersBtn" type="button" class="tts-btn tts-btn-ghost">检测说话者</button>
-                <button id="synthesizeChapterBtn" type="button" class="tts-btn tts-btn-brand">批量生成</button>
-              </div>
-            </div>
-
-            <div id="chapterStatus" class="micro-status"></div>
-
-            <div id="chapterResult" class="tts-card hidden">
-              <div class="card-heading">
-                <h2>批量生成结果</h2>
-              </div>
-              <div id="chapterResultSummary" class="tts-chapter-summary"></div>
-              <div id="chapterResultList"></div>
-            </div>
-          </section>
+                <!-- Character detail modal -->
+                <div id="charDetailModal" class="tts-modal-overlay">
+                    <div class="tts-modal">
+                        <div class="tts-modal-header">
+                            <h3 id="charDetailTitle">角色详情</h3>
+                            <button class="tts-modal-close" id="closeCharDetailBtn">&times;</button>
+                        </div>
+                        <div id="charDetailContent"></div>
+                    </div>
+                </div>
+            </section>
         </main>
-      </div>
     </div>
+</div>
 
-    <div id="page-toast" class="page-toast hidden" aria-live="polite" aria-hidden="true"></div>
-
-    <!-- indexTTS2 状态指示 -->
-    <div id="ttsServerStatus" class="tts-server-status" title="indexTTS2 服务状态">
-      <span id="ttsServerDot"></span>
-      <span id="ttsServerLabel">检测中...</span>
-    </div>
-
-    <script src="/static/js/tts-generation.js?v=20260601a"></script>
-  </body>
+<div id="page-toast" class="page-toast hidden" aria-live="polite"></div>
+<script src="/static/js/tts-generation.js?v=20260607a"></script>
+</body>
 </html>

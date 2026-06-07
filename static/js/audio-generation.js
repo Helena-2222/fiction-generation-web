@@ -1,535 +1,515 @@
-// audio-generation.js - 音频生成页面前端逻辑
+// audio-generation.js - audio page logic
+document.addEventListener("DOMContentLoaded", function() {
+  console.log("[audio-gen] init");
 
-document.addEventListener('DOMContentLoaded', () => {
-  // ========== 0. 模型选择逻辑 ==========
-  const modelTypeSelect = document.getElementById('modelTypeSelect');
-  const modelVariantSelect = document.getElementById('modelVariantSelect');
-  const modelSwitchStatus = document.getElementById('modelSwitchStatus');
+  // ========== HF Token ==========
+  var hfTokenInput = document.getElementById("hfTokenInput");
+  var saveHfTokenBtn = document.getElementById("saveHfTokenBtn");
+  var hfTokenStatus = document.getElementById("hfTokenStatus");
 
-  const modelVariants = {
-    'musicgen': [
-      { value: 'facebook/musicgen-small', label: 'musicgen-small (300M)' },
-      { value: 'facebook/musicgen-medium', label: 'musicgen-medium (1.5B)' },
-      { value: 'facebook/musicgen-large', label: 'musicgen-large (3.3B)' },
-    ],
-    'stable-audio': [
-      { value: 'stabilityai/stable-audio-open-1.0', label: 'stable-audio-open-1.0 (~1B)' },
-    ],
-  };
-
-  // Update variant dropdown when model type changes
-  if (modelTypeSelect && modelVariantSelect) {
-    modelTypeSelect.addEventListener('change', () => {
-      const type = modelTypeSelect.value;
-      const variants = modelVariants[type] || [];
-      modelVariantSelect.innerHTML = '';
-      variants.forEach(v => {
-        const opt = document.createElement('option');
-        opt.value = v.value;
-        opt.textContent = v.label;
-        modelVariantSelect.appendChild(opt);
-      });
-    });
-
-    // Switch model on variant change
-    modelVariantSelect.addEventListener('change', async () => {
-      const type = modelTypeSelect.value;
-      if (modelSwitchStatus) {
-        modelSwitchStatus.textContent = '正在切换模型...';
+  // Check token status on load
+  (async function() {
+    try {
+      var r = await fetch("/api/audio/hf-token");
+      var d = await r.json();
+      if (d.token_set && hfTokenStatus) {
+        hfTokenStatus.textContent = "已配置: " + d.token_preview;
+        hfTokenStatus.style.color = "#2e7d32";
+      } else if (hfTokenStatus) {
+        hfTokenStatus.textContent = "未配置";
+        hfTokenStatus.style.color = "#8a7a67";
       }
+    } catch(e) {}
+  })();
+
+  if (saveHfTokenBtn && hfTokenInput) {
+    saveHfTokenBtn.addEventListener("click", async function() {
+      var token = hfTokenInput.value.trim();
+      if (!token) { toast("请输入 HF Token"); return; }
+      saveHfTokenBtn.disabled = true;
+      saveHfTokenBtn.textContent = "保存中...";
       try {
-        const resp = await fetch('/api/audio/switch-model', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model_type: type }),
+        var r = await fetch("/api/audio/hf-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: token })
         });
-        const data = await resp.json();
-        if (resp.ok && modelSwitchStatus) {
-          modelSwitchStatus.textContent = '已切换: ' + data.message;
-        } else if (modelSwitchStatus) {
-          modelSwitchStatus.textContent = '切换失败: ' + (data.detail || '');
-        }
-      } catch (err) {
-        if (modelSwitchStatus) {
-          modelSwitchStatus.textContent = '切换失败: ' + err.message;
-        }
-      }
-    });
-  }
-
-
-  // ========== 1. 标签切换逻辑 ==========
-  const tabs = document.querySelectorAll('.audio-tab');
-  const panels = document.querySelectorAll('.audio-panel');
-
-  tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      const target = tab.dataset.target;
-
-      // 更新标签状态
-      tabs.forEach(t => t.classList.remove('is-active'));
-      tab.classList.add('is-active');
-
-      // 更新面板显示
-      panels.forEach(p => p.classList.remove('is-active'));
-      document.getElementById(target).classList.add('is-active');
-    });
-  });
-
-  // ========== 2. 导入 Word 文档 ==========
-  const docxInput = document.getElementById('docxFileInput');
-  const importBtn = document.getElementById('importDocxBtn');
-  const importStatus = document.getElementById('importDocxStatus');
-
-  if (importBtn && docxInput) {
-    importBtn.addEventListener('click', async () => {
-      if (!docxInput.files.length) {
-        showToast('请先选择 Word 文档');
-        return;
-      }
-
-      const file = docxInput.files[0];
-      const formData = new FormData();
-      formData.append('file', file);
-
-      try {
-        importStatus.textContent = '正在导入...';
-        const resp = await fetch('/api/audio/import-docx', {
-          method: 'POST',
-          body: formData
-        });
-
-        if (!resp.ok) throw new Error('导入失败');
-
-        const data = await resp.json();
-        
-        // 填充表单
-        if (data.title) {
-          document.getElementById('novelTitleInput').value = data.title;
-        }
-        
-        // 填充章节内容到文本框
-        if (data.chapters && data.chapters.length > 0) {
-          // 如果有多个章节，取第一个章节的内容
-          const firstChapter = data.chapters[0];
-          const contentText = firstChapter && firstChapter.content ? firstChapter.content : (firstChapter || '');
-          document.getElementById('chapterContentInput').value = contentText;
-          
-          // 如果有多个章节，提示用户
-          if (data.chapter_count > 1) {
-            showToast(`已导入 ${data.chapter_count} 个章节，已加载第一章内容`);
-          } else {
-            showToast('Word 文档导入成功');
+        var d = await r.json();
+        if (r.ok) {
+          if (hfTokenStatus) {
+            hfTokenStatus.textContent = "已保存";
+            hfTokenStatus.style.color = "#2e7d32";
           }
-          
-          // 填充章节选择下拉框
-          const chapterSelect = document.getElementById('chapterSelect');
-          if (chapterSelect) {
-            chapterSelect.innerHTML = '<option value="all">全部章节</option>';
-            if (data.chapters && Array.isArray(data.chapters)) {
-              data.chapters.forEach((ch, idx) => {
-                const option = document.createElement('option');
-                option.value = idx;
-                option.textContent = (ch && ch.title) ? ch.title : `第 ${idx + 1} 章`;
-                chapterSelect.appendChild(option);
-              });
-            }
-          }
+          hfTokenInput.value = "";
+          toast("HF Token 已保存");
         } else {
-          showToast('Word 文档导入成功');
+          toast("保存失败: " + (d.detail || ""));
         }
-
-        importStatus.textContent = '导入成功！';
-      } catch (err) {
-        importStatus.textContent = '导入失败：' + err.message;
-        showToast('导入失败，请检查文件格式');
-      }
-    });
-  }
-
-  // ========== 3. 分析章节内容 ==========
-  const analyzeBtn = document.getElementById('analyzeBtn');
-  const analysisResult = document.getElementById('analysisResult');
-
-  if (analyzeBtn) {
-    analyzeBtn.addEventListener('click', async () => {
-      const title = document.getElementById('novelTitleInput')?.value || '';
-      const chapterContent = document.getElementById('chapterContentInput')?.value || '';
-
-      if (!title) {
-        showToast('请输入小说标题');
-        return;
-      }
-
-      if (!chapterContent) {
-        showToast('请先导入文档或输入章节内容');
-        return;
-      }
-
-      try {
-        analyzeBtn.disabled = true;
-        analyzeBtn.textContent = '分析中...';
-
-        // 调用后端 API 分析章节
-        const resp = await fetch('/api/audio/analyze-chapter', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chapter_number: 1,
-            chapter_title: title,
-            chapter_content: chapterContent,
-            music_duration: 30.0,
-            generate_effects: true
-          })
-        });
-
-        if (!resp.ok) {
-          const errText = await resp.text();
-          throw new Error('分析失败: ' + errText);
-        }
-
-        const data = await resp.json();
-
-        // 显示分析结果
-        const summaryData = data.summary || (data[0] && data[0].summary) || {};
-        const audioPrompts = data.audio_prompts || (data[0] && data[0].audio_prompts) || {};
-        const hints = summaryData.audio_hints || {};
-
-        // --- 摘要 ---
-        const summaryEl = document.getElementById('analysisSummary');
-        if (summaryEl) {
-          const text = summaryData.summary || '';
-          summaryEl.textContent = typeof text === 'string' ? text : JSON.stringify(text);
-        }
-
-        // --- 情绪标签 ---
-        const moodEl = document.getElementById('analysisMood');
-        if (moodEl) {
-          const mood = summaryData.mood || '';
-          moodEl.textContent = mood;
-          moodEl.className = 'mood-badge mood-' + (mood || 'neutral');
-        }
-
-        // --- 音乐风格/节拍/乐器标签 ---
-        const styleTagsEl = document.getElementById('analysisMusicTags');
-        if (styleTagsEl) {
-          styleTagsEl.innerHTML = '';
-          var tags = [];
-          if (hints.music_style) tags.push({ label: hints.music_style, cls: 'tag-style' });
-          if (hints.tempo) tags.push({ label: hints.tempo, cls: 'tag-tempo' });
-          if (hints.instruments && Array.isArray(hints.instruments)) {
-            hints.instruments.forEach(function(inst) { tags.push({ label: inst, cls: 'tag-instrument' }); });
-          }
-          tags.forEach(function(t) {
-            var span = document.createElement('span');
-            span.className = 'audio-tag ' + t.cls;
-            span.textContent = t.label;
-            styleTagsEl.appendChild(span);
-          });
-        }
-
-        // --- 情绪曲线 ---
-        const emotionEl = document.getElementById('analysisEmotionCurve');
-        if (emotionEl) {
-          emotionEl.innerHTML = '';
-          var curve = summaryData.emotion_curve;
-          if (curve && Array.isArray(curve) && curve.length > 0) {
-            curve.forEach(function(point) {
-              var bar = document.createElement('div');
-              bar.className = 'emotion-bar';
-              var pct = Math.round((point.intensity || 0.5) * 100);
-              bar.innerHTML =
-                '<span class="emotion-label">' + escapeHtml(point.segment || '') + '</span>' +
-                '<span class="emotion-mood">' + escapeHtml(point.mood || '') + '</span>' +
-                '<div class="emotion-fill"><div class="emotion-fill-inner" style="width:' + pct + '%"></div></div>';
-              emotionEl.appendChild(bar);
-            });
-          } else {
-            emotionEl.innerHTML = '<p class="micro-status">无情绪曲线数据</p>';
-          }
-        }
-
-        // --- 音乐提示词 (可编辑) ---
-        const musicPromptEl = document.getElementById('musicPromptInput');
-        if (musicPromptEl) {
-          var prompt = audioPrompts.music_prompt || hints.background_music || '';
-          musicPromptEl.value = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
-        }
-
-        // --- 音效提示词列表 ---
-        const effectsListEl = document.getElementById('effectsPromptsList');
-        if (effectsListEl) {
-          effectsListEl.innerHTML = '';
-          var effects = audioPrompts.effect_prompts || hints.sound_effects || [];
-          if (effects && ((Array.isArray(effects) && effects.length > 0) || (typeof effects === 'object' && Object.keys(effects).length > 0))) {
-            var effList = Array.isArray(effects) ? effects : [effects];
-            effList.forEach(function(item, idx) {
-              var desc = typeof item === 'string' ? item : (item.description || item.desc || JSON.stringify(item));
-              var time = (typeof item === 'object' && item.time) ? item.time : null;
-              var div = document.createElement('div');
-              div.className = 'effect-prompt-item';
-              div.innerHTML =
-                '<span class="effect-idx">#' + (idx + 1) + '</span>' +
-                (time ? '<span class="effect-time">' + escapeHtml(String(time)) + '</span>' : '') +
-                '<input type="text" value="' + escapeHtml(String(desc)) + '" class="effect-prompt-input" data-idx="' + idx + '" />';
-              effectsListEl.appendChild(div);
-            });
-          } else {
-            effectsListEl.innerHTML = '<p class="micro-status">未检测到音效提示词，可手动添加</p>';
-          }
-        }
-
-        analysisResult.classList.remove('hidden');
-        showToast('内容分析完成');
-      } catch (err) {
-        console.error('分析失败:', err);
-        showToast('分析失败：' + err.message);
+      } catch(e) {
+        toast("保存失败: " + e.message);
       } finally {
-        analyzeBtn.disabled = false;
-        analyzeBtn.textContent = '分析内容并生成提示词 →';
+        saveHfTokenBtn.disabled = false;
+        saveHfTokenBtn.textContent = "保存";
       }
     });
   }
 
-  // ========== 工具函数 ==========
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+  function escapeHtml(t) {
+    var d = document.createElement("div");
+    d.textContent = t || "";
+    return d.innerHTML;
   }
 
-  // ========== 4. 生成背景音乐 ==========
-  const generateMusicBtn = document.getElementById('generateMusicBtn');
-  const generateMusicBtn2 = document.getElementById('generateMusicBtn2');
-  const musicResult = document.getElementById('musicResult');
-
-  async function generateMusic(event) {
-    const description = document.getElementById('musicPromptInput')?.value ||
-                      document.getElementById('musicStyleInput')?.value;
-    const duration = document.getElementById('musicDurationInput')?.value || 10;
-
-    if (!description) {
-      showToast('请输入音乐提示词');
-      return;
-    }
-
-    try {
-      const btn = event ? event.target : document.getElementById('generateMusicBtn');
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = '生成中...';
-      }
-
-      // 调用后端 API 生成音乐（参数名必须是 description）
-      const resp = await fetch('/api/audio/generate-music', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          description: description,
-          duration: parseInt(duration),
-          guidance_scale: 3.0
-        })
-      });
-
-      if (!resp.ok) throw new Error('生成失败');
-
-      const data = await resp.json();
-
-      // 显示生成结果（后端返回 audio_path，不是 audio_url）
-      const resultList = document.getElementById('musicResultList');
-      const item = document.createElement('div');
-      item.className = 'audio-result-item';
-      const audioUrl = '/' + data.audio_path.replace(/\\/g, '/');
-      item.innerHTML = `
-        <audio controls class="audio-player">
-          <source src="${audioUrl}" type="audio/wav">
-        </audio>
-        <div class="audio-info">${data.description || '背景音乐'}</div>
-        <div class="audio-actions">
-          <button class="audio-btn audio-btn-ghost" onclick="downloadAudio('${audioUrl}')">下载</button>
-        </div>
-      `;
-      resultList.appendChild(item);
-
-      musicResult.classList.remove('hidden');
-      showToast('音乐生成成功');
-    } catch (err) {
-      console.error('生成音乐失败:', err);
-      showToast('生成失败：' + err.message);
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = '生成背景音乐';
-      }
-    }
+  function toast(m) {
+    var t = document.getElementById("page-toast");
+    if (!t) return;
+    t.textContent = m;
+    t.classList.remove("hidden");
+    clearTimeout(t._tid);
+    t._tid = setTimeout(function() { t.classList.add("hidden"); }, 3500);
   }
 
-  if (generateMusicBtn) generateMusicBtn.addEventListener('click', (e) => generateMusic(e));
-  if (generateMusicBtn2) generateMusicBtn2.addEventListener('click', (e) => generateMusic(e));
-
-  // ========== 5. 生成音效 ==========
-  const generateEffectsBtn = document.getElementById('generateEffectsBtn');
-  const generateAllEffectsBtn = document.getElementById('generateAllEffectsBtn');
-  const effectsResult = document.getElementById('effectsResult');
-
-  async function generateEffects(event) {
-    const descriptions = [];
-    document.querySelectorAll('.effect-prompt-input').forEach(input => {
-      if (input.value) descriptions.push(input.value);
-    });
-
-    if (!descriptions.length) {
-      showToast('请先添加音效提示词');
-      return;
-    }
-
-    try {
-      const btn = event ? event.target : document.getElementById('generateEffectsBtn');
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = '生成中...';
-      }
-
-      // 调用后端 API 生成音效（参数名必须是 descriptions）
-      const resp = await fetch('/api/audio/generate-effects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          descriptions: descriptions,
-          duration: 5.0
-        })
-      });
-
-      if (!resp.ok) throw new Error('生成失败');
-
-      const data = await resp.json();
-
-      // 显示生成结果（后端返回数组，每个元素有 audio_path）
-      const resultList = document.getElementById('effectsResultList');
-      if (data && Array.isArray(data)) {
-        data.forEach((item, idx) => {
-          const resultItem = document.createElement('div');
-          resultItem.className = 'audio-result-item';
-          const audioPath = item && item.audio_path ? item.audio_path : '';
-          const audioUrl = audioPath ? '/' + audioPath.replace(/\\/g, '/') : '';
-          const desc = (item && item.description) ? item.description : ('音效 ' + (idx + 1));
-          resultItem.innerHTML = `
-            <div class="audio-info">${escapeHtml(String(desc))}</div>
-            <audio controls class="audio-player">
-              <source src="${audioUrl}" type="audio/wav">
-            </audio>
-            <div class="audio-actions">
-              <button class="audio-btn audio-btn-ghost" onclick="downloadAudio('${audioUrl}')">下载</button>
-            </div>
-          `;
-          resultList.appendChild(resultItem);
-        });
-      } else {
-        console.error('Unexpected response format:', data);
-        throw new Error('生成失败：返回数据格式错误');
-      }
-
-      effectsResult.classList.remove('hidden');
-      showToast('音效生成成功');
-    } catch (err) {
-      console.error('生成音效失败:', err);
-      showToast('生成失败：' + err.message);
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = '生成音效';
-      }
-    }
-  }
-
-  if (generateEffectsBtn) generateEffectsBtn.addEventListener('click', (e) => generateEffects(e));
-  if (generateAllEffectsBtn) generateAllEffectsBtn.addEventListener('click', (e) => generateEffects(e));
-
-  // ========== 6. 添加音效输入框 ==========
-  const addEffectBtn = document.getElementById('addEffectBtn');
-  if (addEffectBtn) {
-    addEffectBtn.addEventListener('click', () => {
-      const effectsList = document.getElementById('effectsList');
-      const div = document.createElement('div');
-      div.className = 'audio-effect-item';
-      div.innerHTML = `
-        <label>音效提示词
-          <input type="text" placeholder="如：雨声、脚步声" class="effect-prompt-input" />
-        </label>
-      `;
-      effectsList.appendChild(div);
-    });
-  }
-
-  // ========== 7. 导出功能 ==========
-  const downloadMusicBtn = document.getElementById('downloadMusicBtn');
-  const downloadEffectsBtn = document.getElementById('downloadEffectsBtn');
-  const exportAudiobookBtn = document.getElementById('exportAudiobookBtn');
-
-  if (downloadMusicBtn) {
-    downloadMusicBtn.addEventListener('click', () => {
-      // 下载所有背景音乐
-      document.querySelectorAll('#musicResultList audio').forEach(audio => {
-        const url = audio.querySelector('source').src;
-        downloadAudio(url);
-      });
-    });
-  }
-
-  if (downloadEffectsBtn) {
-    downloadEffectsBtn.addEventListener('click', () => {
-      // 下载所有音效
-      document.querySelectorAll('#effectsResultList audio').forEach(audio => {
-        const url = audio.querySelector('source').src;
-        downloadAudio(url);
-      });
-    });
-  }
-
-  if (exportAudiobookBtn) {
-    exportAudiobookBtn.addEventListener('click', async () => {
-      try {
-        exportAudiobookBtn.disabled = true;
-        exportAudiobookBtn.textContent = '导出中...';
-
-        const resp = await fetch('/api/audio/generate-chapter-audio', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: document.getElementById('novelTitleInput').value,
-            chapters: ['all']
-          })
-        });
-
-        if (!resp.ok) throw new Error('导出失败');
-
-        const data = await resp.json();
-        showToast('有声书导出成功！');
-        window.open(data.audiobook_url, '_blank');
-      } catch (err) {
-        showToast('导出失败：' + err.message);
-      } finally {
-        exportAudiobookBtn.disabled = false;
-        exportAudiobookBtn.textContent = '导出有声书';
-      }
-    });
-  }
-
-  // ========== 工具函数 ==========
-  function showToast(msg) {
-    const toast = document.getElementById('page-toast');
-    if (!toast) return;
-    toast.textContent = msg;
-    toast.classList.remove('hidden');
-    setTimeout(() => toast.classList.add('hidden'), 3000);
-  }
+  function showErr(el, m) { if (el) { el.textContent = m; el.classList.remove("hidden"); } }
+  function hideErr(el) { if (el) { el.textContent = ""; el.classList.add("hidden"); } }
 
   window.downloadAudio = function(url) {
-    const a = document.createElement('a');
+    var a = document.createElement("a");
     a.href = url;
-    a.download = url.split('/').pop();
+    a.download = url.split("/").pop();
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
   };
+
+  // ========== Model defs ==========
+  var musicModels = {
+    musicgen: [
+      { v: "facebook/musicgen-small", l: "musicgen-small (300M)" },
+      { v: "facebook/musicgen-medium", l: "musicgen-medium (1.5B)" },
+      { v: "facebook/musicgen-large", l: "musicgen-large (3.3B)" }
+    ],
+    "stable-audio": [
+      { v: "stabilityai/stable-audio-3-small-music", l: "SA3-small-music (~1B)" },
+      { v: "stabilityai/stable-audio-3-medium", l: "SA3-medium (~3B)" }
+    ]
+  };
+
+  var effectsModels = {
+    musicgen: [
+      { v: "facebook/audiogen-medium", l: "audiogen-medium (1.5B)" }
+    ],
+    "stable-audio": [
+      { v: "stabilityai/stable-audio-3-small-sfx", l: "SA3-small-sfx (~1B)" }
+    ]
+  };
+
+  // ========== Tab switching ==========
+  var tabBtns = document.querySelectorAll(".audio-tab");
+  var panels = document.querySelectorAll(".audio-panel");
+  console.log("[audio-gen] tabs=" + tabBtns.length + " panels=" + panels.length);
+
+  function switchTab(id) {
+    console.log("[audio-gen] switchTab: " + id);
+    for (var i = 0; i < tabBtns.length; i++) tabBtns[i].classList.remove("is-active");
+    for (var j = 0; j < panels.length; j++) panels[j].classList.remove("is-active");
+    var tb = document.querySelector(".audio-tab[data-target=\"" + id + "\"]");
+    var pn = document.getElementById(id);
+    if (tb) tb.classList.add("is-active");
+    if (pn) pn.classList.add("is-active");
+  }
+
+  for (var k = 0; k < tabBtns.length; k++) {
+    (function(tab) {
+      tab.addEventListener("click", function(e) {
+        e.preventDefault();
+        switchTab(tab.getAttribute("data-target"));
+      });
+    })(tabBtns[k]);
+  }
+
+  // ========== Music model ==========
+  var mtype = document.getElementById("musicModelTypeSelect");
+  var mvar = document.getElementById("musicModelVariantSelect");
+  var mstat = document.getElementById("musicModelSwitchStatus");
+
+  function updMusicDropdown() {
+    var t = mtype.value;
+    var vs = musicModels[t] || [];
+    mvar.innerHTML = "";
+    for (var i = 0; i < vs.length; i++) {
+      var o = document.createElement("option");
+      o.value = vs[i].v;
+      o.textContent = vs[i].l;
+      mvar.appendChild(o);
+    }
+  }
+
+  if (mtype && mvar) {
+    mtype.addEventListener("change", function() { updMusicDropdown(); switchMusicModel(); });
+    mvar.addEventListener("change", switchMusicModel);
+  }
+
+  async function switchMusicModel() {
+    if (mstat) mstat.textContent = "Switching...";
+    try {
+      var r = await fetch("/api/audio/switch-model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model_type: mtype.value, model_name: mvar.value })
+      });
+      var d = await r.json();
+      if (mstat) mstat.textContent = r.ok ? "OK: " + d.message : "Fail: " + (d.detail || "");
+    } catch (e) { if (mstat) mstat.textContent = "Error: " + e.message; }
+  }
+
+  // ========== Effects model ==========
+  var etype = document.getElementById("effectsModelTypeSelect");
+  var evar = document.getElementById("effectsModelVariantSelect");
+  var estat = document.getElementById("effectsModelSwitchStatus");
+
+  function updEffectsDropdown() {
+    var t = etype.value;
+    var vs = effectsModels[t] || [];
+    evar.innerHTML = "";
+    for (var i = 0; i < vs.length; i++) {
+      var o = document.createElement("option");
+      o.value = vs[i].v;
+      o.textContent = vs[i].l;
+      evar.appendChild(o);
+    }
+  }
+
+  if (etype && evar) {
+    etype.addEventListener("change", function() { updEffectsDropdown(); switchEffectsModel(); });
+    evar.addEventListener("change", switchEffectsModel);
+  }
+
+  async function switchEffectsModel() {
+    if (estat) estat.textContent = "Switching...";
+    try {
+      var r = await fetch("/api/audio/switch-model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model_type: etype.value, model_name: evar.value })
+      });
+      var d = await r.json();
+      if (estat) estat.textContent = r.ok ? "OK: " + d.message : "Fail: " + (d.detail || "");
+    } catch (e) { if (estat) estat.textContent = "Error: " + e.message; }
+  }
+
+  // ========== Word import ==========
+  var docxIn = document.getElementById("docxFileInput");
+  var impBtn = document.getElementById("importDocxBtn");
+  var impStat = document.getElementById("importDocxStatus");
+
+  if (impBtn && docxIn) {
+    impBtn.addEventListener("click", async function() {
+      if (!docxIn.files.length) { toast("Please select a file"); return; }
+      impBtn.disabled = true;
+      try {
+        impStat.textContent = "Importing...";
+        var fd = new FormData();
+        fd.append("file", docxIn.files[0]);
+        var r = await fetch("/api/audio/import-docx", { method: "POST", body: fd });
+        if (!r.ok) throw new Error("Import failed: HTTP " + r.status);
+        var d = await r.json();
+        if (d.title) document.getElementById("novelTitleInput").value = d.title;
+        if (d.chapters && d.chapters.length) {
+          var fc = d.chapters[0];
+          document.getElementById("chapterContentInput").value = (fc && fc.content) ? fc.content : (fc || "");
+          toast(d.chapter_count > 1 ? "Imported " + d.chapter_count + " chapters" : "Imported");
+          var cs = document.getElementById("chapterSelect");
+          if (cs) {
+            cs.innerHTML = '<option value="all">All</option>';
+            if (Array.isArray(d.chapters)) {
+              for (var i = 0; i < d.chapters.length; i++) {
+                var ch = d.chapters[i];
+                var o = document.createElement("option");
+                o.value = i;
+                o.textContent = (ch && ch.title) ? ch.title : "Ch " + (i + 1);
+                cs.appendChild(o);
+              }
+            }
+          }
+        }
+        impStat.textContent = "Done";
+      } catch (e) {
+        impStat.textContent = "Error: " + e.message;
+        toast("Import error: " + e.message);
+      } finally { impBtn.disabled = false; }
+    });
+  }
+
+  // ========== Analyze ==========
+  var anBtn = document.getElementById("analyzeBtn");
+  var anRes = document.getElementById("analysisResult");
+
+  if (anBtn) {
+    anBtn.addEventListener("click", async function() {
+      console.log("[audio-gen] analyze clicked");
+      var ti = document.getElementById("novelTitleInput");
+      var ci = document.getElementById("chapterContentInput");
+      var title = ti ? ti.value : "";
+      var content = ci ? ci.value : "";
+
+      if (!title) { toast("Enter title"); return; }
+      if (!content) { toast("Enter content"); return; }
+
+      anBtn.disabled = true;
+      var orig = anBtn.textContent;
+      anBtn.textContent = "Analyzing...";
+
+      try {
+        var r = await fetch("/api/audio/analyze-chapter", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chapter_number: 1, chapter_title: title, chapter_content: content, music_duration: 30, generate_effects: true })
+        });
+        if (!r.ok) { var et = await r.text(); throw new Error("HTTP " + r.status + ": " + et); }
+        var d = await r.json();
+
+        var sd = d.summary || (d[0] && d[0].summary) || {};
+        var ap = d.audio_prompts || (d[0] && d[0].audio_prompts) || {};
+        var hints = sd.audio_hints || {};
+
+        var se = document.getElementById("analysisSummary");
+        if (se) { var t = sd.summary || ""; se.textContent = typeof t === "string" ? t : JSON.stringify(t); }
+
+        var me = document.getElementById("analysisMood");
+        if (me) { var m = sd.mood || ""; me.textContent = m; me.className = "mood-badge mood-" + (m || "neutral"); }
+
+        var te = document.getElementById("analysisMusicTags");
+        if (te) {
+          te.innerHTML = "";
+          var tags = [];
+          if (hints.music_style) tags.push({ l: hints.music_style, c: "tag-style" });
+          if (hints.tempo) tags.push({ l: hints.tempo, c: "tag-tempo" });
+          if (hints.instruments && Array.isArray(hints.instruments)) {
+            for (var i = 0; i < hints.instruments.length; i++) tags.push({ l: hints.instruments[i], c: "tag-instrument" });
+          }
+          for (var j = 0; j < tags.length; j++) {
+            var sp = document.createElement("span");
+            sp.className = "audio-tag " + tags[j].c;
+            sp.textContent = tags[j].l;
+            te.appendChild(sp);
+          }
+        }
+
+        var ee = document.getElementById("analysisEmotionCurve");
+        if (ee) {
+          ee.innerHTML = "";
+          var cv = sd.emotion_curve;
+          if (cv && Array.isArray(cv) && cv.length) {
+            for (var i = 0; i < cv.length; i++) {
+              var p = cv[i];
+              var bar = document.createElement("div");
+              bar.className = "emotion-bar";
+              var pct = Math.round((p.intensity || 0.5) * 100);
+              bar.innerHTML = "<span class=\"emotion-label\">" + escapeHtml(p.segment || "") + "</span><span class=\"emotion-mood\">" + escapeHtml(p.mood || "") + "</span><div class=\"emotion-fill\"><div class=\"emotion-fill-inner\" style=\"width:" + pct + "%\"></div></div>";
+              ee.appendChild(bar);
+            }
+          } else {
+            ee.innerHTML = "<p class=\"micro-status\">No emotion data</p>";
+          }
+        }
+
+        var mp = ap.music_prompt || hints.background_music || "";
+        var mpe = document.getElementById("musicPromptInput");
+        if (mpe) mpe.value = typeof mp === "string" ? mp : JSON.stringify(mp);
+        var msi = document.getElementById("musicStyleInput");
+        if (msi && mp) msi.value = typeof mp === "string" ? mp : JSON.stringify(mp);
+
+        var epl = document.getElementById("effectsPromptsList");
+        if (epl) {
+          epl.innerHTML = "";
+          var ef = ap.effect_prompts || hints.sound_effects || [];
+          if (ef && ((Array.isArray(ef) && ef.length) || (typeof ef === "object" && Object.keys(ef).length))) {
+            var el = Array.isArray(ef) ? ef : [ef];
+            for (var i = 0; i < el.length; i++) {
+              var it = el[i];
+              var desc = typeof it === "string" ? it : (it.description || it.desc || JSON.stringify(it));
+              var tm = (typeof it === "object" && it.time) ? it.time : null;
+              var dv = document.createElement("div");
+              dv.className = "effect-prompt-item";
+              dv.innerHTML = "<span class=\"effect-idx\">#" + (i + 1) + "</span>" + (tm ? "<span class=\"effect-time\">" + escapeHtml(String(tm)) + "</span>" : "") + "<input type=\"text\" value=\"" + escapeHtml(String(desc)) + "\" class=\"effect-prompt-input\" data-idx=\"" + i + "\" />";
+              epl.appendChild(dv);
+            }
+          } else {
+            epl.innerHTML = "<p class=\"micro-status\">No effects detected</p>";
+          }
+        }
+
+        syncFx();
+        anRes.classList.remove("hidden");
+        toast("Analysis done");
+      } catch (e) {
+        console.error("[audio-gen] analyze error:", e);
+        toast("Error: " + e.message);
+      } finally {
+        anBtn.disabled = false;
+        anBtn.textContent = orig;
+      }
+    });
+  }
+
+  function syncFx() {
+    var fl = document.getElementById("effectsList");
+    if (!fl) return;
+    var ins = document.querySelectorAll("#effectsPromptsList .effect-prompt-input");
+    if (!ins.length) return;
+    fl.innerHTML = "";
+    for (var i = 0; i < ins.length; i++) {
+      var dv = document.createElement("div");
+      dv.className = "audio-effect-item";
+      dv.innerHTML = "<label>Effect prompt<input type=\"text\" class=\"effect-prompt-input\" value=\"" + escapeHtml(ins[i].value) + "\" /></label>";
+      fl.appendChild(dv);
+    }
+  }
+
+  // ========== Nav buttons ==========
+  var gmb = document.getElementById("gotoMusicBtn");
+  var geb = document.getElementById("gotoEffectsBtn");
+  if (gmb) gmb.addEventListener("click", function() {
+    var mp = document.getElementById("musicPromptInput");
+    var ms = document.getElementById("musicStyleInput");
+    if (mp && ms && mp.value) ms.value = mp.value;
+    switchTab("music-panel");
+  });
+  if (geb) geb.addEventListener("click", function() {
+    syncFx();
+    switchTab("effects-panel");
+  });
+
+  // ========== Generate music ==========
+  var gmb2 = document.getElementById("generateMusicBtn2");
+  var mres = document.getElementById("musicResult");
+  var merr = document.getElementById("musicError");
+
+  if (gmb2) gmb2.addEventListener("click", function() { genMusic(gmb2); });
+
+  async function genMusic(btn) {
+    var de = document.getElementById("musicStyleInput");
+    var du = document.getElementById("musicDurationInput");
+    var desc = de ? de.value : "";
+    var dur = parseInt(du ? du.value : 10) || 10;
+    if (!desc) { toast("Enter music prompt"); return; }
+
+    if (mtype && mvar) {
+      try { await fetch("/api/audio/switch-model", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model_type: mtype.value, model_name: mvar.value }) }); } catch (e) {}
+    }
+
+    var orig = btn ? btn.textContent : "";
+    try {
+      if (btn) { btn.disabled = true; btn.textContent = "Generating..."; }
+      hideErr(merr);
+      var r = await fetch("/api/audio/generate-music", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ description: desc, duration: dur, guidance_scale: 3 }) });
+      if (!r.ok) { var ed; try { ed = await r.json(); } catch (e2) { ed = { detail: await r.text() }; } throw new Error(ed.detail || ("HTTP " + r.status)); }
+      var d = await r.json();
+      var rl = document.getElementById("musicResultList");
+      var it = document.createElement("div");
+      it.className = "audio-result-item";
+      var au = "/" + (d.audio_path || "").replace(/\\/g, "/");
+      it.innerHTML = "<audio controls class=\"audio-player\"><source src=\"" + au + "\" type=\"audio/wav\"></audio><div class=\"audio-info\">" + escapeHtml(d.description || "BGM") + "</div><div class=\"audio-actions\"><button class=\"audio-btn audio-btn-ghost\" onclick=\"downloadAudio('" + au + "')\">Download</button></div>";
+      rl.appendChild(it);
+      mres.classList.remove("hidden");
+      hideErr(merr);
+      toast("Music generated");
+    } catch (e) {
+      console.error(e);
+      showErr(merr, "Error: " + e.message);
+      toast("Error: " + e.message);
+    } finally { if (btn) { btn.disabled = false; btn.textContent = orig || "Generate"; } }
+  }
+
+  // ========== Generate effects ==========
+  var geb2 = document.getElementById("generateAllEffectsBtn");
+  var eres = document.getElementById("effectsResult");
+  var eerr = document.getElementById("effectsError");
+
+  if (geb2) geb2.addEventListener("click", function() { genFx(geb2); });
+
+  async function genFx(btn) {
+    var descs = [];
+    var ins = document.querySelectorAll("#effectsList .effect-prompt-input");
+    for (var i = 0; i < ins.length; i++) { if (ins[i].value) descs.push(ins[i].value); }
+    if (!descs.length) { toast("Add effect prompts first"); return; }
+
+    if (etype && evar) {
+      try { await fetch("/api/audio/switch-model", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model_type: etype.value, model_name: evar.value }) }); } catch (e) {}
+    }
+
+    var orig = btn ? btn.textContent : "";
+    try {
+      if (btn) { btn.disabled = true; btn.textContent = "Generating..."; }
+      hideErr(eerr);
+      var r = await fetch("/api/audio/generate-effects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ descriptions: descs, duration: 5 }) });
+      if (!r.ok) { var ed; try { ed = await r.json(); } catch (e2) { ed = { detail: await r.text() }; } throw new Error(ed.detail || ("HTTP " + r.status)); }
+      var d = await r.json();
+      var rl = document.getElementById("effectsResultList");
+      if (d && Array.isArray(d)) {
+        for (var i = 0; i < d.length; i++) {
+          var it = d[i];
+          if (it.error) {
+            var ei = document.createElement("div");
+            ei.className = "audio-result-item audio-result-error";
+            ei.innerHTML = "<div class=\"audio-info\">FX " + (i + 1) + ": " + escapeHtml(it.description || "") + "</div><div class=\"audio-error-inline\">Error: " + escapeHtml(it.error) + "</div>";
+            rl.appendChild(ei);
+            continue;
+          }
+          var ri = document.createElement("div");
+          ri.className = "audio-result-item";
+          var ap = it && it.audio_path ? it.audio_path : "";
+          var au = ap ? "/" + ap.replace(/\\/g, "/") : "";
+          ri.innerHTML = "<div class=\"audio-info\">" + escapeHtml(String(it.description || "FX " + (i + 1))) + "</div><audio controls class=\"audio-player\"><source src=\"" + au + "\" type=\"audio/wav\"></audio><div class=\"audio-actions\"><button class=\"audio-btn audio-btn-ghost\" onclick=\"downloadAudio('" + au + "')\">Download</button></div>";
+          rl.appendChild(ri);
+        }
+      }
+      eres.classList.remove("hidden");
+      hideErr(eerr);
+      toast("Effects done");
+    } catch (e) {
+      console.error(e);
+      showErr(eerr, "Error: " + e.message);
+      toast("Error: " + e.message);
+    } finally { if (btn) { btn.disabled = false; btn.textContent = orig || "Generate All"; } }
+  }
+
+  // ========== Add effect ==========
+  var aeb = document.getElementById("addEffectBtn");
+  if (aeb) aeb.addEventListener("click", function() {
+    var fl = document.getElementById("effectsList");
+    var dv = document.createElement("div");
+    dv.className = "audio-effect-item";
+    dv.innerHTML = "<label>Effect prompt<input type=\"text\" placeholder=\"e.g. rain, footsteps\" class=\"effect-prompt-input\" /></label>";
+    fl.appendChild(dv);
+  });
+
+  // ========== Export ==========
+  var dmb = document.getElementById("downloadMusicBtn");
+  if (dmb) dmb.addEventListener("click", function() {
+    var as = document.querySelectorAll("#musicResultList audio");
+    for (var i = 0; i < as.length; i++) { var s = as[i].querySelector("source"); if (s && s.src) window.downloadAudio(s.src); }
+  });
+  var deb = document.getElementById("downloadEffectsBtn");
+  if (deb) deb.addEventListener("click", function() {
+    var as = document.querySelectorAll("#effectsResultList audio");
+    for (var i = 0; i < as.length; i++) { var s = as[i].querySelector("source"); if (s && s.src) window.downloadAudio(s.src); }
+  });
+  var eab = document.getElementById("exportAudiobookBtn");
+  if (eab) eab.addEventListener("click", async function() {
+    eab.disabled = true;
+    var orig = eab.textContent;
+    eab.textContent = "Exporting...";
+    try {
+      var ti = document.getElementById("novelTitleInput");
+      var r = await fetch("/api/audio/generate-chapter-audio", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: ti ? ti.value : "", chapters: ["all"] }) });
+      if (!r.ok) throw new Error("Export failed: HTTP " + r.status);
+      var d = await r.json();
+      toast("Audiobook exported");
+      if (d.audiobook_url) window.open(d.audiobook_url, "_blank");
+    } catch (e) { toast("Error: " + e.message); }
+    finally { eab.disabled = false; eab.textContent = orig; }
+  });
+
+  console.log("[audio-gen] ready");
 });
