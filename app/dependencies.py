@@ -63,6 +63,18 @@ def _init_audio_services():
     except ImportError as e:
         logger.warning("Audio service unavailable (missing torch): %s", e)
         audio_service = _DummyAudioService()
+
+    # Try HuggingFace Inference API as cloud fallback
+    _hf_token = _os.environ.get("HF_TOKEN", "").strip()
+    if _hf_token:
+        try:
+            from app.services.audio_hf_service import AudioHfService
+            audio_service = AudioHfService(hf_token=_hf_token)
+            logger.info("Audio service: HF cloud (token=%s...)", _hf_token[:8])
+            _init_tts()
+            return
+        except Exception as e2:
+            logger.warning("HF cloud audio unavailable: %s", e2)
     except Exception as e:
         logger.error("Audio init failed: %s", e)
         audio_service = _DummyAudioService()

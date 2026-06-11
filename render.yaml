@@ -27,5 +27,7 @@ services:
         value: sk-nmnk0mEJ1J8fOTVnktQruPIcWNBytGISjWVwyuEv5p1E08qW
       - key: AUDIO_API_URL
         sync: false
+      - key: HF_TOKEN
+        sync: false
       - key: HF_ENDPOINT
         value: https://huggingface.co
