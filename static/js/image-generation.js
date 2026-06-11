@@ -11,6 +11,8 @@ let currentCharacterIndex = 0;
 let currentChapterIndex = 0;
 let characterGenerationRunning = false;
 let chapterGenerationRunning = false;
+let currentExportType = "";
+let projectAssets = [];
 
 function normalizeEmpty(value) {
   const text = (value ?? "").toString().trim();
@@ -23,6 +25,291 @@ function currentCharacterKey() {
 
 function currentChapterKey() {
   return normalizeEmpty(document.getElementById("chapterIdInput").value);
+}
+
+function setAssetsExportStatus(text, className = "") {
+  const node = document.getElementById("assetsExportStatus");
+  if (!node) return;
+  node.textContent = text;
+  node.className = `micro-status ${className}`.trim();
+}
+
+async function refreshProjectAssets() {
+  try {
+    const response = await fetch(`${API_BASE}/projects/novel_demo_001/assets`);
+    if (!response.ok) {
+      throw new Error(`asset list failed: ${response.status}`);
+    }
+    const data = await response.json();
+    projectAssets = Array.isArray(data.assets) ? data.assets : [];
+  } catch (error) {
+    projectAssets = [];
+    console.error("Failed to refresh project assets", error);
+  }
+}
+
+function getStoredCharacterAssets() {
+  return projectAssets.filter((asset) => asset.asset_type === "character_turnaround");
+}
+
+function getStoredChapterAssets() {
+  return projectAssets.filter((asset) => asset.asset_type === "chapter_illustration");
+}
+
+function buildLatestAssetMap(assets) {
+  const map = new Map();
+  assets.forEach((asset) => {
+    const key = normalizeEmpty(asset.ref_id);
+    if (!key) return;
+    map.set(key, asset);
+  });
+  return map;
+}
+
+function getCurrentCharacterExportAssets() {
+  const latestAssets = buildLatestAssetMap(getStoredCharacterAssets());
+  const currentNames = characterData
+    .map((character, index) => normalizeEmpty(character.name) || `角色${index + 1}`)
+    .filter(Boolean);
+
+  if (!currentNames.length) {
+    return Array.from(latestAssets.values());
+  }
+
+  return currentNames.map((name) => latestAssets.get(name)).filter(Boolean);
+}
+
+function getCurrentChapterExportAssets() {
+  const allAssets = getStoredChapterAssets();
+  const currentChapterIds = chapterData
+    .map((chapter, index) => normalizeEmpty(chapter.id) || `ch${index + 1}`)
+    .filter(Boolean);
+
+  if (!currentChapterIds.length) {
+    const fallbackGrouped = new Map();
+    allAssets.forEach((asset) => {
+      const key = normalizeEmpty(asset.ref_id);
+      if (!key) return;
+      const list = fallbackGrouped.get(key) || [];
+      list.push(asset);
+      fallbackGrouped.set(key, list);
+    });
+    return fallbackGrouped;
+  }
+
+  const grouped = new Map();
+  currentChapterIds.forEach((chapterId) => grouped.set(chapterId, []));
+  allAssets.forEach((asset) => {
+    const key = normalizeEmpty(asset.ref_id);
+    if (!grouped.has(key)) return;
+    grouped.get(key).push(asset);
+  });
+  return grouped;
+}
+
+function getLatestCurrentChapterExportAssets() {
+  const grouped = getCurrentChapterExportAssets();
+  const latestOnly = new Map();
+  grouped.forEach((assets, chapterId) => {
+    if (!assets.length) {
+      latestOnly.set(chapterId, []);
+      return;
+    }
+    latestOnly.set(chapterId, [assets[assets.length - 1]]);
+  });
+  return latestOnly;
+}
+
+function collectGeneratedCharacterEntries() {
+  return characterData.map((character, index) => {
+    const name = normalizeEmpty(character.name) || `角色${index + 1}`;
+    const result = characterResults.get(name);
+    return {
+      name,
+      gender: normalizeEmpty(character.gender),
+      age: normalizeEmpty(character.age),
+      ethnicity: normalizeEmpty(character.ethnicity),
+      job: normalizeEmpty(character.job),
+      appearance: normalizeEmpty(character.appearance),
+      costume: normalizeEmpty(character.costume),
+      personality: normalizeEmpty(character.personality),
+      assetId: result?.assetId || "",
+      hasAsset: Boolean(result?.assetId),
+    };
+  });
+}
+
+function collectGeneratedChapterEntries() {
+  return chapterData.map((chapter, index) => {
+    const id = normalizeEmpty(chapter.id) || `ch${index + 1}`;
+    const title = normalizeEmpty(chapter.title) || `第${index + 1}章`;
+    const result = chapterResults.get(id);
+    const images = result?.images || [];
+    return {
+      id,
+      title,
+      events: normalizeEmpty(chapter.events),
+      prompt: normalizeEmpty(chapter.prompt),
+      assetIds: images.map((image) => image.assetId).filter(Boolean),
+      imageCount: images.length,
+    };
+  });
+}
+
+function renderAssetsPanel() {
+  const characters = collectGeneratedCharacterEntries();
+  const chapters = collectGeneratedChapterEntries();
+  const storedCharacterAssets = getCurrentCharacterExportAssets();
+  const storedChapterAssetGroups = getLatestCurrentChapterExportAssets();
+  const storedChapterAssets = Array.from(storedChapterAssetGroups.values()).flat();
+
+  const generatedCharacterCount = Math.max(
+    characters.filter((item) => item.hasAsset).length,
+    storedCharacterAssets.length
+  );
+  const generatedChapterCount = Math.max(
+    chapters.filter((item) => item.assetIds.length).length,
+    Array.from(storedChapterAssetGroups.values()).filter((assets) => assets.length > 0).length
+  );
+
+  const characterSummary = document.getElementById("characterExportSummary");
+  const chapterSummary = document.getElementById("chapterExportSummary");
+  if (characterSummary) {
+    characterSummary.textContent = `已生成 ${generatedCharacterCount} / ${characters.length}`;
+  }
+  if (chapterSummary) {
+    chapterSummary.textContent = `已生成 ${generatedChapterCount} / ${chapters.length}`;
+  }
+
+  const characterList = document.getElementById("characterExportList");
+  const chapterList = document.getElementById("chapterExportList");
+  if (characterList) {
+    characterList.innerHTML = "";
+    if (!characters.length) {
+      if (!storedCharacterAssets.length) {
+        const li = document.createElement("li");
+        li.textContent = "暂无角色数据";
+        characterList.appendChild(li);
+      } else {
+        storedCharacterAssets.forEach((asset, index) => {
+          const li = document.createElement("li");
+          const title = document.createElement("strong");
+          title.textContent = asset.ref_id || `角色 ${index + 1}`;
+          const meta = document.createElement("span");
+          meta.textContent = "已生成角色三视图，可导出";
+          li.append(title, meta);
+          characterList.appendChild(li);
+        });
+      }
+    } else {
+      characters.forEach((item) => {
+        const li = document.createElement("li");
+        const title = document.createElement("strong");
+        title.textContent = item.name;
+        const meta = document.createElement("span");
+        meta.textContent = item.hasAsset ? "已生成角色三视图，可导出" : "未生成角色三视图";
+        li.append(title, meta);
+        characterList.appendChild(li);
+      });
+    }
+  }
+
+  if (chapterList) {
+    chapterList.innerHTML = "";
+    if (!chapters.length) {
+      if (!storedChapterAssets.length) {
+        const li = document.createElement("li");
+        li.textContent = "暂无章节数据";
+        chapterList.appendChild(li);
+      } else {
+        Array.from(storedChapterAssetGroups.entries()).forEach(([key, assets]) => {
+          const li = document.createElement("li");
+          const title = document.createElement("strong");
+          title.textContent = key;
+          const meta = document.createElement("span");
+          meta.textContent = `已生成 ${assets.length} 张章节配图`;
+          li.append(title, meta);
+          chapterList.appendChild(li);
+        });
+      }
+    } else {
+      chapters.forEach((item) => {
+        const li = document.createElement("li");
+        const title = document.createElement("strong");
+        title.textContent = item.title;
+        const meta = document.createElement("span");
+        meta.textContent = item.assetIds.length
+          ? `已生成 ${item.assetIds.length} 张章节配图`
+          : "未生成章节配图";
+        li.append(title, meta);
+        chapterList.appendChild(li);
+      });
+    }
+  }
+
+  const exportCharactersBtn = document.getElementById("exportCharactersBtn");
+  const exportChaptersBtn = document.getElementById("exportChaptersBtn");
+  const exportAllAssetsBtn = document.getElementById("exportAllAssetsBtn");
+  if (exportCharactersBtn) exportCharactersBtn.disabled = generatedCharacterCount === 0 || currentExportType === "characters";
+  if (exportChaptersBtn) exportChaptersBtn.disabled = generatedChapterCount === 0 || currentExportType === "chapters";
+  if (exportAllAssetsBtn) {
+    exportAllAssetsBtn.disabled =
+      (generatedCharacterCount === 0 && generatedChapterCount === 0) || currentExportType === "all";
+  }
+}
+
+function triggerBlobDownload(blob, fallbackFilename) {
+  const blobUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = blobUrl;
+  anchor.download = fallbackFilename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+}
+
+function getFilenameFromDisposition(disposition, fallbackFilename) {
+  if (!disposition) return fallbackFilename;
+  const utfMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utfMatch?.[1]) {
+    return decodeURIComponent(utfMatch[1]);
+  }
+  const plainMatch = disposition.match(/filename="?([^"]+)"?/i);
+  return plainMatch?.[1] || fallbackFilename;
+}
+
+async function postExport(exportType, endpoint, payload, fallbackFilename, successText) {
+  if (currentExportType) return;
+
+  currentExportType = exportType;
+  await refreshProjectAssets();
+  renderAssetsPanel();
+  setAssetsExportStatus("正在准备导出...");
+
+  try {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get("Content-Disposition");
+    const filename = getFilenameFromDisposition(disposition, fallbackFilename);
+    triggerBlobDownload(blob, filename);
+    setAssetsExportStatus(successText, "success");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "导出失败";
+    setAssetsExportStatus(`导出失败：${message}`);
+  } finally {
+    currentExportType = "";
+    await refreshProjectAssets();
+    renderAssetsPanel();
+  }
 }
 
 function collectChapterReferenceAssetIds() {
@@ -321,6 +608,8 @@ function renderChapterResultLegacy() {
 
 function mapImportedCharacters(list) {
   characterData.length = 0;
+  characterResults.clear();
+  characterTaskStates.clear();
   list.forEach((item) => {
     characterData.push({
       name: normalizeEmpty(item.name),
@@ -336,10 +625,13 @@ function mapImportedCharacters(list) {
   currentCharacterIndex = 0;
   renderCharacterList();
   fillCharacter(0);
+  renderAssetsPanel();
 }
 
 function mapImportedChapters(list) {
   chapterData.length = 0;
+  chapterResults.clear();
+  chapterTaskStates.clear();
   list.forEach((item, index) => {
     chapterData.push({
       id: normalizeEmpty(item.id) || `ch${index + 1}`,
@@ -351,6 +643,7 @@ function mapImportedChapters(list) {
   currentChapterIndex = 0;
   renderChapterList();
   fillChapter(0);
+  renderAssetsPanel();
 }
 
 async function importFromDocx() {
@@ -386,6 +679,8 @@ async function importFromDocx() {
     mapImportedCharacters(data.characters);
   } else {
     characterData.length = 0;
+    characterResults.clear();
+    characterTaskStates.clear();
     renderCharacterList();
     resetCharacterResultView();
     setCharacterStatus("状态：待生成");
@@ -395,11 +690,14 @@ async function importFromDocx() {
     mapImportedChapters(data.chapters);
   } else {
     chapterData.length = 0;
+    chapterResults.clear();
+    chapterTaskStates.clear();
     renderChapterList();
     renderChapterResult();
   }
 
   status.textContent = "导入成功：已自动填充小说、角色和章节信息";
+  renderAssetsPanel();
 }
 
 async function pollTask(taskId, statusSetter, stateMap, stateKey) {
@@ -491,6 +789,8 @@ async function runCharacterGeneration() {
     });
     characterTaskStates.set(key, { text: "状态：success", className: "success" });
     renderCharacterResult();
+    await refreshProjectAssets();
+    renderAssetsPanel();
   } catch (error) {
     const message = error instanceof Error ? error.message : "生成失败";
     characterTaskStates.set(key, { text: `状态：failed（${message}）`, className: "" });
@@ -556,6 +856,7 @@ async function runChapterGeneration() {
     }
 
     const images = (finalData.result || []).map((item) => ({
+      assetId: item.asset_id || "",
       previewUrl: item.file_url,
       downloadUrl: item.asset_id ? `${API_BASE}/assets/${item.asset_id}/download` : item.file_url,
     }));
@@ -565,6 +866,8 @@ async function runChapterGeneration() {
     });
     chapterTaskStates.set(key, { text: "状态：success", className: "success" });
     renderChapterResult();
+    await refreshProjectAssets();
+    renderAssetsPanel();
   } catch (error) {
     const message = error instanceof Error ? error.message : "生成失败";
     chapterTaskStates.set(key, { text: `状态：failed（${message}）`, className: "" });
@@ -635,6 +938,110 @@ document.getElementById("previewChapterBtn").addEventListener("click", () => {
   openPreview(firstImage.previewUrl);
 });
 
+function buildExportFilename(suffix) {
+  const novelTitle = normalizeEmpty(document.getElementById("novelTitleInput").value) || "novel-project";
+  return `${novelTitle}-${suffix}`;
+}
+
+function buildFullAssetsExportPayload() {
+  const currentCharacterAssets = buildLatestAssetMap(getCurrentCharacterExportAssets());
+  const currentChapterAssetGroups = getCurrentChapterExportAssets();
+  const characters = collectGeneratedCharacterEntries()
+    .map((item) => ({
+      ...item,
+      assetId: item.assetId || currentCharacterAssets.get(item.name)?.asset_id || "",
+    }))
+    .filter((item) => item.assetId)
+    .map((item) => ({
+      name: item.name,
+      gender: item.gender,
+      age: item.age,
+      ethnicity: item.ethnicity,
+      job: item.job,
+      appearance: item.appearance,
+      costume: item.costume,
+      personality: item.personality,
+      asset_id: item.assetId,
+    }));
+
+  const chapters = collectGeneratedChapterEntries()
+    .map((item) => ({
+      ...item,
+      assetIds: item.assetIds.length
+        ? item.assetIds
+        : (currentChapterAssetGroups.get(item.id) || [])
+            .slice(-1)
+            .map((asset) => asset.asset_id)
+            .filter(Boolean),
+    }))
+    .filter((item) => item.assetIds.length)
+    .map((item) => ({
+      id: item.id,
+      title: item.title,
+      events: item.events,
+      prompt: item.prompt,
+      asset_ids: item.assetIds,
+    }));
+
+  return {
+    filename: buildExportFilename("all-assets"),
+    project_id: "novel_demo_001",
+    novel_title: normalizeEmpty(document.getElementById("novelTitleInput").value),
+    world_setting: normalizeEmpty(document.getElementById("worldSettingInput").value),
+    era: normalizeEmpty(document.getElementById("eraInput").value),
+    language_style: normalizeEmpty(document.getElementById("languageStyleInput").value),
+    visual_style: normalizeEmpty(document.getElementById("visualStyleInput").value),
+    aspect_ratio: document.getElementById("aspectRatioInput").value,
+    quality: document.getElementById("qualityInput").value,
+    characters,
+    chapters,
+  };
+}
+
+document.getElementById("exportCharactersBtn").addEventListener("click", async () => {
+  await refreshProjectAssets();
+  const assetIds = getCurrentCharacterExportAssets().map((asset) => asset.asset_id).filter(Boolean);
+  await postExport(
+    "characters",
+    "/exports/characters",
+    {
+      filename: buildExportFilename("character-assets"),
+      asset_ids: assetIds,
+    },
+    "character-assets.zip",
+    "角色三视图导出成功"
+  );
+});
+
+document.getElementById("exportChaptersBtn").addEventListener("click", async () => {
+  await refreshProjectAssets();
+  const assetIds = Array.from(getLatestCurrentChapterExportAssets().values())
+    .flat()
+    .map((asset) => asset.asset_id)
+    .filter(Boolean);
+  await postExport(
+    "chapters",
+    "/exports/chapters",
+    {
+      filename: buildExportFilename("chapter-assets"),
+      asset_ids: assetIds,
+    },
+    "chapter-assets.zip",
+    "章节配图导出成功"
+  );
+});
+
+document.getElementById("exportAllAssetsBtn").addEventListener("click", async () => {
+  await refreshProjectAssets();
+  await postExport(
+    "all",
+    "/exports/all",
+    buildFullAssetsExportPayload(),
+    "all-assets.zip",
+    "全部素材导出成功"
+  );
+});
+
 function renderChapterResult() {
   const grid = document.getElementById("chapterResultGrid");
   const key = currentChapterKey();
@@ -674,9 +1081,15 @@ function renderChapterResult() {
   setChapterStatus(taskState?.text || result.statusText || "状态：success", taskState?.className || "success");
 }
 
-renderCharacterList();
-renderChapterList();
-resetCharacterResultView();
-setChapterDownloadEnabled(false);
-setChapterPreviewEnabled(false);
-renderChapterResult();
+async function initializeImagePage() {
+  await refreshProjectAssets();
+  renderCharacterList();
+  renderChapterList();
+  resetCharacterResultView();
+  setChapterDownloadEnabled(false);
+  setChapterPreviewEnabled(false);
+  renderChapterResult();
+  renderAssetsPanel();
+}
+
+initializeImagePage();

@@ -116,3 +116,42 @@ class ImportedNovelData(BaseModel):
     language_style: str = ""
     characters: list[ImportedCharacter] = Field(default_factory=list)
     chapters: list[ImportedChapter] = Field(default_factory=list)
+
+
+class AssetExportRequest(BaseModel):
+    filename: str
+    asset_ids: list[str] = Field(default_factory=list)
+
+
+class ExportCharacterItem(BaseModel):
+    name: str
+    gender: str = ""
+    ethnicity: str = ""
+    age: str = ""
+    job: str = ""
+    appearance: str = ""
+    costume: str = ""
+    personality: str = ""
+    asset_id: str = ""
+
+
+class ExportChapterItem(BaseModel):
+    id: str
+    title: str = ""
+    events: str = ""
+    prompt: str = ""
+    asset_ids: list[str] = Field(default_factory=list)
+
+
+class FullAssetsExportRequest(BaseModel):
+    filename: str
+    project_id: str = "novel_demo_001"
+    novel_title: str = ""
+    world_setting: str = ""
+    era: str = ""
+    language_style: str = ""
+    visual_style: str = ""
+    aspect_ratio: str = ""
+    quality: str = ""
+    characters: list[ExportCharacterItem] = Field(default_factory=list)
+    chapters: list[ExportChapterItem] = Field(default_factory=list)

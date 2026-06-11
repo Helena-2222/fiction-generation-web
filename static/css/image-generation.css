@@ -195,6 +195,10 @@ body {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.image-grid-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .image-grid-span {
   grid-column: 1 / -1;
 }
@@ -441,6 +445,47 @@ textarea:-webkit-autofill:focus {
   margin-top: 22px;
 }
 
+.export-summary-grid,
+.export-lists-grid {
+  margin-bottom: 18px;
+}
+
+.export-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.export-summary-card .image-btn {
+  align-self: flex-start;
+}
+
+.export-summary-text,
+.export-note {
+  margin: 0;
+  color: var(--image-sub);
+}
+
+.export-item-list li {
+  cursor: default;
+}
+
+.export-item-list li strong {
+  display: block;
+  color: var(--image-ink);
+  margin-bottom: 4px;
+}
+
+.export-item-list li span {
+  display: block;
+  color: var(--image-sub);
+  font-size: 14px;
+}
+
+.export-legacy-note {
+  display: none;
+}
+
 .image-modal {
   position: fixed;
   inset: 0;
@@ -494,6 +539,7 @@ textarea:-webkit-autofill:focus {
   }
 
   .image-grid-two,
+  .image-grid-three,
   .chapter-result-grid {
     grid-template-columns: 1fr;
   }
