@@ -2,57 +2,57 @@
 document.addEventListener("DOMContentLoaded", function() {
   console.log("[audio-gen] init");
 
-  // ========== HF Token ==========
-  var hfTokenInput = document.getElementById("hfTokenInput");
-  var saveHfTokenBtn = document.getElementById("saveHfTokenBtn");
-  var hfTokenStatus = document.getElementById("hfTokenStatus");
+  // // ========== HF Token ==========
+  // var hfTokenInput = document.getElementById("hfTokenInput");
+  // var saveHfTokenBtn = document.getElementById("saveHfTokenBtn");
+  // var hfTokenStatus = document.getElementById("hfTokenStatus");
 
   // Check token status on load
-  (async function() {
-    try {
-      var r = await fetch("/api/audio/hf-token");
-      var d = await r.json();
-      if (d.token_set && hfTokenStatus) {
-        hfTokenStatus.textContent = "已配置: " + d.token_preview;
-        hfTokenStatus.style.color = "#2e7d32";
-      } else if (hfTokenStatus) {
-        hfTokenStatus.textContent = "未配置";
-        hfTokenStatus.style.color = "#8a7a67";
-      }
-    } catch(e) {}
-  })();
+  // (async function() {
+  //   try {
+  //     var r = await fetch("/api/audio/hf-token");
+  //     var d = await r.json();
+  //     if (d.token_set && hfTokenStatus) {
+  //       hfTokenStatus.textContent = "已配置: " + d.token_preview;
+  //       hfTokenStatus.style.color = "#2e7d32";
+  //     } else if (hfTokenStatus) {
+  //       hfTokenStatus.textContent = "未配置";
+  //       hfTokenStatus.style.color = "#8a7a67";
+  //     }
+  //   } catch(e) {}
+  // })();
 
-  if (saveHfTokenBtn && hfTokenInput) {
-    saveHfTokenBtn.addEventListener("click", async function() {
-      var token = hfTokenInput.value.trim();
-      if (!token) { toast("请输入 HF Token"); return; }
-      saveHfTokenBtn.disabled = true;
-      saveHfTokenBtn.textContent = "保存中...";
-      try {
-        var r = await fetch("/api/audio/hf-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token: token })
-        });
-        var d = await r.json();
-        if (r.ok) {
-          if (hfTokenStatus) {
-            hfTokenStatus.textContent = "已保存";
-            hfTokenStatus.style.color = "#2e7d32";
-          }
-          hfTokenInput.value = "";
-          toast("HF Token 已保存");
-        } else {
-          toast("保存失败: " + (d.detail || ""));
-        }
-      } catch(e) {
-        toast("保存失败: " + e.message);
-      } finally {
-        saveHfTokenBtn.disabled = false;
-        saveHfTokenBtn.textContent = "保存";
-      }
-    });
-  }
+  // if (saveHfTokenBtn && hfTokenInput) {
+  //   saveHfTokenBtn.addEventListener("click", async function() {
+  //     var token = hfTokenInput.value.trim();
+  //     if (!token) { toast("请输入 HF Token"); return; }
+  //     saveHfTokenBtn.disabled = true;
+  //     saveHfTokenBtn.textContent = "保存中...";
+  //     try {
+  //       var r = await fetch("/api/audio/hf-token", {
+  //         method: "POST",
+  //         headers: { "Content-Type": "application/json" },
+  //         body: JSON.stringify({ token: token })
+  //       });
+  //       var d = await r.json();
+  //       if (r.ok) {
+  //         if (hfTokenStatus) {
+  //           hfTokenStatus.textContent = "已保存";
+  //           hfTokenStatus.style.color = "#2e7d32";
+  //         }
+  //         hfTokenInput.value = "";
+  //         toast("HF Token 已保存");
+  //       } else {
+  //         toast("保存失败: " + (d.detail || ""));
+  //       }
+  //     } catch(e) {
+  //       toast("保存失败: " + e.message);
+  //     } finally {
+  //       saveHfTokenBtn.disabled = false;
+  //       saveHfTokenBtn.textContent = "保存";
+  //     }
+  //   });
+  // }
 
   function escapeHtml(t) {
     var d = document.createElement("div");
