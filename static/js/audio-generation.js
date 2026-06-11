@@ -2,107 +2,6 @@
 document.addEventListener("DOMContentLoaded", function() {
   console.log("[audio-gen] init");
 
-  // ========== HF Token ==========
-  var hfTokenInput = document.getElementById("hfTokenInput");
-  var saveHfTokenBtn = document.getElementById("saveHfTokenBtn");
-  var hfTokenStatus = document.getElementById("hfTokenStatus");
-
-  // Check token status on load
-  (async function() {
-    try {
-      var r = await fetch("/api/audio/hf-token");
-      var d = await r.json();
-      if (d.token_set && hfTokenStatus) {
-        hfTokenStatus.textContent = "已配置: " + d.token_preview;
-        hfTokenStatus.style.color = "#2e7d32";
-      } else if (hfTokenStatus) {
-        hfTokenStatus.textContent = "未配置";
-        hfTokenStatus.style.color = "#8a7a67";
-      }
-    } catch(e) {}
-  })();
-
-  if (saveHfTokenBtn && hfTokenInput) {
-    saveHfTokenBtn.addEventListener("click", async function() {
-      var token = hfTokenInput.value.trim();
-      if (!token) { toast("请输入 HF Token"); return; }
-      saveHfTokenBtn.disabled = true;
-      saveHfTokenBtn.textContent = "保存中...";
-      try {
-        var r = await fetch("/api/audio/hf-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token: token })
-        });
-        var d = await r.json();
-        if (r.ok) {
-          if (hfTokenStatus) {
-            hfTokenStatus.textContent = "已保存";
-            hfTokenStatus.style.color = "#2e7d32";
-          }
-          hfTokenInput.value = "";
-          toast("HF Token 已保存");
-        } else {
-          toast("保存失败: " + (d.detail || ""));
-        }
-      } catch(e) {
-        toast("保存失败: " + e.message);
-      } finally {
-        saveHfTokenBtn.disabled = false;
-        saveHfTokenBtn.textContent = "保存";
-      }
-    });
-  }
-
-  function escapeHtml(t) {
-    var d = document.createElement("div");
-    d.textContent = t || "";
-    return d.innerHTML;
-  }
-
-  function toast(m) {
-    var t = document.getElementById("page-toast");
-    if (!t) return;
-    t.textContent = m;
-    t.classList.remove("hidden");
-    clearTimeout(t._tid);
-    t._tid = setTimeout(function() { t.classList.add("hidden"); }, 3500);
-  }
-
-  function showErr(el, m) { if (el) { el.textContent = m; el.classList.remove("hidden"); } }
-  function hideErr(el) { if (el) { el.textContent = ""; el.classList.add("hidden"); } }
-
-  window.downloadAudio = function(url) {
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = url.split("/").pop();
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-
-  // ========== Model defs ==========
-  var musicModels = {
-    musicgen: [
-      { v: "facebook/musicgen-small", l: "musicgen-small (300M)" },
-      { v: "facebook/musicgen-medium", l: "musicgen-medium (1.5B)" },
-      { v: "facebook/musicgen-large", l: "musicgen-large (3.3B)" }
-    ],
-    "stable-audio": [
-      { v: "stabilityai/stable-audio-3-small-music", l: "SA3-small-music (~1B)" },
-      { v: "stabilityai/stable-audio-3-medium", l: "SA3-medium (~3B)" }
-    ]
-  };
-
-  var effectsModels = {
-    musicgen: [
-      { v: "facebook/audiogen-medium", l: "audiogen-medium (1.5B)" }
-    ],
-    "stable-audio": [
-      { v: "stabilityai/stable-audio-3-small-sfx", l: "SA3-small-sfx (~1B)" }
-    ]
-  };
-
   // ========== Tab switching ==========
   var tabBtns = document.querySelectorAll(".audio-tab");
   var panels = document.querySelectorAll(".audio-panel");
@@ -265,7 +164,7 @@ document.addEventListener("DOMContentLoaded", function() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ chapter_number: 1, chapter_title: title, chapter_content: content, music_duration: 30, generate_effects: true })
         });
-        if (!r.ok) { var et = await r.text(); throw new Error("HTTP " + r.status + ": " + et); }
+        if (!r.ok) { var et = await r.text(); try { var ej = JSON.parse(et); et = ej.detail || et; } catch(__) {} throw new Error(et); }
         var d = await r.json();
 
         var sd = d.summary || (d[0] && d[0].summary) || {};
@@ -403,7 +302,7 @@ document.addEventListener("DOMContentLoaded", function() {
       if (btn) { btn.disabled = true; btn.textContent = "Generating..."; }
       hideErr(merr);
       var r = await fetch("/api/audio/generate-music", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ description: desc, duration: dur, guidance_scale: 3 }) });
-      if (!r.ok) { var ed; try { ed = await r.json(); } catch (e2) { ed = { detail: await r.text() }; } throw new Error(ed.detail || ("HTTP " + r.status)); }
+      if (!r.ok) { var et = await r.text(); try { var ej = JSON.parse(et); et = ej.detail || et; } catch(__) {} throw new Error(et); }
       var d = await r.json();
       var rl = document.getElementById("musicResultList");
       var it = document.createElement("div");
@@ -443,7 +342,7 @@ document.addEventListener("DOMContentLoaded", function() {
       if (btn) { btn.disabled = true; btn.textContent = "Generating..."; }
       hideErr(eerr);
       var r = await fetch("/api/audio/generate-effects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ descriptions: descs, duration: 5 }) });
-      if (!r.ok) { var ed; try { ed = await r.json(); } catch (e2) { ed = { detail: await r.text() }; } throw new Error(ed.detail || ("HTTP " + r.status)); }
+      if (!r.ok) { var et = await r.text(); try { var ej = JSON.parse(et); et = ej.detail || et; } catch(__) {} throw new Error(et); }
       var d = await r.json();
       var rl = document.getElementById("effectsResultList");
       if (d && Array.isArray(d)) {
