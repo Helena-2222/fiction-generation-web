@@ -6,4 +6,11 @@ node_modules/
 __pycache__/
 *.py[cod]
 test/
-data/generated_images/
+data
+# HuggingFace model cache (downloaded automatically)
+models/
+# Generated audio files (large, regeneratable)
+static/audio/music/*.wav
+static/audio/effects/*.wav
+static/audio/tts/*.wav
+.claude/

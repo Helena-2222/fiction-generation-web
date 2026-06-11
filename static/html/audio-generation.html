@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>音频生成 | 非凡故事</title>
+    <link rel="stylesheet" href="/static/css/tokens.css" />
+    <link rel="stylesheet" href="/static/css/base.css" />
+    <link rel="stylesheet" href="/static/css/components.css" />
+    <link rel="stylesheet" href="/static/css/app-nav.css" />
+    <link rel="stylesheet" href="/static/css/audio-generation.css?v=20260607g" />
+  </head>
+  <body>
+    <div class="app audio-app">
+      <aside class="sidebar app-sidebar rail-shell" aria-label="主导航">
+        <a class="app-logo-link" href="/create?stage=basic" aria-label="回到创作台" title="回到创作台">
+          <img class="app-logo" src="/static/assets/images/logo2.png" alt="非凡故事" />
+        </a>
+        <nav class="nav-items" aria-label="主导航">
+          <a class="nav-item" href="/create?stage=basic" aria-label="创作台" title="创作台">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <path d="M5.4 15.6c2.6-.7 4.8-2 6.6-3.9 2-2.1 3-4.6 3.3-7.4-2.8.3-5.3 1.4-7.4 3.3-1.9 1.8-3.2 4-3.9 6.6l1.4 1.4Z"></path>
+              <path d="M8.2 11.8 4 16"></path>
+            </svg>
+            <span class="nav-label">创作台</span>
+          </a>
+          <a class="nav-item" href="/images" aria-label="生成图片" title="生成图片">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <path d="M4 14.5V5.8A1.8 1.8 0 0 1 5.8 4h8.4A1.8 1.8 0 0 1 16 5.8v8.4A1.8 1.8 0 0 1 14.2 16H5.8A1.8 1.8 0 0 1 4 14.2Z"></path>
+              <path d="m6.2 12.8 2.3-2.7 2.1 1.9 3.2-4"></path>
+              <circle cx="7.2" cy="7.3" r="1"></circle>
+            </svg>
+            <span class="nav-label">生成图片</span>
+          </a>
+          <a class="nav-item is-active" href="/audio" aria-label="音频生成" title="音频生成">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <path d="M10 3v14M7 6v8M4 8v4M13 6v8M16 8v4"></path>
+            </svg>
+            <span class="nav-label">音频生成</span>
+          </a>
+          <a class="nav-item" href="/tts" aria-label="TTS 配音" title="TTS 配音">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <path d="M8 3.5a5.5 5.5 0 0 0 0 13M12 3.5a5.5 5.5 0 0 1 0 13M3.5 8a6.5 6.5 0 0 0 0 4M16.5 8a6.5 6.5 0 0 1 0 4"></path>
+            </svg>
+            <span class="nav-label">TTS 配音</span>
+          </a>
+          <a class="nav-item" href="/works" aria-label="作品管理" title="作品管理">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <rect x="4" y="3" width="12" height="14" rx="1.4"></rect>
+              <path d="M7 3v14M9 7h4"></path>
+            </svg>
+            <span class="nav-label">作品管理</span>
+          </a>
+          <a class="nav-item" href="/mynote" aria-label="我的笔记" title="我的笔记">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+              <path d="M10 16.2 4.7 11.5a3.5 3.5 0 0 1 5-4.9L10 7l.3-.4a3.5 3.5 0 0 1 5 4.9L10 16.2Z"></path>
+            </svg>
+            <span class="nav-label">我的笔记</span>
+          </a>
+          <a class="nav-item app-nav-user" href="/usercenter" aria-label="用户中心" title="用户中心">
+            <span class="nav-user-avatar" aria-hidden="true">游</span>
+          </a>
+        </nav>
+      </aside>
+
+      <div class="main-col">
+        <header class="audio-topbar">
+          <nav class="audio-tabs" aria-label="音频生成页面分区">
+            <button type="button" class="audio-tab is-active" data-target="overview-panel">项目概览</button>
+            <button type="button" class="audio-tab" data-target="music-panel">背景音乐</button>
+            <button type="button" class="audio-tab" data-target="effects-panel">音效生成</button>
+            <button type="button" class="audio-tab" data-target="export-panel">资源导出</button>
+          </nav>
+        </header>
+
+        <main class="audio-main">
+          <!-- 项目概览面板 -->
+          <section id="overview-panel" class="audio-panel is-active">
+            <div class="audio-page-title">
+              <h1>音频生成</h1>
+              <p>基于小说内容，智能生成背景音乐与环境音效。</p>
+
+            <div class="audio-card audio-card-token">
+              <div class="card-heading">
+                <h2>HF Token 配置</h2>
+                <span id="hfTokenStatus" class="micro-status" style="margin:0;"></span>
+              </div>
+              <div class="audio-actions-inline">
+                <input id="hfTokenInput" type="password" placeholder="输入 HuggingFace Token 以访问 gated 模型（如 Stable Audio 3）" />
+                <button id="saveHfTokenBtn" type="button" class="audio-btn audio-btn-brand">保存</button>
+              </div>
+              <p class="analysis-hint" style="margin-top:8px;">Token 仅保存在本地，用于下载 Stable Audio 3 等需要授权的模型。</p>
+            </div>
+            </div>
+
+            <div class="audio-card">
+              <div class="card-heading"><h2>小说内容导入</h2></div>
+              <div class="audio-actions audio-actions-inline">
+                <input id="docxFileInput" type="file" accept=".docx" />
+                <button id="importDocxBtn" type="button" class="audio-btn audio-btn-ghost">导入 Word 文档</button>
+              </div>
+              <p id="importDocxStatus" class="micro-status"></p>
+              <div class="audio-divider"></div>
+              <div class="audio-grid audio-grid-full">
+                <label>小说标题<input id="novelTitleInput" type="text" placeholder="请输入小说标题" /></label>
+                <label>选择章节（可选）<select id="chapterSelect" multiple><option value="all">全部章节</option></select></label>
+              </div>
+              <div class="audio-divider"></div>
+              <div class="audio-grid audio-grid-full">
+                <label>章节内容（用于分析）<textarea id="chapterContentInput" class="textarea-field" rows="8" placeholder="在此粘贴章节内容，或导入 Word 文档后自动填充"></textarea></label>
+              </div>
+              <div class="card-footer">
+                <button id="analyzeBtn" type="button" class="audio-btn audio-btn-brand">分析内容并生成提示词 →</button>
+              </div>
+            </div>
+
+            <div id="analysisResult" class="audio-card hidden">
+              <div class="card-heading"><h2>内容分析结果</h2></div>
+              <div class="audio-analysis-result">
+                <div class="analysis-section"><h3>摘要</h3><p id="analysisSummary"></p><span id="analysisMood" class="mood-badge"></span></div>
+                <div class="analysis-section"><h3>情感曲线</h3><div id="analysisEmotionCurve"></div></div>
+                <div class="analysis-section"><h3>音乐风格</h3><div id="analysisMusicTags" class="audio-tags-row"></div></div>
+                <div class="audio-divider"></div>
+                <div class="analysis-section">
+                  <h3>音乐提示词</h3>
+                  <p class="analysis-hint">以下提示词已自动填充到「背景音乐」面板，可直接前往生成。</p>
+                  <textarea id="musicPromptInput" class="textarea-field" rows="3" placeholder="可编辑音乐生成提示词"></textarea>
+                  <button id="gotoMusicBtn" type="button" class="audio-btn audio-btn-brand" style="margin-top:8px;">前往背景音乐面板生成 →</button>
+                </div>
+                <div class="audio-divider"></div>
+                <div class="analysis-section">
+                  <h3>音效提示词</h3>
+                  <p class="analysis-hint">以下提示词已自动填充到「音效生成」面板，可直接前往生成。</p>
+                  <div id="effectsPromptsList"></div>
+                  <button id="gotoEffectsBtn" type="button" class="audio-btn audio-btn-brand" style="margin-top:8px;">前往音效面板生成 →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 背景音乐面板 -->
+          <section id="music-panel" class="audio-panel">
+            <div class="audio-page-title"><h1>背景音乐</h1><p>为小说章节生成匹配的背景音乐。</p></div>
+
+            <div class="audio-card">
+              <div class="card-heading"><h2>音乐模型选择</h2></div>
+              <div class="audio-grid audio-grid-two">
+                <label>模型类型<select id="musicModelTypeSelect">
+                  <option value="musicgen" selected>MusicGen (Meta) — 快速、轻量</option>
+                  <option value="stable-audio">Stable Audio 3 (Stability AI) — 高质量</option>
+                </select></label>
+                <label>模型变体<select id="musicModelVariantSelect">
+                  <option value="facebook/musicgen-small" selected>musicgen-small (300M)</option>
+                  <option value="facebook/musicgen-medium">musicgen-medium (1.5B)</option>
+                  <option value="facebook/musicgen-large">musicgen-large (3.3B)</option>
+                </select></label>
+              </div>
+              <p id="musicModelSwitchStatus" class="micro-status"></p>
+              <div id="musicError" class="audio-error hidden"></div>
+            </div>
+
+            <div class="audio-card">
+              <div class="card-heading"><h2>音乐生成设置</h2></div>
+              <div class="audio-grid audio-grid-two">
+                <label>音乐风格提示词<textarea id="musicStyleInput" class="textarea-field" rows="2" placeholder="如：平静的钢琴曲..."></textarea></label>
+                <label>节奏<select id="musicTempoInput"><option value="slow">慢速</option><option value="medium" selected>中速</option><option value="fast">快速</option></select></label>
+                <label>乐器（可选）<input id="musicInstrumentsInput" type="text" placeholder="如：钢琴、小提琴" /></label>
+                <label>时长（秒）<input id="musicDurationInput" type="number" min="5" max="30" value="10" /></label>
+              </div>
+              <div class="card-footer">
+                <button id="generateMusicBtn2" type="button" class="audio-btn audio-btn-brand">生成音乐</button>
+              </div>
+            </div>
+
+            <div id="musicResult" class="audio-card hidden">
+              <div class="card-heading"><h2>生成结果</h2></div>
+              <div class="audio-result-list" id="musicResultList"></div>
+            </div>
+          </section>
+
+          <!-- 音效生成面板 -->
+          <section id="effects-panel" class="audio-panel">
+            <div class="audio-page-title"><h1>音效生成</h1><p>为场景生成匹配的环境音效。</p></div>
+
+            <div class="audio-card">
+              <div class="card-heading"><h2>音效模型选择</h2></div>
+              <div class="audio-grid audio-grid-two">
+                <label>模型类型<select id="effectsModelTypeSelect">
+                  <option value="musicgen" selected>MusicGen (Meta) — 快速、轻量</option>
+                  <option value="stable-audio">Stable Audio 3 (Stability AI) — 高质量</option>
+                </select></label>
+                <label>模型变体<select id="effectsModelVariantSelect">
+                  <option value="facebook/audiogen-medium" selected>audiogen-medium (1.5B)</option>
+                </select></label>
+              </div>
+              <p id="effectsModelSwitchStatus" class="micro-status"></p>
+              <div id="effectsError" class="audio-error hidden"></div>
+            </div>
+
+            <div class="audio-card">
+              <div class="card-heading"><h2>音效列表</h2></div>
+              <div class="audio-effects-list" id="effectsList"></div>
+              <div class="card-footer">
+                <button id="addEffectBtn" type="button" class="audio-btn audio-btn-ghost">添加音效</button>
+                <button id="generateAllEffectsBtn" type="button" class="audio-btn audio-btn-brand">全部生成</button>
+              </div>
+            </div>
+
+            <div id="effectsResult" class="audio-card hidden">
+              <div class="card-heading"><h2>生成结果</h2></div>
+              <div class="audio-result-list" id="effectsResultList"></div>
+            </div>
+          </section>
+
+          <!-- 资源导出面板 -->
+          <section id="export-panel" class="audio-panel">
+            <div class="audio-page-title"><h1>资源导出</h1><p>下载生成的音频文件或导出有声书。</p></div>
+            <div class="audio-card">
+              <div class="card-heading"><h2>导出选项</h2></div>
+              <div class="audio-export-options">
+                <button id="downloadMusicBtn" type="button" class="audio-btn audio-btn-ghost">下载背景音乐</button>
+                <button id="downloadEffectsBtn" type="button" class="audio-btn audio-btn-ghost">下载音效</button>
+                <button id="exportAudiobookBtn" type="button" class="audio-btn audio-btn-brand">导出有声书</button>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <div id="page-toast" class="page-toast hidden" aria-live="polite" aria-hidden="true"></div>
+    <script src="/static/js/audio-generation.js?v=20260607g"></script>
+  </body>
+</html>

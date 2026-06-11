@@ -1,5 +1,27 @@
+# 安装: pip install -r requirements.txt
+#
+# 注意: torch 建议根据你的 CUDA 版本单独安装:
+#   CPU 版:  pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   CUDA 12.x: pip install torch --index-url https://download.pytorch.org/whl/cu128
+# =============================================================================
+
+# --- Web 框架 ---
 fastapi>=0.116,<1.0
-httpx>=0.28,<1.0
 uvicorn>=0.35,<1.0
+httpx>=0.28,<1.0
 python-multipart>=0.0.12,<1.0
+
+# --- 文档处理 ---
 python-docx>=1.1.2,<2.0
+
+# --- 音频生成 ---
+torch>=2.0.0
+transformers>=4.40.0
+soundfile>=0.12.0
+accelerate>=1.0.0
+safetensors>=0.4.0
+
+# --- Stable Audio 3 (可选) ---
+# 安装后可在前端切换模型
+diffusers>=0.30.0
+numpy>=1.24.0,<2.0.0
