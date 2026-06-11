@@ -2,6 +2,57 @@
 document.addEventListener("DOMContentLoaded", function() {
   console.log("[audio-gen] init");
 
+  // // ========== HF Token ==========
+  // var hfTokenInput = document.getElementById("hfTokenInput");
+  // var saveHfTokenBtn = document.getElementById("saveHfTokenBtn");
+  // var hfTokenStatus = document.getElementById("hfTokenStatus");
+
+  // Check token status on load
+  // (async function() {
+  //   try {
+  //     var r = await fetch("/api/audio/hf-token");
+  //     var d = await r.json();
+  //     if (d.token_set && hfTokenStatus) {
+  //       hfTokenStatus.textContent = "已配置: " + d.token_preview;
+  //       hfTokenStatus.style.color = "#2e7d32";
+  //     } else if (hfTokenStatus) {
+  //       hfTokenStatus.textContent = "未配置";
+  //       hfTokenStatus.style.color = "#8a7a67";
+  //     }
+  //   } catch(e) {}
+  // })();
+
+  // if (saveHfTokenBtn && hfTokenInput) {
+  //   saveHfTokenBtn.addEventListener("click", async function() {
+  //     var token = hfTokenInput.value.trim();
+  //     if (!token) { toast("请输入 HF Token"); return; }
+  //     saveHfTokenBtn.disabled = true;
+  //     saveHfTokenBtn.textContent = "保存中...";
+  //     try {
+  //       var r = await fetch("/api/audio/hf-token", {
+  //         method: "POST",
+  //         headers: { "Content-Type": "application/json" },
+  //         body: JSON.stringify({ token: token })
+  //       });
+  //       var d = await r.json();
+  //       if (r.ok) {
+  //         if (hfTokenStatus) {
+  //           hfTokenStatus.textContent = "已保存";
+  //           hfTokenStatus.style.color = "#2e7d32";
+  //         }
+  //         hfTokenInput.value = "";
+  //         toast("HF Token 已保存");
+  //       } else {
+  //         toast("保存失败: " + (d.detail || ""));
+  //       }
+  //     } catch(e) {
+  //       toast("保存失败: " + e.message);
+  //     } finally {
+  //       saveHfTokenBtn.disabled = false;
+  //       saveHfTokenBtn.textContent = "保存";
+  //     }
+  //   });
+  // }
 
   function escapeHtml(t) {
     var d = document.createElement("div");
@@ -352,7 +403,7 @@ document.addEventListener("DOMContentLoaded", function() {
       if (btn) { btn.disabled = true; btn.textContent = "Generating..."; }
       hideErr(merr);
       var r = await fetch("/api/audio/generate-music", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ description: desc, duration: dur, guidance_scale: 3 }) });
-      if (!r.ok) { var et406 = await r.text(); var ed406; try { ed406 = JSON.parse(et406); } catch (e2) { ed406 = { detail: et406 }; } throw new Error(ed406.detail || ("HTTP " + r.status)); }
+      if (!r.ok) { var ed; try { ed = await r.json(); } catch (e2) { ed = { detail: await r.text() }; } throw new Error(ed.detail || ("HTTP " + r.status)); }
       var d = await r.json();
       var rl = document.getElementById("musicResultList");
       var it = document.createElement("div");
@@ -392,7 +443,7 @@ document.addEventListener("DOMContentLoaded", function() {
       if (btn) { btn.disabled = true; btn.textContent = "Generating..."; }
       hideErr(eerr);
       var r = await fetch("/api/audio/generate-effects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ descriptions: descs, duration: 5 }) });
-      if (!r.ok) { var et406 = await r.text(); var ed406; try { ed406 = JSON.parse(et406); } catch (e2) { ed406 = { detail: et406 }; } throw new Error(ed406.detail || ("HTTP " + r.status)); }
+      if (!r.ok) { var ed; try { ed = await r.json(); } catch (e2) { ed = { detail: await r.text() }; } throw new Error(ed.detail || ("HTTP " + r.status)); }
       var d = await r.json();
       var rl = document.getElementById("effectsResultList");
       if (d && Array.isArray(d)) {
