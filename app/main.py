@@ -8,13 +8,14 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.routers import outline_router, story_router, character_router, export_router, task_router
+from app.routers import outline_router, story_router, character_router, export_router, task_router, image_router
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 STATIC_DIR = BASE_DIR / "static"
 HTML_DIR = STATIC_DIR / "html"
 SUPABASE_BROWSER_BUNDLE = STATIC_DIR / "js" / "vendor" / "supabase.js"
+GENERATED_IMAGES_DIR = BASE_DIR / "data" / "generated_images"
 
 app = FastAPI(title="AI 协同小说创作 WEB", version="1.0.0")
 app.add_middleware(
@@ -25,12 +26,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+GENERATED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/generated-images", StaticFiles(directory=GENERATED_IMAGES_DIR), name="generated-images")
 
 app.include_router(outline_router.router)
 app.include_router(story_router.router)
 app.include_router(character_router.router)
 app.include_router(export_router.router)
 app.include_router(task_router.router)
+app.include_router(image_router.router)
 
 
 @app.get("/")
@@ -46,6 +50,11 @@ async def auth_page() -> FileResponse:
 @app.get("/create")
 async def create_page() -> FileResponse:
     return FileResponse(HTML_DIR / "create.html")
+
+
+@app.get("/images")
+async def images_page() -> FileResponse:
+    return FileResponse(HTML_DIR / "image-generation.html")
 
 
 @app.get("/works")

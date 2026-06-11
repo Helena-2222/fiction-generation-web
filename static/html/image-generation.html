@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>生成图片 | 非凡故事</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600&display=swap" />
+    <link rel="stylesheet" href="/static/css/tokens.css" />
+    <link rel="stylesheet" href="/static/css/base.css" />
+    <link rel="stylesheet" href="/static/css/components.css" />
+    <link rel="stylesheet" href="/static/css/app-nav.css" />
+    <link rel="stylesheet" href="/static/css/image-generation.css" />
+  </head>
+  <body>
+    <div class="app image-app">
+      <aside class="sidebar app-sidebar rail-shell" aria-label="主导航">
+        <a class="app-logo-link" href="/create?stage=basic" aria-label="回到创作台" title="回到创作台">
+          <img class="app-logo" src="/static/assets/images/logo2.png" alt="非凡故事" />
+        </a>
+
+        <nav class="nav-items" aria-label="主导航">
+          <a class="nav-item" href="/create?stage=basic" aria-label="创作台" title="创作台">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <path d="M5.4 15.6c2.6-.7 4.8-2 6.6-3.9 2-2.1 3-4.6 3.3-7.4-2.8.3-5.3 1.4-7.4 3.3-1.9 1.8-3.2 4-3.9 6.6l1.4 1.4Z"></path>
+              <path d="M8.2 11.8 4 16"></path>
+            </svg>
+            <span class="nav-label">创作台</span>
+          </a>
+          <a class="nav-item is-active" href="/images" aria-label="生成图片" title="生成图片">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <path d="M4 14.5V5.8A1.8 1.8 0 0 1 5.8 4h8.4A1.8 1.8 0 0 1 16 5.8v8.4A1.8 1.8 0 0 1 14.2 16H5.8A1.8 1.8 0 0 1 4 14.2Z"></path>
+              <path d="m6.2 12.8 2.3-2.7 2.1 1.9 3.2-4"></path>
+              <circle cx="7.2" cy="7.3" r="1"></circle>
+            </svg>
+            <span class="nav-label">生成图片</span>
+          </a>
+          <a class="nav-item" href="/works" aria-label="作品管理" title="作品管理">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <rect x="4" y="3" width="12" height="14" rx="1.4"></rect>
+              <path d="M7 3v14M9 7h4"></path>
+            </svg>
+            <span class="nav-label">作品管理</span>
+          </a>
+          <a class="nav-item" href="/mynote" aria-label="我的笔记" title="我的笔记">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+              <path d="M10 16.2 4.7 11.5a3.5 3.5 0 0 1 5-4.9L10 7l.3-.4a3.5 3.5 0 0 1 5 4.9L10 16.2Z"></path>
+            </svg>
+            <span class="nav-label">我的笔记</span>
+          </a>
+          <a class="nav-item app-nav-user" href="/usercenter" aria-label="用户中心" title="用户中心">
+            <span class="nav-user-avatar" aria-hidden="true">游</span>
+          </a>
+        </nav>
+      </aside>
+
+      <div class="main-col">
+        <header class="image-topbar">
+          <nav class="image-tabs" aria-label="生图页面分区">
+            <button type="button" class="image-tab is-active" data-target="overview-panel">项目概览</button>
+            <button type="button" class="image-tab" data-target="character-panel">角色三视图</button>
+            <button type="button" class="image-tab" data-target="chapter-panel">章节配图</button>
+            <button type="button" class="image-tab" data-target="assets-panel">资源导出</button>
+          </nav>
+          <div class="image-topbar-avatar">N</div>
+        </header>
+
+        <main class="image-main">
+          <section id="overview-panel" class="image-panel is-active">
+            <div class="image-page-title">
+              <h1>生成图片</h1>
+              <p>独立接收小说内容，完成角色三视图与章节配图生成。</p>
+            </div>
+
+            <div class="image-card">
+              <div class="card-heading">
+                <h2>小说基础信息</h2>
+              </div>
+              <div class="docx-actions docx-actions-inline docx-actions-half">
+                <input id="docxFileInput" type="file" accept=".docx" />
+                <button id="importDocxBtn" type="button" class="image-btn image-btn-ghost">自动填充</button>
+              </div>
+              <p id="importDocxStatus" class="micro-status"></p>
+
+              <div class="image-grid image-grid-two">
+                <label>
+                  小说标题
+                  <input id="novelTitleInput" type="text" value="" />
+                </label>
+                <label>
+                  世界观
+                  <input id="worldSettingInput" type="text" value="" />
+                </label>
+                <label>
+                  时代背景
+                  <input id="eraInput" type="text" value="" />
+                </label>
+                <label>
+                  语言风格
+                  <input id="languageStyleInput" type="text" value="" />
+                </label>
+                <label>
+                  视觉风格（可选）
+                  <input id="visualStyleInput" type="text" value="" />
+                </label>
+                <label>
+                  画幅比例
+                  <select id="aspectRatioInput">
+                    <option value="1:1">1:1</option>
+                    <option value="2:3">2:3</option>
+                    <option value="3:4" selected>3:4</option>
+                    <option value="4:3">4:3</option>
+                    <option value="9:16">9:16</option>
+                    <option value="16:9">16:9</option>
+                  </select>
+                </label>
+                <label>
+                  生成质量
+                  <select id="qualityInput">
+                    <option value="standard" selected>标准（推荐）</option>
+                    <option value="fast">快速（质量略低）</option>
+                    <option value="fine">精细（速度较慢）</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="card-footer">
+                <button id="goCharacterBtn" type="button" class="image-btn image-btn-brand">生成角色三视图 →</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="character-panel" class="image-panel">
+            <div class="image-columns">
+              <div class="image-card image-col-list">
+                <h2>角色列表</h2>
+                <ul class="item-list" id="characterList"></ul>
+              </div>
+
+              <div class="image-card image-col-main">
+                <h2>角色设定</h2>
+                <div class="image-grid image-grid-two">
+                  <label>
+                    角色名
+                    <input id="characterNameInput" type="text" value="" />
+                  </label>
+                  <label>
+                    性别
+                    <input id="characterGenderInput" type="text" value="" />
+                  </label>
+                  <label>
+                    年龄
+                    <input id="characterAgeInput" type="text" value="" />
+                  </label>
+                  <label>
+                    国籍/种族
+                    <input id="characterEthnicityInput" type="text" value="" />
+                  </label>
+                  <label>
+                    身份职业
+                    <input id="characterJobInput" type="text" value="" />
+                  </label>
+                  <label>
+                    外在特征
+                    <input id="characterAppearanceInput" type="text" value="" />
+                  </label>
+                  <label class="image-grid-span">
+                    服装设定
+                    <input id="characterCostumeInput" type="text" value="" />
+                  </label>
+                </div>
+                <label>
+                  性格关键词
+                  <textarea id="characterPersonalityInput" class="character-personality-textarea"></textarea>
+                </label>
+                <div class="card-footer character-main-footer">
+                  <button id="generateTurnaroundBtn" type="button" class="image-btn image-btn-brand">生成三视图</button>
+                </div>
+              </div>
+
+              <div class="image-card image-col-result">
+                <h2>三视图结果</h2>
+                <div id="characterResultBox" class="result-box">
+                  <button id="previewTurnaroundBtn" type="button" class="icon-button" title="放大查看" aria-label="放大查看">⤢</button>
+                  <img id="characterResultImage" alt="角色三视图结果" />
+                  <span id="characterResultPlaceholder">角色三视图合成图（正面 / 侧面 / 背面）</span>
+                </div>
+                <p id="characterTaskStatus" class="result-status">状态：待生成</p>
+                <div class="card-footer">
+                  <a id="downloadTurnaroundBtn" class="image-btn image-btn-ghost is-disabled" href="#">下载三视图</a>
+                  <button id="regenerateTurnaroundBtn" type="button" class="image-btn image-btn-ghost">重生成</button>
+                </div>
+              </div>
+            </div>
+            <div class="card-footer page-footer character-page-footer">
+              <button id="goChapterBtn" type="button" class="image-btn image-btn-brand">章节配图 →</button>
+            </div>
+          </section>
+
+          <section id="chapter-panel" class="image-panel">
+            <div class="image-columns">
+              <div class="image-card image-col-list">
+                <h2>章节列表</h2>
+                <ul class="item-list" id="chapterList"></ul>
+              </div>
+
+              <div class="image-card image-col-main">
+                <h2>章节信息</h2>
+                <label>
+                  章节编号
+                  <input id="chapterIdInput" type="text" value="" />
+                </label>
+                <label>
+                  章节标题
+                  <input id="chapterTitleInput" type="text" value="" />
+                </label>
+                <label>
+                  关键事件
+                  <textarea id="chapterEventsInput"></textarea>
+                </label>
+                <label>
+                  章节提示词
+                  <textarea id="chapterPromptInput"></textarea>
+                </label>
+                <div class="card-footer chapter-main-footer">
+                  <button id="generateChapterBtn" type="button" class="image-btn image-btn-brand">生成本章配图</button>
+                </div>
+              </div>
+
+              <div class="image-card image-col-result">
+                <h2>结果预览</h2>
+                <div id="chapterResultBox" class="result-box chapter-result-box">
+                  <button id="previewChapterBtn" type="button" class="icon-button chapter-preview-button" title="放大查看" aria-label="放大查看" disabled>⤢</button>
+                  <div id="chapterResultGrid" class="chapter-result-grid">
+                    <div class="chapter-placeholder">当前章节配图会显示在这里</div>
+                  </div>
+                </div>
+                <p id="chapterTaskStatus" class="result-status">状态：待生成</p>
+                <div class="card-footer">
+                  <button id="downloadChapterBtn" type="button" class="image-btn image-btn-ghost" disabled>下载本章配图</button>
+                  <button id="regenerateChapterBtn" type="button" class="image-btn image-btn-ghost">重生成</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="assets-panel" class="image-panel">
+            <div class="image-page-title">
+              <h1>资源导出</h1>
+              <p>统一整理当前项目已生成的角色三视图、章节配图与说明文档。</p>
+            </div>
+
+            <div class="image-grid image-grid-three export-summary-grid">
+              <article class="image-card export-summary-card">
+                <h2>全部角色三视图</h2>
+                <p id="characterExportSummary" class="export-summary-text">已生成 0 / 0</p>
+                <button id="exportCharactersBtn" type="button" class="image-btn image-btn-brand">导出全部角色三视图</button>
+              </article>
+
+              <article class="image-card export-summary-card">
+                <h2>全部章节配图</h2>
+                <p id="chapterExportSummary" class="export-summary-text">已生成 0 / 0</p>
+                <button id="exportChaptersBtn" type="button" class="image-btn image-btn-brand">导出全部章节配图</button>
+              </article>
+
+              <article class="image-card export-summary-card">
+                <h2>全部素材</h2>
+                <p class="export-summary-text">包含角色三视图、章节配图和说明文档</p>
+                <button id="exportAllAssetsBtn" type="button" class="image-btn image-btn-brand">导出全部素材</button>
+              </article>
+            </div>
+
+            <div class="image-card">
+              <h2>导出说明</h2>
+              <p class="export-note">
+                说明文档将包含项目概览里的小说信息、每个角色的角色设定，以及每个章节配图对应的章节信息。
+              </p>
+              <p id="assetsExportStatus" class="micro-status"></p>
+            </div>
+
+            <div class="image-grid image-grid-two export-lists-grid">
+              <div class="image-card">
+                <h2>角色素材清单</h2>
+                <ul id="characterExportList" class="item-list export-item-list"></ul>
+              </div>
+
+              <div class="image-card">
+                <h2>章节素材清单</h2>
+                <ul id="chapterExportList" class="item-list export-item-list"></ul>
+              </div>
+            </div>
+
+            <div class="image-card export-legacy-note">
+              <p>当前版本已支持角色三视图下载，章节图片导出会基于后续资源管理接口继续扩展。</p>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <div id="imagePreviewModal" class="image-modal" aria-hidden="true">
+      <div class="image-modal-inner">
+        <button id="closePreviewBtn" type="button" class="icon-button image-modal-close" title="关闭" aria-label="关闭">✕</button>
+        <img id="previewImage" alt="三视图大图预览" />
+      </div>
+    </div>
+
+    <script type="module" src="/static/js/image-generation.js"></script>
+  </body>
+</html>
