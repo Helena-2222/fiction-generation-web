@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -74,7 +74,7 @@ class TaskResponse(BaseModel):
     task_type: str
     status: TaskStatus
     progress: int = 0
-    error_message: str | None = None
+    error_message: Optional[str] = None
     result: list[TaskResultItem] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime

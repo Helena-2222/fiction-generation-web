@@ -37,7 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!resp.ok) {
       let detail = "";
       try { detail = (await resp.json()).detail; } catch {}
-      throw new Error(detail || "请求失败 (HTTP " + resp.statusCode + ")");
+      throw new Error(detail || "请求失败 (HTTP " + resp.status + ")");
     }
     return resp.json();
   }
@@ -131,7 +131,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (localData.index_tts2_available) {
         badge.textContent = "本地 indexTTS2 在线";
         badge.className = "tts-server-badge online";
-        STATE.engine = "local";
+        STATE.engine = "local"; document.querySelector("input[name=ttsEngine][value=local]").checked = true;
         return;
       }
     } catch {}
@@ -144,7 +144,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (cloudData.token_valid) {
           badge.textContent = "EmotionTTS 云端在线";
           badge.className = "tts-server-badge online";
-          STATE.engine = "cloud";
+          STATE.engine = "cloud"; document.querySelector("input[name=ttsEngine][value=cloud]").checked = true;
           return;
         }
       } catch {}

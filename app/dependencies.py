@@ -1,5 +1,6 @@
 """Shared service singletons used across routers."""
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 

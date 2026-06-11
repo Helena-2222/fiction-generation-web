@@ -334,26 +334,6 @@ async def unload_models():
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-# --- HF Token for gated models ---
-
-class HfTokenRequest(BaseModel):
-    token: str
-
-@router.post("/hf-token")
-async def set_hf_token(request: HfTokenRequest):
-    """Save HuggingFace token for downloading gated models (Stable Audio 3)."""
-    from app.services.audio_service import _set_hf_token, _get_hf_token
-    _set_hf_token(request.token)
-    current = _get_hf_token()
-    return {"status": "ok", "token_set": bool(current), "message": "HF Token 已保存"}
-
-@router.get("/hf-token")
-async def get_hf_token_status():
-    """Check if HF token is configured."""
-    from app.services.audio_service import _get_hf_token
-    token = _get_hf_token()
-    return {"token_set": bool(token), "token_preview": (token[:6] + "..." + token[-4:]) if token and len(token) > 10 else None}
-
 @router.get("/device-info")
 async def get_device_info():
     """
