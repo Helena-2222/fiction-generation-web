@@ -1,14 +1,22 @@
-# 使用官方 Python 3.9 镜像作为基础镜像
-FROM python:3.9
+# Render deployment - lightweight image
+FROM python:3.11-slim
 
-# 设置工作目录为 /app
 WORKDIR /app
 
-# 将本地代码复制到 Docker 容器的 /app 目录
-COPY . /app
+# Install only required system deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
 
-# 安装项目依赖
-RUN pip install -r requirements.txt
+# Copy requirements first for better layer caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# 启动 FastAPI 应用
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Copy application code
+COPY . .
+
+# Render injects $PORT (typically 10000)
+ENV PORT=8000
+EXPOSE $PORT
+
+CMD sh -c "uvicorn app.main:app --host 0.0.0.0 --port $PORT"

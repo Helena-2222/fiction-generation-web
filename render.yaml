@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: fiction-generation
+    env: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_BASE_URL
+        value: https://api.deepseek.com
+      - key: DEEPSEEK_MODEL
+        value: deepseek-chat
+      - key: IMAGE_API_KEY
+        sync: false
+      - key: IMAGE_API_BASE_URL
+        value: https://dashscope.aliyuncs.com/api/v1
+      - key: IMAGE_MODEL
+        value: wan2.7-image
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: REQUEST_TIMEOUT_SECONDS
+        value: "180"
+      - key: HF_ENDPOINT
+        value: https://huggingface.co
