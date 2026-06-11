@@ -1,4 +1,4 @@
-﻿"""
+"""
 Standalone audio generation server.
 Run on your local machine to expose MusicGen/AudioGen/StableAudio3 as an HTTP API.
 
@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 from pydantic import BaseModel
 import uvicorn
 
@@ -65,13 +66,13 @@ class EffectsRequest(BaseModel):
 
 class ModelSwitchRequest(BaseModel):
     model_type: str  # "musicgen" or "stable-audio"
-    model_name: str | None = None
+    model_name: Optional[str] = None
 
 class AudioResponse(BaseModel):
     audio_path: str
     duration: float
     sample_rate: int
-    description: str | None = None
+    description: Optional[str] = None
 
 # ── Endpoints ───────────────────────────────────────────
 

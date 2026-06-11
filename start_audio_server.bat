@@ -5,7 +5,7 @@ REM  Usage: start_audio_server.bat
 REM ============================================================
 
 echo [1/3] Starting audio generation server on port 8001...
-start "AudioServer" cmd /c "..\fiction_generation\Scripts\python.exe audio_server.py --port 8001"
+start "AudioServer" cmd /c "E:\fiction_generation\fiction_generation\python.exe audio_server.py --port 8001"
 
 echo [2/3] Waiting for server to start...
 timeout /t 5 /nobreak >nul
