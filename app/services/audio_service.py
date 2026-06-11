@@ -410,7 +410,15 @@ class AudioService:
         if progress_callback:
             progress_callback(0.05, "Loading model...")
 
-        await loop.run_in_executor(self._ex(), gen._load)
+        try:
+            await loop.run_in_executor(self._ex(), gen._load)
+        except Exception as e:
+            logger.warning("SFX model load failed (%s), falling back to audiogen-medium", e)
+            if hasattr(gen, "unload"):
+                gen.unload()
+            self._ag = _HFMG("facebook/audiogen-medium", self.device)
+            gen = self._ag
+            await loop.run_in_executor(self._ex(), gen._load)
 
         results = []
         total = len(descriptions)

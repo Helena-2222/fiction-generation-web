@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+import os
 import mimetypes
+
+# --- HF Mirror for mainland China ---
+# Must be set BEFORE any huggingface_hub / diffusers import
+if not os.environ.get('HF_ENDPOINT'):
+    os.environ['HF_ENDPOINT'] = os.environ.get('HF_MIRROR', 'https://hf-mirror.com')
+if not os.environ.get('HF_HUB_DISABLE_SYMLINKS_WARNING'):
+    os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
