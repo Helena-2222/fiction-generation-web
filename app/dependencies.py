@@ -17,21 +17,39 @@ llm_task_manager = LlmTaskManager(story_service)
 summary_service = SummaryService(_client)
 
 # EmotionTTS Cloud service (external API, no local models)
-tts_cloud_service = TtsCloudService()
+tts_cloud_service = TtsCloudService(
+    api_token=os.environ.get("EMOTIONTTS_API_TOKEN", "sk-nmnk0mEJ1J8fOTVnktQruPIcWNBytGISjWVwyuEv5p1E08qW")
+)
 
 # Audio/TTS services — optional, require torch + transformers
 audio_service = None
 tts_service = None
 
 def _init_audio_services():
-    """Initialize audio and TTS services if torch is available.
-    Called lazily on first API request to avoid crashing on Render."""
+    """Initialize audio services. Uses AUDIO_API_URL if configured (Render -> local machine)."""
     global audio_service, tts_service
     if audio_service is not None:
         return
+
+    import os as _os
+
+    # Check for remote audio API first (Render deployment -> local GPU machine)
+    _audio_api_url = _os.environ.get("AUDIO_API_URL", "").strip()
+    if _audio_api_url:
+        try:
+            from app.services.audio_api_client import AudioApiClient
+            audio_service = AudioApiClient(_audio_api_url)
+            logger.info("Audio service: remote API at %s", _audio_api_url)
+        except ImportError as e:
+            logger.warning("AudioApiClient import failed: %s", e)
+            audio_service = _DummyAudioService()
+        # TTS still needs torch locally or cloud
+        _init_tts()
+        return
+
+    # Try local torch-based audio service
     try:
         from app.services.audio_service import AudioService
-        from app.services.tts_service import TtsService
         audio_service = AudioService(
             device=None,
             music_model_name="facebook/musicgen-small",
@@ -40,17 +58,31 @@ def _init_audio_services():
             stable_music_model="stabilityai/stable-audio-3-small-music",
             stable_sfx_model="stabilityai/stable-audio-3-small-sfx",
         )
-        tts_service = TtsService(llm_client=_client)
-        logger.info("Audio/TTS services initialized")
+        logger.info("Audio service: local torch")
     except ImportError as e:
-        logger.warning("Audio/TTS services unavailable (missing torch/transformers): %s", e)
+        logger.warning("Audio service unavailable (missing torch): %s", e)
         audio_service = _DummyAudioService()
+    except Exception as e:
+        logger.error("Audio init failed: %s", e)
+        audio_service = _DummyAudioService()
+
+    _init_tts()
+
+
+def _init_tts():
+    global tts_service
+    if tts_service is not None:
+        return
+    try:
+        from app.services.tts_service import TtsService
+        tts_service = TtsService(llm_client=_client)
+        logger.info("TTS service: local")
+    except ImportError as e:
+        logger.warning("TTS service unavailable: %s", e)
         tts_service = _DummyTtsService()
     except Exception as e:
-        logger.error("Audio/TTS init failed: %s", e)
-        audio_service = _DummyAudioService()
+        logger.error("TTS init failed: %s", e)
         tts_service = _DummyTtsService()
-
 
 class _DummyAudioService:
     """Placeholder when audio models are not available (e.g. on Render)."""
