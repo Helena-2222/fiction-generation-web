@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/static/css/base.css" />
     <link rel="stylesheet" href="/static/css/components.css" />
     <link rel="stylesheet" href="/static/css/app-nav.css" />
-    <link rel="stylesheet" href="/static/css/audio-generation.css?v=20260611b" />
+    <link rel="stylesheet" href="/static/css/audio-generation.css?v=20260607g" />
   </head>
   <body>
     <div class="app audio-app">
@@ -79,6 +79,12 @@
             <div class="audio-page-title">
               <h1>音频生成</h1>
               <p>基于小说内容，智能生成背景音乐与环境音效。</p>
+
+            <div class="audio-card audio-card-token">
+              <div class="card-heading">
+                <h2>HF Token 配置</h2>
+                <span id="hfTokenStatus" class="micro-status" style="margin:0;"></span>
+              </div>
               <div class="audio-actions-inline">
                 <input id="hfTokenInput" type="password" placeholder="输入 HuggingFace Token 以访问 gated 模型（如 Stable Audio 3）" />
                 <button id="saveHfTokenBtn" type="button" class="audio-btn audio-btn-brand">保存</button>
@@ -223,6 +229,6 @@
     </div>
 
     <div id="page-toast" class="page-toast hidden" aria-live="polite" aria-hidden="true"></div>
-    <script src="/static/js/audio-generation.js?v=20260611b"></script>
+    <script src="/static/js/audio-generation.js?v=20260607g"></script>
   </body>
 </html>
