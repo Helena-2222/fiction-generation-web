@@ -1,5 +1,6 @@
 """Shared service singletons used across routers."""
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +62,24 @@ def _init_audio_services():
         logger.info("Audio service: local torch")
     except ImportError as e:
         logger.warning("Audio service unavailable (missing torch): %s", e)
-        audio_service = _DummyAudioService()
+        audio_service = None
     except Exception as e:
         logger.error("Audio init failed: %s", e)
-        audio_service = _DummyAudioService()
+        audio_service = None
+
+    # Fallback: HuggingFace cloud inference (no GPU needed)
+    if audio_service is None:
+        _hf_token = _os.environ.get("HF_TOKEN", "").strip()
+        if _hf_token:
+            try:
+                from app.services.audio_hf_service import AudioHfService
+                audio_service = AudioHfService(hf_token=_hf_token)
+                logger.info("Audio service: HF cloud (token=%s...)", _hf_token[:8])
+            except Exception as e2:
+                logger.warning("HF cloud audio unavailable: %s", e2)
+                audio_service = _DummyAudioService()
+        else:
+            audio_service = _DummyAudioService()
 
     _init_tts()
 
@@ -87,6 +102,7 @@ def _init_tts():
 class _DummyAudioService:
     """Placeholder when audio models are not available (e.g. on Render)."""
     model_type = "unavailable"
+    mmn = ""
     stable_music_model = ""
     stable_sfx_model = ""
     def __getattr__(self, name):
