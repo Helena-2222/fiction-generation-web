@@ -1,0 +1,37 @@
+flowchart TD
+  SuperStory["SuperStory"]
+
+  SuperStory --> Landing["Landing Page<br/>/"]
+  Landing --> L1["Brand Hero<br/>product intro + start entry"]
+  Landing --> L2["Product Highlights<br/>workflow + core features + Neuro AI"]
+  Landing --> L3["CTA Entry<br/>open Create or Auth"]
+
+  SuperStory --> AppShell["App Shell"]
+  AppShell --> Nav["Sidebar Navigation<br/>Create / Works / Notes / User Center"]
+  AppShell --> AuthState["Auth State<br/>Guest / Signed-in User"]
+  AppShell --> Storage["Shared Data<br/>localStorage / Works Library / Cloud Workspace"]
+
+  SuperStory --> Create["Create Workbench<br/>/create"]
+  Create --> CreateBasic["Basic Info<br/>genre / synopsis / worldview / style / length"]
+  Create --> CreateCharacters["Character Setup<br/>dossiers / relation graph / AI relation supplement"]
+  Create --> CreateOutline["Outline Generation<br/>generate / regenerate / history / export"]
+  Create --> CreateStory["Story Generation<br/>chapters / local edit / favorite quote / export"]
+  Create --> CreateNeuro["Neuro Assistant<br/>task status / logs / feedback / pause-resume"]
+
+  SuperStory --> Works["Works Management<br/>/works"]
+  Works --> WorksShelf["Bookshelf<br/>work list / open work"]
+  Works --> WorksOps["Work Actions<br/>new / rename / duplicate / delete"]
+
+  SuperStory --> Notes["My Notes<br/>/mynote"]
+  Notes --> NotesList["Favorite Quotes<br/>grouped by work and chapter"]
+  Notes --> NotesOps["Note Actions<br/>filter / delete / sync favorites"]
+
+  SuperStory --> UserCenter["User Center<br/>/usercenter"]
+  UserCenter --> Profile["Profile<br/>avatar / name / auth status"]
+  UserCenter --> Stats["Writing Stats<br/>time / days / works / words"]
+  UserCenter --> UserWorks["My Works<br/>work entries / progress overview"]
+  UserCenter --> Subscription["Subscriptions<br/>placeholder"]
+
+  SuperStory --> Auth["Auth<br/>/auth"]
+  Auth --> AuthForm["Login / Register / Password Reset"]
+  Auth --> AuthRedirect["Redirect back to creation flow"]

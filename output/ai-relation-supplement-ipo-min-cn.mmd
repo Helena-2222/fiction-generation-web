@@ -1,0 +1,27 @@
+flowchart LR
+  subgraph Input["输入"]
+    A["已保存的 story 快照<br/>state.savedStoryDraft"]
+    A1["包含：基本信息 / 角色档案 / 已有关系"]
+    A --> A1
+  end
+
+  subgraph Process["处理"]
+    B["发送 AI 补充请求<br/>POST /api/llm-tasks/relations/supplement"]
+    C["构造提示词<br/>STORY_JSON + relation_supplement_prompt.txt"]
+    D["LLM 推断新增关系"]
+    E["后端过滤<br/>无效关系 / 不存在角色 / 重复方向关系"]
+
+    B --> C --> D --> E
+  end
+
+  subgraph Output["输出"]
+    F["返回 added_relations"]
+    G["前端 appendAiRelation()<br/>二次去重"]
+    H["写入 state.relations"]
+    I["renderGraph()<br/>重绘角色关系图"]
+
+    F --> G --> H --> I
+  end
+
+  A1 --> B
+  E --> F

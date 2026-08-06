@@ -38,7 +38,8 @@
 
 ## 技术栈
 
-- 后端：`FastAPI`、`httpx`、`uvicorn`
+- 后端：`FastAPI`、`httpx`、`Uvicorn`
+- 生产部署：`Nginx`、`Gunicorn`、多 Worker
 - 前端：原生 `HTML / CSS / JavaScript`
 - 大模型：`DeepSeek`
 - 鉴权与账户：`Supabase Auth`
@@ -119,17 +120,77 @@ VITE_SUPABASE_ANON_KEY=your_supabase_publishable_key
 - `DEEPSEEK_API_KEY` 必填项，请先在deepseek官网创建API KEY，然后在.env中填入你的API KEY。创建deepseek API KEY具体方法参见https://api-docs.deepseek.com/zh-cn/api/deepseek-api
 - `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY` 选填项，为supabase数据库密钥，正确填写后方可使用用户登录与注册功能，不填则只能以游客身份登录。这两条密钥的创建与配置方法详见本项目SUPABASE_SETUP.md 。
 
-### 3. 启动服务
+### 3. 启动开发服务
 
 ```bash
 uvicorn app.main:app --reload
 ```
+
+`--reload` 只用于本地开发，生产环境不要启用。
 
 启动后访问：
 http://127.0.0.1:8000/
 - 首页：``
 - 登录页：`http://127.0.0.1:8000/auth`
 - 创作页：`http://127.0.0.1:8000/create`
+
+## 生产部署与性能优化
+
+生产环境采用以下请求路径：
+
+```text
+浏览器 -> Nginx -> HTML（直接响应且不做强缓存）
+                 -> CSS/JS/图片（直接响应，缓存 7 天并启用 gzip）
+                 -> 普通 /api/*（4 个 Gunicorn + Uvicorn Worker）
+                 -> /api/llm-tasks/*（独立的单 Worker 任务服务）
+```
+
+项目的 LLM 异步任务状态当前保存在进程内存中。如果把任务接口直接放进多个 Worker，任务创建、状态轮询和暂停请求可能落到不同进程并返回 404。因此生产配置只将任务生命周期接口固定到一个独立 Worker，其余 API 仍使用多进程并行。后续把任务状态迁移到 Redis/Celery 等共享存储后，可再扩展任务服务的 Worker 数量。
+
+### Docker Compose（推荐）
+
+确认 `.env` 已配置后执行：
+
+```bash
+docker compose up -d --build
+
+```
+
+默认访问 `http://127.0.0.1/`。可在 `.env` 中调整：
+
+```env
+API_WORKERS=4
+HTTP_PORT=80
+```
+
+`API_WORKERS` 建议从 CPU 核心数附近开始，并根据压测结果和单 Worker 内存占用调整。4 核服务器可先使用默认值 `4`，不要在未观察内存和上游模型限流的情况下机械套用更高数量。
+
+更新部署：
+
+```bash
+docker compose up -d --build
+docker compose logs -f nginx api llm-tasks
+```
+
+### Linux 主机部署
+
+将项目放到 `/var/www/superstory`，安装依赖后分别启动普通 API 与任务 API：
+
+```bash
+gunicorn app.main:app --workers 4 --worker-class uvicorn_worker.UvicornWorker --bind 127.0.0.1:8000 --timeout 240 --worker-tmp-dir /dev/shm
+gunicorn app.main:app --workers 1 --worker-class uvicorn_worker.UvicornWorker --bind 127.0.0.1:8001 --timeout 240 --worker-tmp-dir /dev/shm
+```
+
+生产运行时应使用 `systemd` 等进程管理器分别托管这两个命令。然后启用项目提供的 Nginx 配置：
+
+```bash
+sudo cp deploy/nginx/superstory.conf /etc/nginx/sites-available/superstory.conf
+sudo ln -s /etc/nginx/sites-available/superstory.conf /etc/nginx/sites-enabled/superstory.conf
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+配置文件默认域名为 `www.superstory.xyz` 和 `superstory.xyz`；若部署目录或域名不同，请同步修改 `deploy/nginx/superstory.conf`。Nginx 会直接响应所有现有页面和 `/static/`，动态接口才进入 FastAPI。
 
 ## 创作流程
 

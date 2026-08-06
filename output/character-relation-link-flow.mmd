@@ -1,0 +1,70 @@
+flowchart TD
+  A["User drags on character graph"]
+
+  A --> B["setupGraphInteractions binds events<br/>pointerdown / pointermove / pointerup / pointercancel"]
+
+  B --> C["pointerdown on graph canvas"]
+  C --> D{"Left button?"}
+  D -- "No: middle button" --> P["Graph pan mode<br/>move viewport"]
+  D -- "No: other button" --> X["Ignore"]
+  D -- "Yes" --> E["Convert client position<br/>getGraphPointFromClient"]
+  E --> F{"Hit a character node?<br/>findCharacterAtGraphPoint"}
+  F -- "No" --> X
+  F -- "Yes" --> G["startGraphNodePress<br/>state.nodePress = source character + pointer id"]
+
+  G --> H["pointermove"]
+  H --> I{"Moved far enough?<br/>GRAPH_NODE_EDGE_DRAG_DISTANCE"}
+  I -- "No" --> H
+  I -- "Yes" --> J["startPendingEdgeFromNodePress"]
+  J --> K["state.pendingEdge = sourceId + currentPoint + candidateTargetId"]
+  K --> L["updatePendingEdgePoint"]
+  L --> M["Hover detection<br/>candidateTargetId = hovered character if not source"]
+  M --> N["renderGraph<br/>draw temporary edge + highlight source/target"]
+
+  N --> O["pointermove while dragging"]
+  O --> L
+
+  N --> Q["pointerup"]
+  Q --> R["Find release target<br/>findCharacterAtGraphPoint"]
+  R --> S["Clear pendingEdge<br/>renderGraph"]
+  S --> T{"Valid target?<br/>target exists and target != source"}
+  T -- "No" --> U["Cancel connection<br/>no relation created"]
+  T -- "Yes" --> V["openRelationModal(sourceId, targetId)"]
+
+  V --> W["Load existing forward/reverse relation if any"]
+  W --> Y["state.relationEditor = source/target/edit context"]
+  Y --> Z["User fills relation label<br/>optionally enable reverse relation"]
+  Z --> AA["Click save relation"]
+  AA --> AB{"Forward label filled?"}
+  AB -- "No" --> AC["Show status error<br/>do not save"]
+  AB -- "Yes" --> AD["createRelationRecord<br/>source_id / target_id / label / names / anchors / source=user"]
+  AD --> AE["upsertDirectionalRelation<br/>replace same direction, then push into state.relations"]
+
+  AE --> AF{"Reverse relation checked?"}
+  AF -- "Yes" --> AG["Create reverse relation record<br/>target -> source"]
+  AG --> AH["upsertDirectionalRelation for reverse"]
+  AF -- "No, but old reverse existed" --> AI["Remove old reverse relation"]
+  AF -- "No old reverse" --> AJ["Keep only forward relation"]
+  AH --> AK["syncRelationNames"]
+  AI --> AK
+  AJ --> AK
+
+  AK --> AL["renderGraph<br/>draw saved relation line and label"]
+  AL --> AM["closeRelationModal"]
+  AM --> AN["markStoryDraftDirty<br/>queueCharacterHistorySnapshot"]
+  AN --> AO["Status: relation updated, click Save Relations to sync full graph"]
+
+  B --> CA["pointercancel"]
+  CA --> CB["Release pointer capture"]
+  CB --> CC["state.pendingEdge = null"]
+  CC --> CD["renderGraph"]
+
+  AL --> DA["Click existing relation label/line"]
+  DA --> V
+  AL --> DB["Delete relation action"]
+  DB --> DC["openRelationDeleteModal"]
+  DC --> DD{"Delete direction or pair?"}
+  DD -- "direction" --> DE["deleteDirectionalRelation"]
+  DD -- "pair" --> DF["deleteRelationPair"]
+  DE --> DG["renderGraph + mark dirty + history"]
+  DF --> DG

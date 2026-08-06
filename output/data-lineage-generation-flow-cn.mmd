@@ -1,0 +1,94 @@
+flowchart LR
+  U["用户填写/编辑"]
+
+  subgraph FEInput["前端输入与状态"]
+    Basic["基本信息数据<br/>genre / synopsis / worldview / style / length"]
+    Characters["角色档案数据<br/>state.characters"]
+    ManualRelations["手动关系数据<br/>state.relations"]
+    StoryPayload["故事草稿载荷<br/>buildStoryPayload()"]
+    SavedDraft["已保存关系快照<br/>state.savedStoryDraft"]
+  end
+
+  subgraph RelationAI["可选：AI 补充角色关系"]
+    RelationReq["关系补充请求<br/>story = state.savedStoryDraft"]
+    RelationPrompt["关系补充 Prompt<br/>STORY_JSON + relation_supplement_prompt"]
+    AddedRelations["新增关系结果<br/>added_relations"]
+    MergedRelations["合并后的关系图数据<br/>state.relations"]
+  end
+
+  subgraph OutlineGen["大纲生成"]
+    OutlineReq["大纲生成请求<br/>story + feedback + previous_outline"]
+    AutoNames["可选自动起名结果<br/>auto_named_characters"]
+    OutlinePrompt["大纲 Prompt<br/>STORY_JSON + outline_prompt"]
+    OutlineData["结构化大纲<br/>state.outline"]
+    OutlineHistory["大纲历史<br/>outlineHistory"]
+  end
+
+  subgraph StoryGen["正文生成"]
+    StoryReq["正文生成请求<br/>story + outline"]
+    ChapterPrompt["逐章正文 Prompt<br/>STORY_JSON + OUTLINE_JSON + chapter_spec"]
+    GeneratedStory["生成正文<br/>state.generatedStory"]
+  end
+
+  subgraph Editing["正文后续使用"]
+    Selection["选中文本上下文<br/>selected_text + before/after context"]
+    RewriteReq["局部重写请求<br/>story + outline + selection"]
+    RewrittenText["局部重写结果<br/>rewritten_text"]
+    FavoriteQuotes["收藏句子<br/>favoriteQuotes"]
+    ExportData["导出数据<br/>设定 / 大纲 / 全书"]
+  end
+
+  subgraph Persistence["持久化与管理"]
+    Workspace["工作区快照<br/>localStorage / user_workspaces"]
+    WorksLibrary["作品库<br/>works"]
+    NotesPage["我的笔记<br/>按作品/章节读取 favoriteQuotes"]
+    UserCenter["用户中心<br/>作品进度 / 统计"]
+  end
+
+  U --> Basic
+  U --> Characters
+  U --> ManualRelations
+
+  Basic --> StoryPayload
+  Characters --> StoryPayload
+  ManualRelations --> StoryPayload
+
+  StoryPayload --> SavedDraft
+  SavedDraft --> RelationReq
+  RelationReq --> RelationPrompt
+  RelationPrompt --> AddedRelations
+  AddedRelations --> MergedRelations
+  MergedRelations --> StoryPayload
+
+  StoryPayload --> OutlineReq
+  OutlineReq --> OutlinePrompt
+  OutlinePrompt --> OutlineData
+  OutlineReq --> AutoNames
+  AutoNames --> Characters
+  OutlineData --> OutlineHistory
+
+  StoryPayload --> StoryReq
+  OutlineData --> StoryReq
+  StoryReq --> ChapterPrompt
+  ChapterPrompt --> GeneratedStory
+
+  GeneratedStory --> Selection
+  Selection --> RewriteReq
+  StoryPayload --> RewriteReq
+  OutlineData --> RewriteReq
+  RewriteReq --> RewrittenText
+  RewrittenText --> GeneratedStory
+
+  GeneratedStory --> FavoriteQuotes
+  StoryPayload --> ExportData
+  OutlineData --> ExportData
+  GeneratedStory --> ExportData
+
+  StoryPayload --> Workspace
+  OutlineData --> Workspace
+  GeneratedStory --> Workspace
+  FavoriteQuotes --> Workspace
+  Workspace --> WorksLibrary
+  WorksLibrary --> NotesPage
+  WorksLibrary --> UserCenter
+  FavoriteQuotes --> NotesPage

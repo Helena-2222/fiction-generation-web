@@ -1,0 +1,29 @@
+flowchart TD
+  A["用户编辑角色档案和关系图"]
+  A --> B["点击保存关系"]
+  B --> C["buildStoryPayload()"]
+  C --> D["保存到前端快照<br/>state.savedStoryDraft"]
+  D --> E["启用 AI补充按钮"]
+
+  E --> F["点击 AI补充"]
+  F --> G{"是否已保存关系快照？"}
+  G -- "否" --> H["提示先保存关系"]
+  G -- "是" --> I["POST /api/llm-tasks/relations/supplement<br/>发送 story = state.savedStoryDraft"]
+
+  I --> J["FastAPI 接收请求"]
+  J --> K["Pydantic 校验<br/>RelationSupplementRequest"]
+  K --> L["StoryService.supplement_relations()"]
+  L --> M["整理故事梗概、角色档案、已有关系<br/>构造 LLM prompt"]
+  M --> N["LLM 推断可补充的角色关系"]
+  N --> O["后端解析返回结果<br/>过滤无效关系和重复方向关系"]
+
+  O --> P["返回 added_relations"]
+  P --> Q["前端 appendAiRelation()"]
+  Q --> R{"前端二次去重<br/>同方向关系是否已存在？"}
+  R -- "已存在" --> S["跳过该关系"]
+  R -- "不存在" --> T["加入 state.relations"]
+
+  S --> U["syncRelationNames()"]
+  T --> U
+  U --> V["renderGraph()<br/>重绘角色关系图"]
+  V --> W["更新 savedStoryDraft<br/>记录角色关系历史"]

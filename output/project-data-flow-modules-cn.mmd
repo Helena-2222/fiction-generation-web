@@ -1,0 +1,83 @@
+flowchart LR
+  User["用户"]
+
+  subgraph FE["前端页面模块"]
+    Basic["基本信息模块<br/>类型 / 梗概 / 世界观 / 风格 / 篇幅"]
+    Character["角色档案模块<br/>角色卡 / 人物设定"]
+    Relation["角色关系图模块<br/>手动连线 / 关系编辑"]
+    Payload["统一故事载荷<br/>buildStoryPayload()"]
+    SavedDraft["已保存关系快照<br/>state.savedStoryDraft"]
+    OutlineUI["大纲生成模块<br/>state.outline / outlineHistory"]
+    StoryUI["正文生成模块<br/>state.generatedStory"]
+    Favorite["句子收藏模块<br/>favoriteQuotes"]
+    Notes["我的笔记模块"]
+    Works["作品管理模块"]
+    UserCenter["用户中心模块"]
+  end
+
+  subgraph Storage["前端/云端存储"]
+    State["前端全局状态<br/>state"]
+    Local["浏览器本地缓存<br/>localStorage"]
+    Cloud["云端作品/工作区<br/>Supabase"]
+  end
+
+  subgraph BE["后端 API 与服务"]
+    API["FastAPI 接口层<br/>/api/llm-tasks/*"]
+    Pydantic["Pydantic 校验<br/>请求结构 / 类型 / 必填项"]
+    Task["LLM 任务管理器<br/>LlmTaskManager"]
+    Service["故事生成服务<br/>StoryService"]
+    Prompt["提示词构造<br/>STORY_JSON + prompt template"]
+  end
+
+  subgraph AI["外部 AI 服务"]
+    LLM["DeepSeek / LLM"]
+  end
+
+  User --> Basic
+  User --> Character
+  User --> Relation
+
+  Basic --> State
+  Character --> State
+  Relation --> State
+
+  State --> Payload
+  Payload --> SavedDraft
+  SavedDraft --> RelationAI["AI 补充关系模块"]
+
+  RelationAI --> API
+  Payload --> OutlineReq["大纲生成请求"]
+  OutlineReq --> API
+  Payload --> StoryReq["正文生成请求"]
+  OutlineUI --> StoryReq
+  StoryReq --> API
+
+  API --> Pydantic --> Task --> Service --> Prompt --> LLM
+  LLM --> Service
+
+  Service --> AddedRelations["added_relations"]
+  AddedRelations --> Relation
+  Relation --> State
+
+  Service --> OutlineResp["结构化大纲 JSON"]
+  OutlineResp --> OutlineUI
+  OutlineUI --> State
+
+  Service --> StoryResp["章节正文 JSON"]
+  StoryResp --> StoryUI
+  StoryUI --> State
+
+  StoryUI --> Favorite
+  Favorite --> Notes
+
+  State --> Local
+  State --> Cloud
+  Cloud --> Works
+  Cloud --> UserCenter
+  Local --> Works
+  Local --> UserCenter
+
+  Works --> State
+  UserCenter --> Cloud
+
+  StoryUI --> Export["导出模块<br/>设定 / 大纲 / 全书"]

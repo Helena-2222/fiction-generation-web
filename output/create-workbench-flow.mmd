@@ -1,0 +1,150 @@
+flowchart TB
+  Start([打开 /create 创作台])
+  Load[前端初始化 app.js: loadWorkspaceSnapshot]
+  Restore{有工作区快照?}
+  Apply[applyWorkspaceSnapshot: 恢复 form/state/characters/relations/outline/story]
+  Init[buildInitialWorkspaceSnapshot: 空表单 + 默认 3 个角色]
+  Render[渲染阶段页签、表单、关系图和 Neuro 状态]
+
+  Start --> Load --> Restore
+  Restore -- 是 --> Apply --> Render
+  Restore -- 否 --> Init --> Render
+
+  subgraph Basic["阶段 1: 基本信息（前端本地态）"]
+    B1[HTML 输入: 故事类型 genre / 梗概 synopsis / 风格 style / 世界观三字段 / total_words / chapter_words]
+    B2[chip 点击写入 state.genre 或 state.style]
+    B3[输入框 input: markStoryDraftDirty + basicHistory + saveWorkspaceSnapshot]
+    B4[点击“编辑角色”: setCurrentStage characters]
+    B5{{注意: 不发 API, 不做完整后端校验}}
+
+    B1 --> B2
+    B1 --> B3
+    B3 --> B4 --> B5
+  end
+
+  Render --> Basic
+
+  subgraph Characters["阶段 2: 角色设定 + 关系图（前端本地态）"]
+    C0[无快照时默认 createCharacter 生成 3 个空角色]
+    C1[CHARACTER_DOSSIER_FIELDS 动态渲染角色档案表单]
+    C2[档案输入: 更新 activeCharacter 字段]
+    C3[syncRelationNames + renderGraph + markStoryDraftDirty + characterHistory]
+    C4[新增/删除角色: 更新 state.characters 并清理相关 relations]
+    C5[关系图拖拽连线]
+    C6[Relation Modal 填写正向/反向关系]
+    C7[保存单条关系: upsertDirectionalRelation 写入 state.relations]
+    C8[点击“保存关系”]
+    C9[buildStoryPayload]
+    C10{前端校验: genre/synopsis 非空, total_words 大于 0, characters 至少 2 个}
+    C11[state.savedStoryDraft = payload; state.isStorySaved = true; 启用 AI 补充]
+    C12[点击“AI补充”]
+    C13{是否已保存 savedStoryDraft?}
+    C14[POST /api/llm-tasks/relations/supplement, body: story = savedStoryDraft]
+    C15[任务完成返回 added_relations]
+    C16[appendAiRelation 去重合并, renderGraph, 更新 savedStoryDraft]
+    CE[前端提示, 不继续]
+    CE2[提示先保存关系]
+
+    C0 --> C1
+    C1 --> C2 --> C3
+    C4 --> C3
+    C5 --> C6 --> C7 --> C3
+    C8 --> C9 --> C10
+    C10 -- 否 --> CE
+    C10 -- 是 --> C11
+    C11 --> C12 --> C13
+    C13 -- 否 --> CE2
+    C13 -- 是 --> C14 --> C15 --> C16
+  end
+
+  Basic --> Characters
+
+  subgraph Payload["统一请求体: buildStoryPayload"]
+    P1[genre = customGenre 或 state.genre]
+    P2[synopsis = textarea.trim]
+    P3[style = customStyle 或 state.style]
+    P4[worldview_time / worldview_physical / worldview_social]
+    P5[total_words / chapter_words]
+    P6[characters = state.characters.map serializeCharacter]
+    P7[relations = state.relations.map serializeRelation]
+    P8[角色额外字段合并: strengths/weaknesses/speaking_style -> personality; inner_conflict/character_arc/values -> values]
+
+    P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7
+    P6 --> P8
+  end
+
+  C9 --> Payload
+
+  subgraph BackendCommon["后端共同入口（FastAPI + Pydantic + 任务管理器）"]
+    API1[前端 postJson: Content-Type application/json]
+    API2[FastAPI Router 接收 /api/llm-tasks/...]
+    API3[Pydantic 模型校验: StoryDraftRequest / CharacterCard / CharacterRelation]
+    API4[LlmTaskManager 创建 task_id, 后台执行]
+    API5[前端轮询 GET /api/llm-tasks/task_id]
+
+    API1 --> API2 --> API3 --> API4 --> API5
+  end
+
+  C14 --> API1
+
+  subgraph Outline["阶段 3: 大纲生成"]
+    O1[点击“生成大纲”: form submit handleOutlineSubmit]
+    O2[buildStoryPayload]
+    O3{前端校验: genre/synopsis 非空}
+    O4[POST /api/llm-tasks/outline, body: story + feedback + previous_outline]
+    O5[StoryService.generate_outline]
+    O6[_normalize_story: chapter_words 默认值, 清理角色和关系]
+    O7[_assign_names_to_unnamed_characters: 未命名角色先由 LLM 起名]
+    O8[_chapter_targets: 按 total_words/chapter_words 算章节目标]
+    O9[_build_compact_story_prompt_json + outline_prompt]
+    O10[LLM 返回 JSON -> GeneratedOutline Pydantic 校验]
+    O11[返回 story + outline + auto_named_characters]
+    O12[前端 applyServerStoryDraft + normalizeOutline + outlineHistory + renderOutline]
+    O13[setCurrentStage outline]
+    O14[重生成: 同接口, 带 feedback 和 previous_outline, 完成后清空旧正文]
+    OE[前端提示, 不继续]
+
+    O1 --> O2 --> O3
+    O3 -- 否 --> OE
+    O3 -- 是 --> O4 --> O5 --> O6 --> O7 --> O8 --> O9 --> O10 --> O11 --> O12 --> O13
+    O13 --> O14
+  end
+
+  Payload --> O1
+  O4 --> API1
+  API4 --> O5
+  API5 --> O12
+
+  subgraph Story["阶段 4: 正文生成"]
+    S1[点击“生成正文”]
+    S2{是否已有 state.outline?}
+    S3[POST /api/llm-tasks/story, body: story = buildStoryPayload + outline = state.outline]
+    S4[StoryGenerationRequest Pydantic 校验]
+    S5[StoryService.generate_story: 汇总设定/角色/关系/大纲]
+    S6[LLM 生成章节正文 JSON]
+    S7[返回 StoryGenerationResponse: title + chapters]
+    S8[前端 normalizeGeneratedStory + renderStory]
+    S9[setCurrentStage story]
+    S10[后续操作: 手动编辑、AI 局部重写、单章重生成、导出设定/全书/全部]
+    SE[按钮不可用或提示先生成大纲]
+
+    S1 --> S2
+    S2 -- 否 --> SE
+    S2 -- 是 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8 --> S9 --> S10
+  end
+
+  O13 --> Story
+  S3 --> API1
+  API4 --> S5
+  API5 --> S8
+
+  subgraph Models["真实后端模型重点"]
+    M1[StoryDraftRequest: genre, synopsis*, style, worldview_time, worldview_physical, worldview_social, total_words*, chapter_words, characters, relations]
+    M2[CharacterCard: id, name, gender, age, occupation, nationality, personality, appearance, values, core_motivation, graph_x, graph_y]
+    M3[CharacterRelation: id, source_id, target_id, label, source_name, target_name, bidirectional, relation_source]
+    M4[不是 story_type/story_outline/world_view/language_style/target_audience]
+
+    M1 --> M2 --> M3 --> M4
+  end
+
+  API3 --> Models

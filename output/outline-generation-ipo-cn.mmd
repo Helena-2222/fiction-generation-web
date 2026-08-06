@@ -1,0 +1,39 @@
+flowchart LR
+  subgraph Input["输入"]
+    A["基本信息<br/>类型 / 梗概 / 世界观 / 风格 / 篇幅"]
+    B["角色设定<br/>角色档案 / 角色关系"]
+    C["buildStoryPayload()<br/>整理为 story"]
+    D["重生成时额外输入<br/>feedback + previous_outline"]
+
+    A --> C
+    B --> C
+  end
+
+  subgraph Process["处理"]
+    E["发送大纲生成请求<br/>POST /api/llm-tasks/outline"]
+    F["Pydantic 校验<br/>OutlineGenerationRequest"]
+    G["StoryService.generate_outline()"]
+    H["规范化 story<br/>清理角色和关系 / 计算章节目标"]
+    I["未命名角色自动起名<br/>auto_named_characters"]
+    J["构造提示词<br/>STORY_JSON + outline_prompt.txt"]
+    K["LLM 生成结构化大纲 JSON"]
+    L["GeneratedOutline 校验与规范化"]
+
+    E --> F --> G --> H --> I --> J --> K --> L
+  end
+
+  subgraph Output["输出"]
+    M["返回 OutlineGenerationResponse"]
+    N["state.outline<br/>保存当前大纲"]
+    O["renderOutline()<br/>展示到大纲页面"]
+    P["outlineHistory<br/>保存历史版本"]
+    Q["作为正文生成输入<br/>state.outline + story"]
+
+    M --> N --> O
+    N --> P
+    N --> Q
+  end
+
+  C --> E
+  D --> E
+  L --> M

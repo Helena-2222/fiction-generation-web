@@ -1,0 +1,51 @@
+flowchart TB
+  User([用户])
+
+  subgraph Browser["浏览器前端"]
+    HTML["static/html/create.html<br/>创作台页面骨架"]
+    CSS["static/css/*.css<br/>视觉样式 / 布局 / 组件样式"]
+    App["static/js/app.js<br/>前端主控制器"]
+
+    subgraph Modules["static/js/src 模块"]
+      State["state.js<br/>全局运行状态"]
+      Constants["constants.js<br/>选项 / 字段配置 / 阶段配置"]
+      Api["api.js<br/>postJson / getJson"]
+      Auth["auth-client.js<br/>登录状态"]
+      Cloud["cloud-workspace.js<br/>云端工作区"]
+      WorkLib["work-library.js<br/>作品库本地缓存"]
+      Utils["utils.js<br/>ID / 转义 / 格式化工具"]
+    end
+
+    UI["DOM 渲染与交互<br/>基本信息表单 / 角色档案 / 关系图 / 大纲 / 正文"]
+    Local["浏览器本地存储<br/>guest workspace / history / draft"]
+  end
+
+  subgraph Backend["后端 FastAPI"]
+    APIBackend["/api/llm-tasks/*<br/>/api/export/*<br/>/api/public-config"]
+    LLM["LLM 任务与生成服务"]
+  end
+
+  subgraph External["外部服务"]
+    Supabase["Supabase<br/>认证 / 云端数据"]
+  end
+
+  User --> HTML
+  HTML --> CSS
+  HTML --> App
+  App --> Modules
+  App <--> State
+  Constants --> App
+  Utils --> App
+  App --> UI
+  UI --> State
+  State --> UI
+  App <--> Local
+  App --> Api
+  Api <--> APIBackend
+  APIBackend --> LLM
+  Auth <--> Supabase
+  Cloud <--> Supabase
+  WorkLib <--> Local
+  App --> Auth
+  App --> Cloud
+  App --> WorkLib

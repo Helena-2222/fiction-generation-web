@@ -1,0 +1,42 @@
+flowchart TD
+  A["用户在角色关系图上拖拽角色节点"]
+
+  A --> B["setupGraphInteractions()<br/>绑定 pointerdown / pointermove / pointerup"]
+
+  B --> C["pointerdown<br/>获取鼠标位置"]
+  C --> D{"是否点中角色节点？<br/>findCharacterAtGraphPoint()"}
+  D -- "否" --> X["忽略本次操作"]
+  D -- "是" --> E["记录按压状态<br/>state.nodePress = 当前角色 + 指针ID"]
+
+  E --> F["pointermove<br/>持续计算拖拽距离"]
+  F --> G{"拖拽距离是否超过阈值？"}
+  G -- "否" --> F
+  G -- "是" --> H["进入临时连线状态<br/>state.pendingEdge"]
+
+  H --> I["updatePendingEdgePoint()<br/>实时更新连线终点"]
+  I --> J["检测当前悬停角色<br/>candidateTargetId"]
+  J --> K["renderGraph()<br/>绘制临时连线和节点高亮"]
+
+  K --> L["pointerup<br/>用户松开鼠标"]
+  L --> M{"是否松在另一个角色节点上？"}
+  M -- "否" --> N["取消临时连线<br/>state.pendingEdge = null"]
+  N --> O["renderGraph()<br/>恢复关系图"]
+
+  M -- "是" --> P["openRelationModal(sourceId, targetId)<br/>打开关系编辑弹窗"]
+  P --> Q["用户填写关系名称<br/>可选择是否创建反向关系"]
+  Q --> R["saveRelationModal()<br/>点击保存该条关系"]
+
+  R --> S{"正向关系名称是否为空？"}
+  S -- "是" --> T["提示用户填写关系<br/>不保存"]
+  S -- "否" --> U["createRelationRecord()<br/>生成关系对象"]
+
+  U --> V["upsertDirectionalRelation()<br/>写入 state.relations"]
+  V --> W{"是否勾选反向关系？"}
+  W -- "是" --> Y["再创建一条反向关系<br/>target -> source"]
+  W -- "否" --> Z["只保留正向关系"]
+
+  Y --> AA["syncRelationNames()<br/>同步角色名称"]
+  Z --> AA
+  AA --> AB["renderGraph()<br/>绘制正式关系线和标签"]
+  AB --> AC["markStoryDraftDirty()<br/>记录角色关系历史"]
+  AC --> AD["完成：关系网连线已保存到前端状态"]

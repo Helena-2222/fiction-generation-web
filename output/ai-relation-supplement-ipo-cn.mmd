@@ -1,0 +1,54 @@
+flowchart LR
+  subgraph Input["输入"]
+    A["用户填写并保存<br/>基本信息"]
+    B["用户填写并保存<br/>角色档案"]
+    C["用户手动建立并保存<br/>已有角色关系"]
+    D["buildStoryPayload()<br/>整理为 story 草稿"]
+    E["state.savedStoryDraft<br/>AI 补充使用的固定快照"]
+
+    A --> D
+    B --> D
+    C --> D
+    D --> E
+  end
+
+  subgraph Process["处理：参考和算法"]
+    F["点击 AI补充"]
+    G["POST /api/llm-tasks/relations/supplement<br/>发送 story = state.savedStoryDraft"]
+    H["Pydantic 校验<br/>RelationSupplementRequest"]
+    I["StoryService.supplement_relations()"]
+
+    J["参考数据<br/>故事梗概 / 世界观 / 风格 / 篇幅<br/>角色卡 / 已有 relations"]
+    K["构造 STORY_JSON<br/>_build_compact_story_prompt_json()"]
+    L["参考提示词<br/>relation_supplement_prompt.txt"]
+    M["提示词规则<br/>只补未存在关系<br/>不覆盖不改写已有关系<br/>关系名简短明确<br/>没有依据宁可留空<br/>只输出 JSON"]
+
+    N["LLM 推断新增关系<br/>输出 relations JSON"]
+
+    O["后端解析与过滤<br/>_extract_ai_relations()"]
+    P["过滤算法<br/>角色必须存在<br/>source != target<br/>label 不能为空<br/>同方向 source_id -> target_id 不重复"]
+
+    Q["返回 added_relations"]
+
+    F --> G --> H --> I
+    I --> J --> K --> L --> M --> N --> O --> P --> Q
+  end
+
+  subgraph Output["输出"]
+    R["前端接收 added_relations"]
+    S["appendAiRelation()<br/>前端二次校验"]
+    T{"同方向关系<br/>是否已存在？"}
+    U["跳过该关系"]
+    V["写入 state.relations"]
+    W["syncRelationNames()<br/>同步角色名"]
+    X["renderGraph()<br/>重绘角色关系图"]
+    Y["更新 state.savedStoryDraft<br/>记录角色关系历史"]
+
+    R --> S --> T
+    T -- "已存在" --> U --> W
+    T -- "不存在" --> V --> W
+    W --> X --> Y
+  end
+
+  E --> F
+  Q --> R

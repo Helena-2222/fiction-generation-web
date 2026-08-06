@@ -1,14 +1,19 @@
-# 使用官方 Python 3.9 镜像作为基础镜像
-FROM python:3.9
+FROM python:3.9-slim
 
-# 设置工作目录为 /app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
 WORKDIR /app
 
-# 将本地代码复制到 Docker 容器的 /app 目录
-COPY . /app
+# Keep dependency installation in a separate layer so source edits rebuild quickly.
+COPY requirements.txt ./
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# 安装项目依赖
-RUN pip install -r requirements.txt
+COPY app ./app
+COPY static ./static
 
-# 启动 FastAPI 应用
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 8000
+
+# The compose deployment overrides the worker count for the in-memory task service.
+CMD ["gunicorn", "app.main:app", "--workers", "4", "--worker-class", "uvicorn_worker.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "240", "--graceful-timeout", "30", "--keep-alive", "5", "--worker-tmp-dir", "/dev/shm", "--access-logfile", "-", "--error-logfile", "-"]

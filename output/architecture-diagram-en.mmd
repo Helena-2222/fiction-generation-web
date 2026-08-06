@@ -1,0 +1,67 @@
+%%{init: {
+  "theme": "base",
+  "themeCSS": ".node foreignObject { overflow: visible !important; } .nodeLabel, .nodeLabel p { overflow: visible !important; }",
+  "themeVariables": {
+    "fontFamily": "Trebuchet MS, Arial, sans-serif",
+    "fontSize": "16px",
+    "primaryColor": "#F8FBFF",
+    "primaryTextColor": "#172033",
+    "primaryBorderColor": "#7EA6E0",
+    "lineColor": "#465268",
+    "clusterBkg": "#EAF4FF",
+    "clusterBorder": "#83ADD9",
+    "edgeLabelBackground": "#FFFFFF"
+  },
+  "flowchart": {
+    "curve": "basis",
+    "htmlLabels": false,
+    "nodeSpacing": 46,
+    "rankSpacing": 58,
+    "padding": 18
+  }
+}}%%
+
+flowchart TB
+    subgraph frontend["Frontend Layer"]
+        direction TB
+        workspace["Authoring Workspace<br/>create.html / app.js"]
+    end
+
+    subgraph orchestration["Business Orchestration Layer"]
+        direction TB
+        router["FastAPI Routing Layer<br/>outline / character / story /"]
+        manager["LlmTaskManager<br/>Asynchronous Task Scheduling"]
+        router --> manager
+    end
+
+    subgraph core["AI Core Layer"]
+        direction TB
+        service["StoryService<br/>Planning / Writing Business Logic"]
+        prompt["Prompt Engineering<br/>Layered Prompt System"]
+        context["Context / Memory Management<br/>Stateful Creation Pipeline"]
+        client["DeepSeekClient<br/>Structured Output + JSON Auto-Correction"]
+        service --> prompt
+        service --> context
+        service --> client
+    end
+
+    subgraph external["External Resources & Persistence"]
+        direction LR
+        deepseek["DeepSeek Large Language Model"]
+        supabase["Supabase Persistent Storage"]
+    end
+
+    workspace --> router
+    manager --> service
+    client --> deepseek
+    workspace --> supabase
+
+    classDef component fill:#F8FBFF,stroke:#7EA6E0,stroke-width:1.4px,color:#172033;
+    class workspace,router,manager,service,prompt,context,client,deepseek,supabase component;
+
+    style frontend fill:#EAF4FF,stroke:#83ADD9,stroke-width:1.4px,color:#23344D
+    style orchestration fill:#EAF4FF,stroke:#83ADD9,stroke-width:1.4px,color:#23344D
+    style core fill:#EAF4FF,stroke:#83ADD9,stroke-width:1.4px,color:#23344D
+    style external fill:#EAF4FF,stroke:#83ADD9,stroke-width:1.4px,color:#23344D
+
+    linkStyle default stroke:#465268,stroke-width:1.4px;
