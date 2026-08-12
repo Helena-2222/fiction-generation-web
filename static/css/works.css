@@ -464,7 +464,7 @@ a {
   margin: 0 40px;
 }
 
-.bc-teal { --bc: #3a8275; --bs: #286058; --bt: rgba(230, 252, 248, 0.95); }
+/* .bc-teal { --bc: #3a8275; --bs: #286058; --bt: rgba(230, 252, 248, 0.95); }
 .bc-burg { --bc: #a83850; --bs: #782535; --bt: rgba(255, 230, 235, 0.95); }
 .bc-plum { --bc: #6e3a8a; --bs: #4c2860; --bt: rgba(245, 225, 255, 0.95); }
 .bc-slate { --bc: #3a5e9a; --bs: #284275; --bt: rgba(220, 235, 255, 0.95); }
@@ -473,7 +473,13 @@ a {
 .bc-ochre { --bc: #a87020; --bs: #785010; --bt: rgba(255, 246, 208, 0.95); }
 .bc-rose { --bc: #a03a60; --bs: #702845; --bt: rgba(255, 222, 235, 0.95); }
 .bc-navy { --bc: #28487a; --bs: #183260; --bt: rgba(215, 228, 255, 0.95); }
-.bc-moss { --bc: #527035; --bs: #384e22; --bt: rgba(228, 248, 210, 0.95); }
+.bc-moss { --bc: #527035; --bs: #384e22; --bt: rgba(228, 248, 210, 0.95); } */
+.bc-teal { --bc: #ECCE8E; --bs: #D59B3E; --bt: rgba(255, 255, 255, 0.95); }
+.bc-plum { --bc: #8DB8D8; --bs: #4D74A1; --bt: rgba(255, 255, 255, 0.95); }
+.bc-slate { --bc: #DFC6B4; --bs: #C89E7F; --bt: rgba(255, 255, 255, 0.95); }
+.bc-forest { --bc: #98CDBB; --bs: #64B096; --bt: rgba(255, 255, 255, 0.95); }
+.bc-burg { --bc: #E7B7BA; --bs: #C98690; --bt: rgba(255, 255, 255, 0.95); }
+.bc-terra { --bc: #BCD3E6; --bs: #A6BFDC; --bt: rgba(255, 255, 255, 0.95); }
 
 @media (max-width: 760px) {
   .main {

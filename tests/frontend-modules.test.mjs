@@ -322,6 +322,22 @@ test("auth-client reuses the public config cache while loading the SDK in parall
   }
 });
 
+test("notes never falls back to a projected snapshot when deleting a favorite", async () => {
+  const source = await readFile(
+    new URL("../static/js/mynote.js", import.meta.url),
+    "utf8",
+  );
+  const functionStart = source.indexOf("async function removeFavorite(");
+  const functionEnd = source.indexOf("\nfunction handleFilterClick", functionStart);
+  const body = source.slice(functionStart, functionEnd);
+
+  assert.notEqual(functionStart, -1);
+  assert.notEqual(functionEnd, -1);
+  assert.match(body, /await getWork\(getWorkOptions\(\), workId\)/);
+  assert.doesNotMatch(body, /\|\| listedWork/);
+  assert.match(body, /if \(!work\)[\s\S]*throw new Error/);
+});
+
 test("user activity stores guest writing stats locally", async () => {
   setupBrowserEnv();
   const {

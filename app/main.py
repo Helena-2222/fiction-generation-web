@@ -16,6 +16,7 @@ STATIC_DIR = BASE_DIR / "static"
 HTML_DIR = STATIC_DIR / "html"
 SUPABASE_BROWSER_BUNDLE = STATIC_DIR / "js" / "vendor" / "supabase.js"
 STATIC_CACHE_CONTROL = "public, max-age=3600"
+REVALIDATE_CACHE_CONTROL = "no-cache"
 PUBLIC_CONFIG_CACHE_CONTROL = "public, max-age=300"
 HTML_CACHE_CONTROL = "no-cache"
 
@@ -23,7 +24,13 @@ HTML_CACHE_CONTROL = "no-cache"
 class CachedStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope) -> Response:
         response = await super().get_response(path, scope)
-        response.headers.setdefault("Cache-Control", STATIC_CACHE_CONTROL)
+        suffix = Path(path).suffix.lower()
+        cache_control = (
+            REVALIDATE_CACHE_CONTROL
+            if suffix in {".js", ".css"}
+            else STATIC_CACHE_CONTROL
+        )
+        response.headers.setdefault("Cache-Control", cache_control)
         return response
 
 

@@ -33,11 +33,11 @@ class PublicEndpointTests(unittest.TestCase):
         self.assertIn("supabaseAnonKey", payload)
         self.assertIsInstance(payload["authEnabled"], bool)
 
-    def test_static_assets_use_short_cache_and_support_revalidation(self) -> None:
+    def test_unversioned_static_code_requires_revalidation(self) -> None:
         response = self.client.get("/static/css/base.css")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.headers["cache-control"], "public, max-age=3600")
+        self.assertEqual(response.headers["cache-control"], "no-cache")
         self.assertIn("etag", response.headers)
         self.assertIn("last-modified", response.headers)
 
@@ -47,8 +47,14 @@ class PublicEndpointTests(unittest.TestCase):
         )
 
         self.assertEqual(revalidated.status_code, 304)
-        self.assertEqual(revalidated.headers["cache-control"], "public, max-age=3600")
+        self.assertEqual(revalidated.headers["cache-control"], "no-cache")
         self.assertEqual(revalidated.headers["etag"], response.headers["etag"])
+
+    def test_static_images_use_short_cache(self) -> None:
+        response = self.client.get("/static/assets/images/logo2.png")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "public, max-age=3600")
 
     def test_html_pages_require_revalidation(self) -> None:
         for path in ("/", "/auth", "/create", "/works", "/mynote", "/notes", "/usercenter"):

@@ -427,7 +427,10 @@ async function removeFavorite(workId, favoriteId) {
   // snapshot before editing so a delete can never overwrite story/outline data.
   const work = workId === "legacy-workspace"
     ? listedWork
-    : await getWork(getWorkOptions(), workId) || listedWork;
+    : await getWork(getWorkOptions(), workId);
+  if (!work) {
+    throw new Error("无法读取完整作品，已取消删除收藏以保护作品内容。");
+  }
 
   const snapshot = {
     ...(work.snapshot || {}),
@@ -537,11 +540,13 @@ async function loadNotes() {
 
   // Make cached notes visible before any cross-origin database request. The
   // subsequent query fetches favoriteQuotes only, not every full workspace.
-  state.works = listCachedWorks(options);
-  state.notes = collectNotes(state.works);
-  normalizeActiveFilter();
-  syncNavLinks();
-  renderNotes();
+  if (!state.works.length) {
+    state.works = listCachedWorks(options);
+    state.notes = collectNotes(state.works);
+    normalizeActiveFilter();
+    syncNavLinks();
+    renderNotes();
+  }
 
   const result = await refreshFavoriteWorks(options);
   state.works = result.works;
