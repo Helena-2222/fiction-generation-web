@@ -502,6 +502,10 @@ body {
 }
 
 @media (max-width: 640px) {
+  body {
+    font-size: 12px;
+  }
+
   .auth-root {
     padding: 20px 16px;
   }
@@ -513,6 +517,32 @@ body {
 
   .auth-card {
     padding: 32px 20px 24px;
+  }
+
+  .auth-title,
+  .auth-user-name {
+    font-size: 21px;
+  }
+
+  .auth-subtitle,
+  .auth-tab,
+  .auth-method-btn,
+  .auth-label,
+  .auth-message,
+  .auth-user-email,
+  .auth-user-note,
+  .auth-submit,
+  .auth-btn-outline,
+  .auth-btn-danger,
+  .auth-inline-action button,
+  .auth-footer {
+    font-size: 12px;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px;
   }
 
   .auth-deco-text {

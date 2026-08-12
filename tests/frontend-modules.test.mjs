@@ -154,6 +154,54 @@ test("create page deduplicates hidden and pagehide workspace saves per lifecycle
   assert.equal(harness.getSaveCount(), 4);
 });
 
+test("create page exposes an accessible mobile-only collapsible sidebar", async () => {
+  const [html, source, navStyles, componentStyles] = await Promise.all([
+    readFile(new URL("../static/html/create.html", import.meta.url), "utf8"),
+    readFile(new URL("../static/js/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../static/css/app-nav.css", import.meta.url), "utf8"),
+    readFile(new URL("../static/css/components.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(html, /id="mobile-sidebar-toggle"/);
+  assert.match(html, /aria-controls="sidebar-rail"/);
+  assert.match(html, /aria-expanded="false"/);
+  assert.match(html, /id="mobile-sidebar-backdrop"/);
+  assert.match(source, /function bindMobileSidebar\(\)/);
+  assert.match(source, /document\.body\.classList\.toggle\("mobile-sidebar-open", isOpen\)/);
+  assert.match(source, /elements\.sidebar\.inert = isMobile && !isOpen/);
+  assert.match(source, /event\.key === "Escape"/);
+  assert.ok(source.indexOf("bindMobileSidebar();") < source.indexOf("await bootstrapCreateAuth()"));
+
+  const hiddenControls = navStyles.indexOf(".mobile-sidebar-toggle,\n.mobile-sidebar-backdrop");
+  const mobileRules = navStyles.indexOf("@media (max-width: 960px)", hiddenControls);
+  assert.notEqual(hiddenControls, -1);
+  assert.notEqual(mobileRules, -1);
+  assert.match(navStyles.slice(hiddenControls, mobileRules), /display: none/);
+  assert.match(navStyles.slice(mobileRules), /\.app > \.sidebar\.app-sidebar[\s\S]*transform: translateX/);
+  assert.match(navStyles.slice(mobileRules), /\.mobile-sidebar-toggle[\s\S]*border-radius: 50%/);
+  assert.doesNotMatch(componentStyles, /@media \(max-width: 960px\)[\s\S]*?\.sidebar\s*\{\s*display:\s*none/);
+});
+
+test("mobile typography is compact while form controls avoid iOS zoom", async () => {
+  const [components, works, notes, userCenter, auth, landing] = await Promise.all([
+    readFile(new URL("../static/css/components.css", import.meta.url), "utf8"),
+    readFile(new URL("../static/css/works.css", import.meta.url), "utf8"),
+    readFile(new URL("../static/css/mynote.css", import.meta.url), "utf8"),
+    readFile(new URL("../static/css/usercenter.css", import.meta.url), "utf8"),
+    readFile(new URL("../static/css/auth.css", import.meta.url), "utf8"),
+    readFile(new URL("../static/html/index.html", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(components, /@media \(max-width: 960px\)[\s\S]*--text-body-sm: 13px/);
+  assert.match(components, /input,\s*textarea,\s*select\s*\{\s*font-size: 16px/);
+  assert.match(components, /\.chapter-content,[\s\S]*\.prose-content[\s\S]*font-size: 15px/);
+  assert.match(works, /@media \(max-width: 760px\)[\s\S]*\.page-title\s*\{\s*font-size: 22px/);
+  assert.match(notes, /@media \(max-width: 760px\)[\s\S]*\.note-text\s*\{\s*font-size: 13px/);
+  assert.match(userCenter, /@media \(max-width: 760px\)[\s\S]*\.profile-name\s*\{\s*font-size: 20px/);
+  assert.match(auth, /@media \(max-width: 640px\)[\s\S]*input,[\s\S]*font-size: 16px/);
+  assert.match(landing, /@media \(max-width: 900px\)[\s\S]*body \{ font-size: 12px; \}/);
+});
+
 test("utils normalize user text, filenames, HTML and ranges", async () => {
   setupBrowserEnv();
   const {

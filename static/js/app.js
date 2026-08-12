@@ -440,6 +440,8 @@ const elements = {
   sidebarNotesLink: document.querySelector("#sidebar-notes-link"),
   sidebarUserCenterLink: document.querySelector("#sidebar-usercenter-link"),
   sidebarLogoutButton: document.querySelector("#sidebar-logout-button"),
+  mobileSidebarToggle: document.querySelector("#mobile-sidebar-toggle"),
+  mobileSidebarBackdrop: document.querySelector("#mobile-sidebar-backdrop"),
   favoriteList: document.querySelector("#favorite-list"),
   favoriteCountBadge: document.querySelector("#favorite-count-badge"),
   stageSections: Array.from(document.querySelectorAll("[data-stage-screen]")),
@@ -993,6 +995,56 @@ function syncShellNavLinks() {
   syncShellNavUserAvatar();
 }
 
+function isMobileSidebarViewport() {
+  return typeof window.matchMedia === "function"
+    && window.matchMedia("(max-width: 960px)").matches;
+}
+
+function setMobileSidebarOpen(open, { restoreFocus = false } = {}) {
+  const isMobile = isMobileSidebarViewport();
+  const isOpen = isMobile && Boolean(open);
+  document.body.classList.toggle("mobile-sidebar-open", isOpen);
+  elements.mobileSidebarToggle?.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  elements.mobileSidebarToggle?.setAttribute("aria-label", isOpen ? "收起主导航" : "展开主导航");
+  elements.mobileSidebarBackdrop?.setAttribute("aria-hidden", isOpen ? "false" : "true");
+  if (elements.sidebar) {
+    elements.sidebar.inert = isMobile && !isOpen;
+    if (isMobile) {
+      elements.sidebar.setAttribute("aria-hidden", isOpen ? "false" : "true");
+    } else {
+      elements.sidebar.removeAttribute("aria-hidden");
+    }
+  }
+  if (!isOpen && restoreFocus && isMobile) {
+    elements.mobileSidebarToggle?.focus({ preventScroll: true });
+  }
+}
+
+function bindMobileSidebar() {
+  if (!elements.mobileSidebarToggle || !elements.sidebar) {
+    return;
+  }
+
+  elements.mobileSidebarToggle.addEventListener("click", () => {
+    setMobileSidebarOpen(!document.body.classList.contains("mobile-sidebar-open"));
+  });
+  elements.mobileSidebarBackdrop?.addEventListener("click", () => {
+    setMobileSidebarOpen(false, { restoreFocus: true });
+  });
+  elements.sidebar.addEventListener("click", (event) => {
+    if (event.target instanceof Element && event.target.closest("a")) {
+      setMobileSidebarOpen(false);
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      setMobileSidebarOpen(false, { restoreFocus: true });
+    }
+  });
+  window.addEventListener("resize", () => setMobileSidebarOpen(false));
+  setMobileSidebarOpen(false);
+}
+
 function syncShellNavUserAvatar() {
   const avatar = elements.sidebarUserCenterLink?.querySelector(".nav-user-avatar");
   if (!avatar) {
@@ -1285,6 +1337,7 @@ function renderCreateAuthError(error) {
 }
 
 async function init() {
+  bindMobileSidebar();
   const isAuthenticated = await bootstrapCreateAuth();
   if (!isAuthenticated) {
     return;

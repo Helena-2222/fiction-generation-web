@@ -2719,17 +2719,24 @@ body.neuro-panel-open #stage-story .prose-content {
 }
 
 @media (max-width: 960px) {
+  :root {
+    --text-display: 26px;
+    --text-title: 22px;
+    --text-subtitle: 16px;
+    --text-body-lg: 14px;
+    --text-body-sm: 13px;
+    --text-note: 12px;
+    --leading-body: 1.55;
+  }
+
   body {
     overflow: auto;
+    font-size: 13px;
   }
 
   .app {
     min-height: 100vh;
     height: auto;
-  }
-
-  .sidebar {
-    display: none;
   }
 
   .topbar {
@@ -2832,6 +2839,76 @@ body.neuro-panel-open #stage-story .prose-content {
 
   .neuro-guide-overlay {
     display: none !important;
+  }
+
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  button {
+    font-size: 13px;
+  }
+
+  .step-tab,
+  .chip,
+  .form-label,
+  .micro-tip,
+  .icon-btn-label,
+  .outline-synopsis-label,
+  .relation-badge,
+  .relation-save-state,
+  .arc-title,
+  .arc-range-prefix,
+  .arc-range-suffix,
+  .arc-range-divider,
+  .outline-stage-editor label,
+  .chapter-label,
+  .chapter-label-en,
+  .story-title-badge,
+  .sel-btn,
+  .favorite-toast,
+  .story-action-toast,
+  .neuro-name,
+  .neuro-stage,
+  .status-pill,
+  .llm-activity-item-title,
+  .llm-activity-item-time,
+  .neuro-input-label,
+  .neuro-input-hint,
+  .section-kicker {
+    font-size: 12px;
+  }
+
+  .character-tab,
+  .graph-node-name,
+  .synopsis-display,
+  .outline-title-card span,
+  .outline-ai-card span,
+  .arc-card,
+  .chapter-item {
+    font-size: 14px;
+  }
+
+  .character-tab-remove {
+    font-size: 12px;
+  }
+
+  .prose-title {
+    font-size: 20px;
+  }
+
+  .chapter-block-title {
+    font-size: 25px;
+  }
+
+  .chapter-content,
+  .prose-content,
+  .story-chapter-content,
+  .outline-result {
+    font-size: 15px;
+    line-height: 1.8;
   }
 }
 

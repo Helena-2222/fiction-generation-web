@@ -482,8 +482,34 @@ a {
 .bc-terra { --bc: #BCD3E6; --bs: #A6BFDC; --bt: rgba(255, 255, 255, 0.95); }
 
 @media (max-width: 760px) {
+  body {
+    font-size: 12px;
+  }
+
   .main {
     padding: 30px 18px 42px;
+  }
+
+  .page-title {
+    font-size: 22px;
+  }
+
+  .page-sub,
+  .works-message {
+    font-size: 11px;
+  }
+
+  .book-title {
+    font-size: 15px;
+  }
+
+  .book-top-tag,
+  .book-spine,
+  .book-author,
+  .book-tooltip,
+  .book-action,
+  .book-new-label {
+    font-size: 10px;
   }
 
   .bookcase {

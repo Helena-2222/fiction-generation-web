@@ -526,8 +526,43 @@ a {
 }
 
 @media (max-width: 760px) {
+  body {
+    font-size: 12px;
+  }
+
   .main {
     padding: 36px 22px 70px;
+  }
+
+  .avatar {
+    font-size: 28px;
+  }
+
+  .profile-name {
+    font-size: 20px;
+  }
+
+  .profile-bio,
+  .edit-btn,
+  .shelf-tab,
+  .shelf-empty,
+  .note-mini-text,
+  .message {
+    font-size: 12px;
+  }
+
+  .tag-pill,
+  .milestone-label,
+  .shelf-tab-count,
+  .book-cover-title,
+  .book-badge,
+  .note-mini-title,
+  .logout-btn {
+    font-size: 10px;
+  }
+
+  .milestone-value {
+    font-size: 22px;
   }
 
   .milestones {
