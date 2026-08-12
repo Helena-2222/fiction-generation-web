@@ -524,6 +524,10 @@ body {
     font-size: 21px;
   }
 
+  .auth-brand {
+    font-size: 15px;
+  }
+
   .auth-subtitle,
   .auth-tab,
   .auth-method-btn,
@@ -536,6 +540,14 @@ body {
   .auth-btn-danger,
   .auth-inline-action button,
   .auth-footer {
+    font-size: 12px;
+  }
+
+  .auth-avatar-circle {
+    font-size: 20px;
+  }
+
+  .phone-prefix {
     font-size: 12px;
   }
 

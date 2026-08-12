@@ -222,6 +222,8 @@ const CREATE_ACTIVITY_FLUSH_INTERVAL_MS = 60000;
 const WORKSPACE_TIMESTAMP_TOLERANCE_MS = 1000;
 const STORY_SYNOPSIS_MAX_CHARS = 10000;
 const GRAPH_NODE_EDGE_DRAG_DISTANCE = 8;
+const GRAPH_TOUCH_NODE_EDGE_DRAG_DISTANCE = 10;
+const GRAPH_TOUCH_HIT_TOLERANCE = 14;
 
 function setCurrentAuthUser(user) {
   const nextUserId = String(user?.id || "").trim();
@@ -5003,6 +5005,10 @@ function preventGraphMiddleMouseScroll(event) {
 }
 
 function handleGraphPointerDown(event) {
+  if (event.isPrimary === false) {
+    return;
+  }
+
   if (event.button === 1) {
     startGraphPan(event);
     return;
@@ -5015,7 +5021,8 @@ function handleGraphPointerDown(event) {
   maybeShowCharacterGuide();
 
   const point = getGraphPointFromClient(event.clientX, event.clientY);
-  const source = findCharacterAtGraphPoint(point.x, point.y);
+  const hitTolerance = getGraphPointerHitTolerance(event.pointerType);
+  const source = findCharacterAtGraphPoint(point.x, point.y, hitTolerance);
   if (!source) {
     return;
   }
@@ -5033,6 +5040,7 @@ function startGraphNodePress(event, character, point) {
   state.nodePress = {
     characterId: character.id,
     pointerId: event.pointerId,
+    pointerType: event.pointerType || "mouse",
     startPoint: point,
     currentPoint: point,
   };
@@ -5053,7 +5061,10 @@ function handleGraphPointerMove(event) {
       point.x - state.nodePress.startPoint.x,
       point.y - state.nodePress.startPoint.y,
     );
-    if (distance >= GRAPH_NODE_EDGE_DRAG_DISTANCE) {
+    const dragDistance = isDirectGraphPointerType(state.nodePress.pointerType)
+      ? GRAPH_TOUCH_NODE_EDGE_DRAG_DISTANCE
+      : GRAPH_NODE_EDGE_DRAG_DISTANCE;
+    if (distance >= dragDistance) {
       startPendingEdgeFromNodePress(state.nodePress, point);
     }
     return;
@@ -5087,7 +5098,11 @@ function handleGlobalPointerUp(event) {
 
   releaseGraphPointerCapture(event.pointerId);
   const point = getGraphPointFromClient(event.clientX, event.clientY);
-  const target = findCharacterAtGraphPoint(point.x, point.y);
+  const target = findCharacterAtGraphPoint(
+    point.x,
+    point.y,
+    getGraphPointerHitTolerance(state.pendingEdge.pointerType),
+  );
   const sourceId = state.pendingEdge.sourceId;
   state.pendingEdge = null;
   renderGraph();
@@ -5128,6 +5143,7 @@ function startPendingEdgeFromNodePress(press, point) {
   state.pendingEdge = {
     sourceId,
     pointerId: press.pointerId,
+    pointerType: press.pointerType,
     currentPoint: point,
     candidateTargetId: null,
   };
@@ -5139,7 +5155,11 @@ function updatePendingEdgePoint(point) {
   if (!state.pendingEdge) {
     return;
   }
-  const hoveredTarget = findCharacterAtGraphPoint(point.x, point.y);
+  const hoveredTarget = findCharacterAtGraphPoint(
+    point.x,
+    point.y,
+    getGraphPointerHitTolerance(state.pendingEdge.pointerType),
+  );
   state.pendingEdge.currentPoint = point;
   state.pendingEdge.candidateTargetId =
     hoveredTarget && hoveredTarget.id !== state.pendingEdge.sourceId ? hoveredTarget.id : null;
@@ -5196,19 +5216,32 @@ function getGraphPointFromClient(clientX, clientY) {
   };
 }
 
-function findCharacterAtGraphPoint(x, y) {
+function isDirectGraphPointerType(pointerType) {
+  return pointerType === "touch" || pointerType === "pen";
+}
+
+function isCoarseGraphPointerDevice() {
+  return typeof window.matchMedia === "function"
+    && window.matchMedia("(pointer: coarse)").matches;
+}
+
+function getGraphPointerHitTolerance(pointerType) {
+  return isDirectGraphPointerType(pointerType) ? GRAPH_TOUCH_HIT_TOLERANCE : 0;
+}
+
+function findCharacterAtGraphPoint(x, y, tolerance = 0) {
   for (let index = state.characters.length - 1; index >= 0; index -= 1) {
     const character = state.characters[index];
-    if (isPointInCharacterEllipse(character, x, y)) {
+    if (isPointInCharacterEllipse(character, x, y, tolerance)) {
       return character;
     }
   }
   return null;
 }
 
-function isPointInCharacterEllipse(character, x, y) {
-  const rx = GRAPH.nodeWidth / 2;
-  const ry = GRAPH.nodeHeight / 2;
+function isPointInCharacterEllipse(character, x, y, tolerance = 0) {
+  const rx = GRAPH.nodeWidth / 2 + Math.max(0, tolerance);
+  const ry = GRAPH.nodeHeight / 2 + Math.max(0, tolerance);
   const offsetX = x - character.graph_x - rx;
   const offsetY = y - character.graph_y - ry;
   const normalized =
@@ -5530,6 +5563,7 @@ function renderRelationItem(item) {
   elements.graphSvg.appendChild(path);
 
   const hitPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  hitPath.classList.add("relation-hit-path");
   hitPath.setAttribute("d", geometry.pathD);
   hitPath.setAttribute("fill", "none");
   hitPath.setAttribute("stroke", "transparent");
@@ -5548,9 +5582,20 @@ function renderRelationItem(item) {
 }
 
 function bindRelationItemEvents(target, item) {
-  target.addEventListener("click", () => openRelationModal(item.sourceId, item.targetId));
+  target.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+  });
+  target.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openRelationModal(item.sourceId, item.targetId);
+  });
   target.addEventListener("contextmenu", (event) => {
     event.preventDefault();
+    event.stopPropagation();
+    if (isDirectGraphPointerType(event.pointerType) || isCoarseGraphPointerDevice()) {
+      openRelationModal(item.sourceId, item.targetId);
+      return;
+    }
     openRelationDeleteModal(item.deleteRequest);
   });
 }

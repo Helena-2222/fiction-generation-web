@@ -544,6 +544,7 @@ a {
 
   .profile-bio,
   .edit-btn,
+  .is-guest-profile .edit-btn,
   .shelf-tab,
   .shelf-empty,
   .note-mini-text,
@@ -563,6 +564,14 @@ a {
 
   .milestone-value {
     font-size: 22px;
+  }
+
+  .milestone-value em {
+    font-size: 11px;
+  }
+
+  .is-guest-profile .shelf-panel::after {
+    font-size: 13px;
   }
 
   .milestones {

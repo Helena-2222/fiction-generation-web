@@ -1159,6 +1159,12 @@ button:disabled {
   color: var(--text-hint);
 }
 
+.rel-touch-hint {
+  display: none;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .graph-wrap {
   flex: 1;
   min-height: 260px;
@@ -2793,6 +2799,41 @@ body.neuro-panel-open #stage-story .prose-content {
     padding: 24px 18px;
   }
 
+  .rel-touch-hint {
+    display: block;
+    margin-top: 5px;
+    font-size: 11px;
+    line-height: 1.55;
+  }
+
+  .graph-canvas,
+  .graph-nodes,
+  .relation-labels {
+    touch-action: pan-y pinch-zoom;
+    overscroll-behavior: contain;
+  }
+
+  .graph-node {
+    touch-action: none;
+    cursor: grab;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .graph-node.is-source,
+  .graph-node.is-target {
+    cursor: grabbing;
+  }
+
+  .relation-hit-path,
+  .relation-badge-button {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .relation-hit-path {
+    stroke-width: 28;
+  }
+
   .rel-label {
     margin-bottom: 12px;
   }
@@ -2869,7 +2910,9 @@ body.neuro-panel-open #stage-story .prose-content {
   .story-title-badge,
   .sel-btn,
   .favorite-toast,
+  .page-toast,
   .story-action-toast,
+  .neuro-avatar span,
   .neuro-name,
   .neuro-stage,
   .status-pill,

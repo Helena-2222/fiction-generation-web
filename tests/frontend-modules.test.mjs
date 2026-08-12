@@ -202,6 +202,41 @@ test("mobile typography is compact while form controls avoid iOS zoom", async ()
   assert.match(landing, /@media \(max-width: 900px\)[\s\S]*body \{ font-size: 12px; \}/);
 });
 
+test("character graph supports touch drag connections and touch editing", async () => {
+  const [html, source, styles] = await Promise.all([
+    readFile(new URL("../static/html/create.html", import.meta.url), "utf8"),
+    readFile(new URL("../static/js/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../static/css/components.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(html, /class="rel-label-meta rel-touch-hint"/);
+  assert.match(source, /event\.isPrimary === false/);
+  assert.match(source, /pointerType: event\.pointerType \|\| "mouse"/);
+  assert.match(source, /getGraphPointerHitTolerance\(state\.pendingEdge\.pointerType\)/);
+  assert.match(source, /function isDirectGraphPointerType\(pointerType\)/);
+  assert.match(source, /window\.matchMedia\("\(pointer: coarse\)"\)\.matches/);
+  assert.match(source, /hitPath\.classList\.add\("relation-hit-path"\)/);
+  assert.match(source, /target\.addEventListener\("pointerdown", \(event\) => \{\s*event\.stopPropagation\(\)/);
+  assert.match(source, /target\.addEventListener\("click", \(event\) => \{[\s\S]*openRelationModal/);
+  assert.match(source, /isDirectGraphPointerType\(event\.pointerType\)[\s\S]*openRelationModal/);
+  assert.match(styles, /@media \(max-width: 960px\)[\s\S]*\.graph-node\s*\{[\s\S]*touch-action: none/);
+  assert.match(styles, /\.relation-hit-path,[\s\S]*\.relation-badge-button[\s\S]*touch-action: manipulation/);
+  assert.match(styles, /\.relation-hit-path\s*\{\s*stroke-width: 28/);
+
+  const ellipseStart = source.indexOf("function isPointInCharacterEllipse(");
+  const ellipseEnd = source.indexOf("\nfunction resolveAnchorPoint", ellipseStart);
+  assert.notEqual(ellipseStart, -1);
+  assert.notEqual(ellipseEnd, -1);
+  const ellipseSource = source.slice(ellipseStart, ellipseEnd);
+  const isPointInCharacterEllipse = new Function(
+    "GRAPH",
+    `${ellipseSource}; return isPointInCharacterEllipse;`,
+  )({ nodeWidth: 116, nodeHeight: 62 });
+  const character = { graph_x: 0, graph_y: 0 };
+  assert.equal(isPointInCharacterEllipse(character, 123, 31, 0), false);
+  assert.equal(isPointInCharacterEllipse(character, 123, 31, 14), true);
+});
+
 test("utils normalize user text, filenames, HTML and ranges", async () => {
   setupBrowserEnv();
   const {
