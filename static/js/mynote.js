@@ -9,8 +9,10 @@ import { fetchUserWorkspaceSnapshot } from "./src/cloud-workspace.js";
 import { subscribeToFavoriteQuotesChanged } from "./src/favorite-sync.js";
 import { GUEST_WORKSPACE_STORAGE_KEY, WORKSPACE_STORAGE_KEY } from "./src/constants.js";
 import {
+  getWork,
   getWorkTitleFromSnapshot,
-  listWorks,
+  listCachedWorks,
+  refreshFavoriteWorks,
   updateWorkSnapshot,
 } from "./src/work-library.js";
 import { escapeHtml, formatFavoriteTime, normalizeFavoriteQuote } from "./src/utils.js";
@@ -416,10 +418,16 @@ function stripFavoriteMarkupFromSnapshot(snapshot, favoriteId) {
 }
 
 async function removeFavorite(workId, favoriteId) {
-  const work = state.works.find((item) => item.id === workId);
-  if (!work) {
+  const listedWork = state.works.find((item) => item.id === workId);
+  if (!listedWork) {
     return;
   }
+
+  // A cold notes page intentionally loads only favoriteQuotes. Fetch the full
+  // snapshot before editing so a delete can never overwrite story/outline data.
+  const work = workId === "legacy-workspace"
+    ? listedWork
+    : await getWork(getWorkOptions(), workId) || listedWork;
 
   const snapshot = {
     ...(work.snapshot || {}),
@@ -447,10 +455,10 @@ async function removeFavorite(workId, favoriteId) {
   } else {
     const updated = await updateWorkSnapshot(getWorkOptions(), workId, snapshot);
     if (updated?.snapshot) {
-      work.snapshot = updated.snapshot;
-      work.updatedAt = updated.updatedAt;
+      listedWork.snapshot = updated.snapshot;
+      listedWork.updatedAt = updated.updatedAt;
     } else {
-      work.snapshot = snapshot;
+      listedWork.snapshot = snapshot;
     }
   }
   state.notes = collectNotes(state.works);
@@ -525,7 +533,17 @@ function persistLegacySnapshot(snapshot) {
 
 async function loadNotes() {
   setMessage("");
-  const result = await listWorks(getWorkOptions());
+  const options = getWorkOptions();
+
+  // Make cached notes visible before any cross-origin database request. The
+  // subsequent query fetches favoriteQuotes only, not every full workspace.
+  state.works = listCachedWorks(options);
+  state.notes = collectNotes(state.works);
+  normalizeActiveFilter();
+  syncNavLinks();
+  renderNotes();
+
+  const result = await refreshFavoriteWorks(options);
   state.works = result.works;
 
   if (!state.works.length) {

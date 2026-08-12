@@ -119,7 +119,7 @@ export async function ensureSupabaseBrowserSdk() {
 
 export async function getAuthConfig() {
   if (!configPromise) {
-    configPromise = fetch(CONFIG_ENDPOINT, { cache: "no-store" })
+    configPromise = fetch(CONFIG_ENDPOINT, { cache: "default" })
       .then(async (response) => {
         if (!response.ok) {
           throw new Error("无法读取登录配置，请确认后端服务已经启动。");
@@ -147,12 +147,20 @@ export async function getSupabaseClient() {
 
   if (!clientPromise) {
     clientPromise = (async () => {
-      const config = await getAuthConfig();
+      const configRequest = getAuthConfig();
+      const sdkLoadResult = ensureSupabaseBrowserSdk().then(
+        (sdk) => ({ sdk, error: null }),
+        (error) => ({ sdk: null, error }),
+      );
+      const config = await configRequest;
       if (!config.authEnabled || !config.supabaseUrl || !config.supabaseAnonKey) {
         throw new Error("当前项目还没有配置 Supabase 登录参数，请先检查 .env 里的 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY。");
       }
 
-      await ensureSupabaseBrowserSdk();
+      const { error: sdkLoadError } = await sdkLoadResult;
+      if (sdkLoadError) {
+        throw sdkLoadError;
+      }
       const createClient = window.supabase?.createClient;
       if (typeof createClient !== "function") {
         throw new Error("Supabase 浏览器 SDK 未加载，请刷新页面后重试。");

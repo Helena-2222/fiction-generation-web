@@ -175,6 +175,136 @@ test("work library cloud listing filters deleted rows and keeps newer local cach
   assert.deepEqual(queries[0].calls.find((call) => call.method === "order").args, ["updated_at", { ascending: false }]);
 });
 
+test("work shelf paints cached snapshots first and refreshes only cloud metadata", async () => {
+  const { localStorage } = setupBrowserEnv();
+  localStorage.setItem(
+    "story-generation-works-v1:user-1",
+    JSON.stringify({
+      activeWorkId: "w1",
+      works: [{
+        id: "w1",
+        userId: "user-1",
+        title: "Cached Story",
+        genre: "mystery",
+        status: "active",
+        snapshot: {
+          currentStage: "characters",
+          generatedStory: { chapters: [{ content: "keep the full local story" }] },
+          updatedAt: "2026-05-03T10:00:00.000Z",
+        },
+        createdAt: "2026-05-01T00:00:00.000Z",
+        updatedAt: "2026-05-03T10:00:00.000Z",
+      }],
+    }),
+  );
+  const queries = installSupabaseClient(() => ({
+    orderResult: {
+      data: [{
+        id: "w1",
+        user_id: "user-1",
+        title: "Cloud Title",
+        genre: "mystery",
+        style: "quiet",
+        status: "active",
+        current_stage: "outline",
+        created_at: "2026-05-01T00:00:00.000Z",
+        updated_at: "2026-05-03T10:00:00.000Z",
+      }],
+      error: null,
+    },
+  }));
+  const {
+    getWorkProgressLabel,
+    listCachedWorks,
+    refreshWorkSummaries,
+  } = await importFresh("static/js/src/work-library.js");
+
+  const cached = listCachedWorks({ userId: "user-1" });
+  assert.equal(cached[0].title, "Cached Story");
+  assert.equal(queries.length, 0);
+
+  const refreshed = await refreshWorkSummaries({ userId: "user-1" });
+  const select = queries[0].calls.find((call) => call.method === "select").args[0];
+
+  assert.equal(refreshed.source, "cloud");
+  assert.equal(refreshed.works[0].title, "Cloud Title");
+  assert.equal(refreshed.works[0].snapshot.generatedStory.chapters[0].content, "keep the full local story");
+  assert.equal(refreshed.works[0].snapshot.currentStage, "outline");
+  assert.equal(getWorkProgressLabel(refreshed.works[0].snapshot), "正文 1 章");
+  assert.match(select, /snapshot->>currentStage/);
+  assert.doesNotMatch(select, /(?:^|,\s*)snapshot(?:\s*,|$)/);
+});
+
+test("notes refresh fetches favorite quotes without full workspace snapshots", async () => {
+  setupBrowserEnv();
+  const queries = installSupabaseClient(() => ({
+    orderResult: {
+      data: [{
+        id: "w2",
+        user_id: "user-1",
+        title: "Quotes Only",
+        status: "active",
+        favorite_quotes: [{ id: "f1", text: "A remembered line" }],
+        created_at: "2026-05-01T00:00:00.000Z",
+        updated_at: "2026-05-03T11:00:00.000Z",
+      }],
+      error: null,
+    },
+  }));
+  const { refreshFavoriteWorks } = await importFresh("static/js/src/work-library.js");
+
+  const refreshed = await refreshFavoriteWorks({ userId: "user-1" });
+  const select = queries[0].calls.find((call) => call.method === "select").args[0];
+
+  assert.equal(refreshed.source, "cloud");
+  assert.equal(refreshed.works[0].snapshot.favoriteQuotes[0].id, "f1");
+  assert.match(select, /snapshot->favoriteQuotes/);
+  assert.doesNotMatch(select, /(?:^|,\s*)snapshot(?:\s*,|$)/);
+});
+
+test("a newer projected cloud revision does not reuse stale local story details", async () => {
+  const { localStorage } = setupBrowserEnv();
+  localStorage.setItem(
+    "story-generation-works-v1:user-1",
+    JSON.stringify({
+      activeWorkId: "w3",
+      works: [{
+        id: "w3",
+        userId: "user-1",
+        title: "Old local copy",
+        status: "active",
+        snapshot: {
+          generatedStory: { chapters: [{ content: "stale" }] },
+          updatedAt: "2026-05-03T10:00:00.000Z",
+        },
+        createdAt: "2026-05-01T00:00:00.000Z",
+        updatedAt: "2026-05-03T10:00:00.000Z",
+      }],
+    }),
+  );
+  installSupabaseClient(() => ({
+    orderResult: {
+      data: [{
+        id: "w3",
+        user_id: "user-1",
+        title: "New cloud copy",
+        status: "active",
+        current_stage: "story",
+        created_at: "2026-05-01T00:00:00.000Z",
+        updated_at: "2026-05-03T11:00:00.000Z",
+      }],
+      error: null,
+    },
+  }));
+  const { refreshWorkSummaries } = await importFresh("static/js/src/work-library.js");
+
+  const refreshed = await refreshWorkSummaries({ userId: "user-1" });
+
+  assert.equal(refreshed.works[0].title, "New cloud copy");
+  assert.equal(refreshed.works[0].snapshot.currentStage, "story");
+  assert.equal(refreshed.works[0].snapshot.generatedStory, undefined);
+});
+
 test("work library create and delete use scoped Supabase writes", async () => {
   setupBrowserEnv();
   const queries = installSupabaseClient((table) => {

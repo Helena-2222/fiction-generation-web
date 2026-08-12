@@ -26,11 +26,47 @@ class PublicEndpointTests(unittest.TestCase):
         response = self.client.get("/api/public-config")
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "public, max-age=300")
         payload = response.json()
         self.assertIn("authEnabled", payload)
         self.assertIn("supabaseUrl", payload)
         self.assertIn("supabaseAnonKey", payload)
         self.assertIsInstance(payload["authEnabled"], bool)
+
+    def test_static_assets_use_short_cache_and_support_revalidation(self) -> None:
+        response = self.client.get("/static/css/base.css")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "public, max-age=3600")
+        self.assertIn("etag", response.headers)
+        self.assertIn("last-modified", response.headers)
+
+        revalidated = self.client.get(
+            "/static/css/base.css",
+            headers={"If-None-Match": response.headers["etag"]},
+        )
+
+        self.assertEqual(revalidated.status_code, 304)
+        self.assertEqual(revalidated.headers["cache-control"], "public, max-age=3600")
+        self.assertEqual(revalidated.headers["etag"], response.headers["etag"])
+
+    def test_html_pages_require_revalidation(self) -> None:
+        for path in ("/", "/auth", "/create", "/works", "/mynote", "/notes", "/usercenter"):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.headers["cache-control"], "no-cache")
+                self.assertIn("etag", response.headers)
+                self.assertIn("last-modified", response.headers)
+
+    def test_vendor_bundle_uses_short_cache(self) -> None:
+        response = self.client.get("/vendor/supabase.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "public, max-age=3600")
+        self.assertIn("etag", response.headers)
+        self.assertIn("last-modified", response.headers)
 
     def test_docx_export_endpoint_returns_downloadable_document(self) -> None:
         response = self.client.post(

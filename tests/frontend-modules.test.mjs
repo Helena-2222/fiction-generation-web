@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 function createLocalStorage() {
@@ -74,6 +75,85 @@ async function importFresh(relativePath) {
   return import(url.href);
 }
 
+test("create page deduplicates hidden and pagehide workspace saves per lifecycle", async () => {
+  const source = await readFile(
+    new URL("../static/js/app.js", import.meta.url),
+    "utf8",
+  );
+  const getFunctionBody = (name) => {
+    const start = source.indexOf(`function ${name}(`);
+    assert.notEqual(start, -1, `${name} should exist`);
+
+    const bodyStart = source.indexOf("{", start);
+    let depth = 0;
+    for (let index = bodyStart; index < source.length; index += 1) {
+      if (source[index] === "{") {
+        depth += 1;
+      } else if (source[index] === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          return source.slice(bodyStart + 1, index);
+        }
+      }
+    }
+
+    assert.fail(`Unable to read ${name} body`);
+  };
+
+  const visibilityBody = getFunctionBody("handleWorkspaceVisibilityChange");
+  const pageHideBody = getFunctionBody("handleWorkspacePageHide");
+  const lifecycleSaveBody = getFunctionBody("saveWorkspaceForHiddenLifecycle");
+  const resetBody = getFunctionBody("resetWorkspaceHiddenLifecycleSave");
+
+  assert.match(visibilityBody, /saveWorkspaceForHiddenLifecycle\(\)/);
+  assert.match(visibilityBody, /resetWorkspaceHiddenLifecycleSave\(\)/);
+  assert.match(pageHideBody, /saveWorkspaceForHiddenLifecycle\(\)/);
+  assert.doesNotMatch(pageHideBody, /saveWorkspaceSnapshot\(/);
+  assert.match(lifecycleSaveBody, /workspaceHiddenLifecycleSavedRevision === workspaceSnapshotSaveRevision/);
+  assert.match(lifecycleSaveBody, /saveWorkspaceSnapshot\(\{ immediate: true \}\)/);
+  assert.match(lifecycleSaveBody, /workspaceHiddenLifecycleSavedRevision = workspaceSnapshotSaveRevision/);
+  assert.match(resetBody, /workspaceHiddenLifecycleSavedRevision = null/);
+  assert.match(
+    source,
+    /window\.addEventListener\("pageshow", resetWorkspaceHiddenLifecycleSave\)/,
+  );
+
+  const createHarness = new Function(`
+    let workspaceSnapshotSaveRevision = 0;
+    let workspaceHiddenLifecycleSavedRevision = null;
+    let saveCount = 0;
+    function saveWorkspaceSnapshot() {
+      saveCount += 1;
+      workspaceSnapshotSaveRevision += 1;
+    }
+    function saveWorkspaceForHiddenLifecycle() {
+      ${lifecycleSaveBody}
+    }
+    function resetWorkspaceHiddenLifecycleSave() {
+      ${resetBody}
+    }
+    return {
+      saveWorkspaceForHiddenLifecycle,
+      resetWorkspaceHiddenLifecycleSave,
+      saveWorkspaceSnapshot,
+      getSaveCount: () => saveCount,
+    };
+  `);
+  const harness = createHarness();
+
+  assert.equal(harness.saveWorkspaceForHiddenLifecycle(), true);
+  assert.equal(harness.saveWorkspaceForHiddenLifecycle(), false);
+  assert.equal(harness.getSaveCount(), 1);
+
+  harness.saveWorkspaceSnapshot();
+  assert.equal(harness.saveWorkspaceForHiddenLifecycle(), true);
+  assert.equal(harness.getSaveCount(), 3);
+
+  harness.resetWorkspaceHiddenLifecycleSave();
+  assert.equal(harness.saveWorkspaceForHiddenLifecycle(), true);
+  assert.equal(harness.getSaveCount(), 4);
+});
+
 test("utils normalize user text, filenames, HTML and ranges", async () => {
   setupBrowserEnv();
   const {
@@ -142,6 +222,104 @@ test("auth-client keeps redirects local and signs out through Supabase", async (
     },
   };
   await assert.rejects(() => auth.signOut(), /sign out failed/);
+});
+
+test("auth-client reuses the public config cache while loading the SDK in parallel", async () => {
+  setupBrowserEnv();
+
+  const originalFetch = globalThis.fetch;
+  const fetchCalls = [];
+  let resolveConfigResponse;
+  let appendedScript = null;
+  let appendCalls = 0;
+  let createClientCalls = 0;
+
+  class FakeScriptElement {
+    constructor() {
+      this.async = false;
+      this.dataset = {};
+      this.listeners = new Map();
+      this.src = "";
+    }
+
+    addEventListener(type, listener) {
+      this.listeners.set(type, listener);
+    }
+
+    removeEventListener(type, listener) {
+      if (this.listeners.get(type) === listener) {
+        this.listeners.delete(type);
+      }
+    }
+
+    remove() {}
+
+    dispatch(type) {
+      this.listeners.get(type)?.();
+    }
+  }
+
+  globalThis.HTMLScriptElement = FakeScriptElement;
+  document.createElement = () => new FakeScriptElement();
+  document.head.appendChild = (script) => {
+    appendCalls += 1;
+    appendedScript = script;
+  };
+  globalThis.fetch = (...args) => {
+    fetchCalls.push(args);
+    return new Promise((resolve) => {
+      resolveConfigResponse = resolve;
+    });
+  };
+
+  try {
+    const auth = await importFresh("static/js/src/auth-client.js");
+    const firstClientRequest = auth.getSupabaseClient();
+    const secondClientRequest = auth.getSupabaseClient();
+
+    assert.equal(fetchCalls.length, 1);
+    assert.deepEqual(fetchCalls[0], ["/api/public-config", { cache: "default" }]);
+    assert.equal(appendCalls, 1);
+    assert.equal(appendedScript?.src, "/static/js/vendor/supabase.js");
+
+    window.supabase = {
+      createClient(url, anonKey, options) {
+        createClientCalls += 1;
+        return { anonKey, options, url };
+      },
+    };
+    appendedScript.dispatch("load");
+
+    let clientResolvedBeforeConfig = false;
+    firstClientRequest.then(() => {
+      clientResolvedBeforeConfig = true;
+    });
+    await Promise.resolve();
+    assert.equal(clientResolvedBeforeConfig, false);
+
+    resolveConfigResponse({
+      ok: true,
+      async json() {
+        return {
+          authEnabled: true,
+          supabaseAnonKey: "anon-key",
+          supabaseUrl: "https://project.supabase.co",
+        };
+      },
+    });
+
+    const [firstClient, secondClient] = await Promise.all([
+      firstClientRequest,
+      secondClientRequest,
+    ]);
+    assert.equal(firstClient, secondClient);
+    assert.equal(createClientCalls, 1);
+
+    await auth.getAuthConfig();
+    assert.equal(fetchCalls.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("user activity stores guest writing stats locally", async () => {

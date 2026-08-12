@@ -122,14 +122,14 @@ VITE_SUPABASE_ANON_KEY=your_supabase_publishable_key
 ### 3. 启动服务
 
 ```bash
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port 8002
 ```
 
 启动后访问：
-http://127.0.0.1:8000/
+http://127.0.0.1:8002/
 - 首页：``
-- 登录页：`http://127.0.0.1:8000/auth`
-- 创作页：`http://127.0.0.1:8000/create`
+- 登录页：`http://127.0.0.1:8002/auth`
+- 创作页：`http://127.0.0.1:8002/create`
 
 ## 创作流程
 

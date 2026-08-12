@@ -14,7 +14,8 @@ import {
   duplicateWork,
   getWorkProgressLabel,
   getWorkWordCount,
-  listWorks,
+  listCachedWorks,
+  refreshWorkSummaries,
   renameWork,
 } from "./src/work-library.js";
 import { escapeHtml } from "./src/utils.js";
@@ -316,7 +317,15 @@ function getWorksErrorMessage(error) {
 
 async function loadWorks() {
   setMessage("");
-  const result = await listWorks(getWorkOptions());
+  const options = getWorkOptions();
+
+  // Render the user-scoped local library immediately. Cloud reconciliation is
+  // deliberately non-blocking for first paint and returns only list metadata.
+  state.works = listCachedWorks(options);
+  state.source = "local";
+  render();
+
+  const result = await refreshWorkSummaries(options);
   state.works = result.works;
   state.source = result.source;
 
@@ -327,13 +336,12 @@ async function loadWorks() {
   if (!state.works.length) {
     const legacySnapshot = await loadLegacySnapshot();
     try {
-      const seeded = await createWork(getWorkOptions(), {
+      const seeded = await createWork(options, {
         snapshot: legacySnapshot || buildEmptyWorkSnapshot(),
       });
       state.works = [seeded];
     } catch (error) {
-      const refreshed = await listWorks(getWorkOptions());
-      state.works = refreshed.works;
+      state.works = listCachedWorks(options);
       setMessage(getWorksErrorMessage(error), true);
     }
   }

@@ -182,6 +182,118 @@ async function fetchCloudWorks(options = {}) {
   return works;
 }
 
+function getActiveLocalWorks(options = {}) {
+  return readLocalLibrary(options).works.filter((work) => work.status !== "deleted");
+}
+
+function mergeCloudListingWithLocal(options = {}, cloudWorks = []) {
+  const localWorks = getActiveLocalWorks(options);
+  const localWorksById = new Map(localWorks.map((work) => [work.id, work]));
+  const worksById = new Map();
+
+  cloudWorks.forEach((cloudWork) => {
+    const localWork = localWorksById.get(cloudWork.id);
+    const localTime = Date.parse(localWork?.updatedAt || "");
+    const cloudTime = Date.parse(cloudWork.updatedAt || "");
+    const localIsNewer = localWork
+      && Number.isFinite(localTime)
+      && localTime > (Number.isFinite(cloudTime) ? cloudTime : 0) + WORK_TIMESTAMP_TOLERANCE_MS;
+    const cloudIsNewer = localWork
+      && Number.isFinite(cloudTime)
+      && cloudTime > (Number.isFinite(localTime) ? localTime : 0) + WORK_TIMESTAMP_TOLERANCE_MS;
+
+    if (localIsNewer) {
+      worksById.set(localWork.id, localWork);
+      return;
+    }
+
+    worksById.set(cloudWork.id, {
+      ...localWork,
+      ...cloudWork,
+      // Page-specific cloud listings intentionally contain only a small snapshot
+      // projection. Keep a complete local snapshot only when it still represents
+      // the same cloud revision; otherwise avoid displaying stale derived data.
+      snapshot: localWork?.snapshot && !cloudIsNewer
+        ? { ...localWork.snapshot, ...(cloudWork.snapshot || {}) }
+        : normalizeSnapshot(cloudWork.snapshot),
+    });
+  });
+
+  localWorks.forEach((localWork) => {
+    if (!worksById.has(localWork.id)) {
+      worksById.set(localWork.id, localWork);
+    }
+  });
+
+  return Array.from(worksById.values())
+    .filter(Boolean)
+    .sort((left, right) => Date.parse(right.updatedAt || "") - Date.parse(left.updatedAt || ""));
+}
+
+function normalizeCloudWorkSummary(row) {
+  if (!row || typeof row !== "object") {
+    return null;
+  }
+  return normalizeWork({
+    ...row,
+    snapshot: {
+      currentStage: String(row.current_stage || "").trim(),
+      updatedAt: row.updated_at,
+    },
+  });
+}
+
+function normalizeCloudFavoriteWork(row) {
+  if (!row || typeof row !== "object") {
+    return null;
+  }
+  return normalizeWork({
+    ...row,
+    snapshot: {
+      favoriteQuotes: Array.isArray(row.favorite_quotes) ? row.favorite_quotes : [],
+      updatedAt: row.updated_at,
+    },
+  });
+}
+
+async function fetchCloudWorkSummaries(options = {}) {
+  const supabase = await getSupabaseClient();
+  const { data, error } = await supabase
+    .from(WORKS_TABLE)
+    .select("id, user_id, title, genre, style, status, current_stage:snapshot->>currentStage, created_at, updated_at")
+    .eq("user_id", String(options.userId || "").trim())
+    .neq("status", "deleted")
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  const cloudWorks = Array.isArray(data)
+    ? data.map((item) => normalizeCloudWorkSummary(item)).filter(Boolean)
+    : [];
+  return mergeCloudListingWithLocal(options, cloudWorks);
+}
+
+async function fetchCloudFavoriteWorks(options = {}) {
+  const supabase = await getSupabaseClient();
+  const { data, error } = await supabase
+    .from(WORKS_TABLE)
+    .select("id, user_id, title, status, favorite_quotes:snapshot->favoriteQuotes, created_at, updated_at")
+    .eq("user_id", String(options.userId || "").trim())
+    .neq("status", "deleted")
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  const cloudWorks = Array.isArray(data)
+    ? data.map((item) => normalizeCloudFavoriteWork(item)).filter(Boolean)
+    : [];
+  return mergeCloudListingWithLocal(options, cloudWorks);
+}
+
 export function cacheWorkSnapshotLocally(options = {}, workId, snapshot) {
   const normalizedWorkId = String(workId || "").trim();
   if (!normalizedWorkId || !snapshot || typeof snapshot !== "object") {
@@ -290,6 +402,20 @@ export function getWorkProgressLabel(snapshot = {}) {
   if (String(snapshot?.form?.synopsis || "").trim()) {
     return "基本信息中";
   }
+
+  const stageLabels = {
+    story: "正文生成中",
+    outline: "大纲生成中",
+    relation: "角色关系中",
+    relations: "角色关系中",
+    character: "角色设定中",
+    characters: "角色设定中",
+    basic: "基本信息中",
+  };
+  const stage = String(snapshot?.currentStage || "").trim().toLowerCase();
+  if (stageLabels[stage]) {
+    return stageLabels[stage];
+  }
   return "刚刚开始";
 }
 
@@ -321,6 +447,43 @@ export async function listWorks(options = {}) {
       error,
     };
   }
+}
+
+export function listCachedWorks(options = {}) {
+  return getActiveLocalWorks(options);
+}
+
+async function refreshProjectedWorks(options = {}, fetcher) {
+  if (!canUseCloud(options)) {
+    return {
+      works: getActiveLocalWorks(options),
+      source: "local",
+      error: null,
+    };
+  }
+
+  try {
+    return {
+      works: await fetcher(options),
+      source: "cloud",
+      error: null,
+    };
+  } catch (error) {
+    console.warn("读取云端作品摘要失败，已保留本地缓存：", error);
+    return {
+      works: getActiveLocalWorks(options),
+      source: "local",
+      error,
+    };
+  }
+}
+
+export async function refreshWorkSummaries(options = {}) {
+  return refreshProjectedWorks(options, fetchCloudWorkSummaries);
+}
+
+export async function refreshFavoriteWorks(options = {}) {
+  return refreshProjectedWorks(options, fetchCloudFavoriteWorks);
 }
 
 export async function getWork(options = {}, workId) {

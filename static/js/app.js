@@ -205,6 +205,11 @@ let activeWorkSaveTimer = null;
 let activeWorkSaveInFlight = false;
 let pendingActiveWorkSnapshot = null;
 let lastActiveWorkSyncErrorAt = 0;
+// A navigation normally emits visibilitychange(hidden) followed by pagehide.
+// Track the latest built snapshot so the second event skips expensive duplicate
+// work, but can still save again if state was persisted between the two events.
+let workspaceSnapshotSaveRevision = 0;
+let workspaceHiddenLifecycleSavedRevision = null;
 let pendingStoryChapterRegeneration = null;
 let createActivityStartedAt = 0;
 let pendingCreateActivitySeconds = 0;
@@ -1408,6 +1413,7 @@ async function init() {
   document.addEventListener("mousedown", handleGlobalPointerDown);
   document.addEventListener("keydown", handleGlobalKeyDown);
   window.addEventListener("pagehide", handleWorkspacePageHide);
+  window.addEventListener("pageshow", resetWorkspaceHiddenLifecycleSave);
   setupPanelInteractions();
   setupGraphInteractions();
   setupGraphResizeObserver();
@@ -3113,19 +3119,38 @@ async function waitForActiveWorkSaveIdle(timeoutMs = 1500) {
 function handleWorkspaceVisibilityChange() {
   if (document.visibilityState === "hidden") {
     pauseCreateActivityTracking();
-    saveWorkspaceSnapshot({ immediate: true });
+    saveWorkspaceForHiddenLifecycle();
     return;
   }
+  resetWorkspaceHiddenLifecycleSave();
   resumeCreateActivityTracking();
 }
 
 function handleWorkspacePageHide() {
   pauseCreateActivityTracking();
+  saveWorkspaceForHiddenLifecycle();
+}
+
+function saveWorkspaceForHiddenLifecycle() {
+  if (
+    workspaceHiddenLifecycleSavedRevision !== null
+    && workspaceHiddenLifecycleSavedRevision === workspaceSnapshotSaveRevision
+  ) {
+    return false;
+  }
+
   saveWorkspaceSnapshot({ immediate: true });
+  workspaceHiddenLifecycleSavedRevision = workspaceSnapshotSaveRevision;
+  return true;
+}
+
+function resetWorkspaceHiddenLifecycleSave() {
+  workspaceHiddenLifecycleSavedRevision = null;
 }
 
 function saveWorkspaceSnapshot({ immediate = false } = {}) {
   const snapshot = buildWorkspaceSnapshot();
+  workspaceSnapshotSaveRevision += 1;
   const signature = buildWorkspaceLockSignature(snapshot);
   if (workspaceLockState.locked && workspaceLockState.signature && workspaceLockState.signature !== signature) {
     setWorkspaceLockState({ locked: false, lockedAt: "", signature: "" });
