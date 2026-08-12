@@ -368,7 +368,6 @@ a {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
   flex-shrink: 0;
   width: 96px;
   cursor: pointer;
@@ -399,7 +398,7 @@ a {
   padding: 10px 9px;
   position: relative;
   overflow: hidden;
-  background: var(--book-color, var(--accent));
+  background: linear-gradient(145deg, var(--bc, var(--accent)) 0 68%, var(--bs, var(--accent)) 100%);
 }
 
 .book-cover-fill::before {
@@ -423,28 +422,16 @@ a {
   line-height: 1.4;
   font-weight: 500;
   letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--bt, rgba(255, 255, 255, 0.92));
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
-.book-entry-title {
-  font-size: 12px;
-  color: var(--ink-soft);
-  line-height: 1.4;
-  letter-spacing: 0.01em;
-  width: 100%;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-.book-entry-sub {
-  font-size: 11px;
-  color: var(--ink-hint);
-  font-family: var(--font-sans);
-  letter-spacing: 0.02em;
-}
+.bc-teal { --bc: #ECCE8E; --bs: #D59B3E; --bt: rgba(255, 255, 255, 0.95); }
+.bc-plum { --bc: #8DB8D8; --bs: #4D74A1; --bt: rgba(255, 255, 255, 0.95); }
+.bc-slate { --bc: #DFC6B4; --bs: #C89E7F; --bt: rgba(255, 255, 255, 0.95); }
+.bc-forest { --bc: #98CDBB; --bs: #64B096; --bt: rgba(255, 255, 255, 0.95); }
+.bc-burg { --bc: #E7B7BA; --bs: #C98690; --bt: rgba(255, 255, 255, 0.95); }
+.bc-terra { --bc: #BCD3E6; --bs: #A6BFDC; --bt: rgba(255, 255, 255, 0.95); }
 
 .book-badge {
   position: absolute;

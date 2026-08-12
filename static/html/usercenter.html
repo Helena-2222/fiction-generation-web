@@ -4,9 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>用户中心 | 非凡故事</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600&display=swap" />
     <link rel="stylesheet" href="/static/css/app-nav.css" />
     <link rel="stylesheet" href="/static/css/usercenter.css" />
+    <link rel="modulepreload" href="/static/js/src/auth-client.js" />
+    <link rel="modulepreload" href="/static/js/src/work-library.js" />
+    <link rel="modulepreload" href="/static/js/src/user-activity.js" />
   </head>
   <body>
     <aside class="app-sidebar" aria-label="主导航">
@@ -100,6 +102,6 @@
 
     <button id="logout-button" class="logout-btn hidden" type="button" aria-hidden="true">退出登录</button>
 
-    <script type="module" src="/static/js/usercenter.js?v=20260502-account-login"></script>
+    <script type="module" src="/static/js/usercenter.js?v=20260812-fast-nav"></script>
   </body>
 </html>

@@ -68,6 +68,10 @@ function readLocalStats(options = {}) {
   }
 }
 
+export function getCachedUserActivityStats(options = {}) {
+  return readLocalStats(options);
+}
+
 function writeLocalStats(options = {}, stats) {
   const normalized = normalizeStats(stats);
   window.localStorage.setItem(getLocalActivityKey(options), JSON.stringify(normalized));

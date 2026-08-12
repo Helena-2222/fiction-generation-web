@@ -11,18 +11,19 @@ import { fetchUserWorkspaceSnapshot } from "./src/cloud-workspace.js";
 import {
   fetchUserActivityStats,
   formatWritingDurationParts,
-  recordUserActivity,
+  getCachedUserActivityStats,
 } from "./src/user-activity.js";
 import { GUEST_WORKSPACE_STORAGE_KEY, WORKSPACE_STORAGE_KEY } from "./src/constants.js";
 import {
-  getWorkProgressLabel,
   getWorkTitleFromSnapshot,
   getWorkWordCount,
+  listCachedWorks,
   listWorks,
+  refreshWorkSummaries,
 } from "./src/work-library.js";
 import { escapeHtml } from "./src/utils.js";
 
-const BOOK_COLORS = ["#3A8275", "#A83850", "#6E3A8A", "#3A5E9A", "#35714A", "#AC4A2A", "#A87020", "#A03A60", "#28487A", "#527035"];
+const BOOK_THEMES = ["bc-teal", "bc-plum", "bc-slate", "bc-forest", "bc-burg", "bc-terra"];
 
 const state = {
   currentUser: null,
@@ -145,16 +146,25 @@ function setMessage(text, isError = false) {
   elements.message.classList.toggle("is-error", Boolean(isError));
 }
 
-function getWorkColor(index) {
-  return BOOK_COLORS[index % BOOK_COLORS.length];
+function getWorkTheme(index) {
+  return BOOK_THEMES[index % BOOK_THEMES.length];
 }
 
 function getWorkStatusClass(work) {
-  return work.snapshot?.generatedStory?.chapters?.length ? "badge-done" : "badge-ongoing";
+  const hasStory = work.snapshot?.generatedStory?.chapters?.length
+    || String(work.snapshot?.currentStage || "").trim().toLowerCase() === "story";
+  return hasStory ? "badge-done" : "badge-ongoing";
 }
 
 function getWorkStatusText(work) {
-  return work.snapshot?.generatedStory?.chapters?.length ? "正文" : "进行中";
+  const hasStory = work.snapshot?.generatedStory?.chapters?.length
+    || String(work.snapshot?.currentStage || "").trim().toLowerCase() === "story";
+  return hasStory ? "正文" : "进行中";
+}
+
+function needsFullWorkSnapshot(work) {
+  const stage = String(work.snapshot?.currentStage || "").trim().toLowerCase();
+  return stage === "story" && !Array.isArray(work.snapshot?.generatedStory?.chapters);
 }
 
 function formatCompactNumber(value) {
@@ -216,15 +226,13 @@ function renderWorks() {
     .map((work, index) => {
       const title = work.title || getWorkTitleFromSnapshot(work.snapshot);
       return `
-        <a class="book-entry" href="${escapeHtml(getCreateUrl(work.id))}" style="--book-color:${escapeHtml(getWorkColor(index))}">
+        <a class="book-entry ${getWorkTheme(index)}" href="${escapeHtml(getCreateUrl(work.id))}">
           <div class="book-cover-wrap">
             <div class="book-cover-fill">
               <span class="book-badge ${getWorkStatusClass(work)}">${escapeHtml(getWorkStatusText(work))}</span>
               <span class="book-cover-title">${escapeHtml(title)}</span>
             </div>
           </div>
-          <span class="book-entry-title">${escapeHtml(title)}</span>
-          <span class="book-entry-sub">${escapeHtml(getWorkProgressLabel(work.snapshot))}</span>
         </a>
       `;
     })
@@ -264,7 +272,6 @@ async function readLegacySnapshot() {
 
 async function loadActivityStats() {
   try {
-    await recordUserActivity(getActivityOptions(), { writingSeconds: 0 });
     return await fetchUserActivityStats(getActivityOptions());
   } catch (error) {
     console.warn("读取创作统计失败：", error);
@@ -276,14 +283,21 @@ async function loadActivityStats() {
   }
 }
 
-async function loadUserData() {
-  setMessage("");
-  const [result, activityResult] = await Promise.all([
-    listWorks(getWorkOptions()),
-    loadActivityStats(),
-  ]);
+async function refreshWorks() {
+  const result = await refreshWorkSummaries(getWorkOptions());
   state.works = result.works;
-  state.activityStats = activityResult.stats;
+  render();
+
+  let cloudError = result.error;
+  const shouldLoadFullWorks = Boolean(result.error)
+    || state.works.some((work) => needsFullWorkSnapshot(work));
+  if (shouldLoadFullWorks) {
+    const fullResult = await listWorks(getWorkOptions());
+    if (!fullResult.error) {
+      state.works = fullResult.works;
+      cloudError = null;
+    }
+  }
 
   if (!state.works.length) {
     const legacySnapshot = await readLegacySnapshot();
@@ -297,13 +311,33 @@ async function loadUserData() {
     }
   }
 
-  if (result.error) {
+  if (cloudError) {
     setMessage("云端作品库暂时不可用，当前展示本地缓存。", true);
-  } else if (activityResult.error) {
-    setMessage("创作统计暂时使用本地缓存，云端统计同步失败。", true);
   }
 
   render();
+}
+
+async function refreshActivityStats() {
+  const activityResult = await loadActivityStats();
+  state.activityStats = activityResult.stats;
+  if (activityResult.error) {
+    setMessage("创作统计暂时使用本地缓存，云端统计同步失败。", true);
+  }
+
+  renderStats();
+}
+
+async function loadUserData() {
+  setMessage("");
+  state.works = listCachedWorks(getWorkOptions());
+  state.activityStats = getCachedUserActivityStats(getActivityOptions());
+
+  render();
+  await Promise.allSettled([
+    refreshWorks(),
+    refreshActivityStats(),
+  ]);
 }
 
 async function bootstrapAuth() {

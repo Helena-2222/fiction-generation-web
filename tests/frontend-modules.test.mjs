@@ -343,9 +343,16 @@ test("user activity stores guest writing stats locally", async () => {
   const {
     fetchUserActivityStats,
     formatWritingDurationParts,
+    getCachedUserActivityStats,
     recordUserActivity,
   } = await importFresh("static/js/src/user-activity.js");
   const options = { guestMode: true };
+
+  assert.deepEqual(getCachedUserActivityStats(options), {
+    writingTimeSeconds: 0,
+    activeDays: [],
+    updatedAt: null,
+  });
 
   const first = await recordUserActivity(options, {
     writingSeconds: 65,
@@ -361,10 +368,39 @@ test("user activity stores guest writing stats locally", async () => {
   assert.equal(second.stats.writingTimeSeconds, 100);
   assert.deepEqual(second.stats.activeDays, ["2026-05-03"]);
   assert.equal(fetched.stats.writingTimeSeconds, 100);
+  assert.equal(getCachedUserActivityStats(options).writingTimeSeconds, 100);
   assert.equal(formatWritingDurationParts(3599).value, "59");
   assert.equal(formatWritingDurationParts(3599).unit, "min");
   assert.deepEqual(formatWritingDurationParts(3600), { value: "1.0", unit: "h" });
   assert.deepEqual(formatWritingDurationParts(36000), { value: "10", unit: "h" });
+});
+
+test("user center renders cached data before independent cloud refreshes", async () => {
+  const [html, source, styles] = await Promise.all([
+    readFile(new URL("../static/html/usercenter.html", import.meta.url), "utf8"),
+    readFile(new URL("../static/js/usercenter.js", import.meta.url), "utf8"),
+    readFile(new URL("../static/css/usercenter.css", import.meta.url), "utf8"),
+  ]);
+  const loadStart = source.indexOf("async function loadUserData()");
+  const loadEnd = source.indexOf("\nasync function bootstrapAuth()", loadStart);
+  const loadBody = source.slice(loadStart, loadEnd);
+
+  assert.notEqual(loadStart, -1);
+  assert.notEqual(loadEnd, -1);
+  assert.doesNotMatch(html, /fonts\.googleapis\.com/);
+  assert.match(html, /rel="modulepreload" href="\/static\/js\/src\/auth-client\.js"/);
+  assert.match(html, /rel="modulepreload" href="\/static\/js\/src\/work-library\.js"/);
+  assert.match(loadBody, /state\.works = listCachedWorks/);
+  assert.match(loadBody, /state\.activityStats = getCachedUserActivityStats/);
+  assert.ok(loadBody.indexOf("render();") < loadBody.indexOf("await Promise.allSettled"));
+  assert.match(loadBody, /refreshWorks\(\)[\s\S]*refreshActivityStats\(\)/);
+  assert.doesNotMatch(source, /recordUserActivity/);
+  assert.match(source, /await refreshWorkSummaries/);
+  assert.ok(source.indexOf("render();", source.indexOf("async function refreshWorks")) < source.indexOf("await listWorks"));
+  assert.match(source, /const BOOK_THEMES = \["bc-teal", "bc-plum", "bc-slate", "bc-forest", "bc-burg", "bc-terra"\]/);
+  assert.doesNotMatch(source, /book-entry-title|book-entry-sub/);
+  assert.match(styles, /\.bc-teal \{ --bc: #ECCE8E; --bs: #D59B3E;/);
+  assert.match(styles, /\.bc-terra \{ --bc: #BCD3E6; --bs: #A6BFDC;/);
 });
 
 test("work library creates, lists, renames, duplicates and deletes local works", async () => {
