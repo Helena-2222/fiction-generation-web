@@ -1,0 +1,85 @@
+services:
+  - type: web
+    runtime: python
+    name: super-story-api
+    region: singapore
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.5
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_BASE_URL
+        value: https://api.deepseek.com
+      - key: DEEPSEEK_MODEL
+        value: deepseek-chat
+      - key: REQUEST_TIMEOUT_SECONDS
+        value: "180"
+      - key: DEEPSEEK_JSON_MAX_TOKENS
+        value: "8192"
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: FRONTEND_ORIGINS
+        sync: false
+
+  - type: web
+    runtime: static
+    name: super-story-web
+    buildCommand: npm run build:static
+    staticPublishPath: ./dist
+    envVars:
+      - key: STORY_API_BASE_URL
+        fromService:
+          type: web
+          name: super-story-api
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: VITE_SUPABASE_URL
+        fromService:
+          type: web
+          name: super-story-api
+          envVarKey: VITE_SUPABASE_URL
+      - key: VITE_SUPABASE_ANON_KEY
+        fromService:
+          type: web
+          name: super-story-api
+          envVarKey: VITE_SUPABASE_ANON_KEY
+    routes:
+      - type: rewrite
+        source: /auth
+        destination: /auth.html
+      - type: rewrite
+        source: /create
+        destination: /create.html
+      - type: rewrite
+        source: /works
+        destination: /works.html
+      - type: rewrite
+        source: /mynote
+        destination: /mynote.html
+      - type: rewrite
+        source: /notes
+        destination: /notes.html
+      - type: rewrite
+        source: /usercenter
+        destination: /usercenter.html
+    headers:
+      - path: /runtime-config.js
+        name: Cache-Control
+        value: no-cache
+      - path: /static/js/*
+        name: Cache-Control
+        value: no-cache
+      - path: /static/css/*
+        name: Cache-Control
+        value: no-cache
+      - path: /static/assets/*
+        name: Cache-Control
+        value: public, max-age=86400
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff

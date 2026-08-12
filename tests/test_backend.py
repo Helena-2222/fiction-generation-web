@@ -22,6 +22,18 @@ class PublicEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"ok": True})
 
+    def test_api_health_allows_cross_origin_static_frontend(self) -> None:
+        response = self.client.options(
+            "/api/health",
+            headers={
+                "Origin": "https://super-story-web.onrender.com",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["access-control-allow-origin"], "*")
+
     def test_public_config_exposes_browser_auth_flags(self) -> None:
         response = self.client.get("/api/public-config")
 

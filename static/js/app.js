@@ -2,7 +2,7 @@
 import { state } from './src/state.js';
 import { GUEST_WORKSPACE_STORAGE_KEY } from './src/constants.js';
 import { generateId, normalizeFavoriteQuote, formatFavoriteTime, formatHistoryTime, sanitizeFilename, escapeHtml, clamp } from './src/utils.js';
-import { postJson, getJson } from './src/api.js';
+import { ensureApiReady, postJson, getJson, resolveApiUrl } from './src/api.js';
 import { DEFAULT_NEXT_PATH, buildAuthUrl, getCurrentUser, getPostAuthNextPath, getUserContact, getUserDisplayName, getUserInitial, isAnonymousUser, requireAuth, signOut, subscribeToAuthChanges } from './src/auth-client.js';
 import { fetchUserWorkspaceSnapshot, saveUserWorkspaceSnapshot } from './src/cloud-workspace.js';
 import { notifyFavoriteQuotesChanged } from './src/favorite-sync.js';
@@ -3990,6 +3990,12 @@ async function handleCurrentLlmTaskStatus(taskStatus) {
 }
 
 async function createManagedLlmTask(createUrl, payload, taskConfig) {
+  await ensureApiReady({
+    onWaiting: () => {
+      setBusyState("AI 服务正在启动，请稍候。启动完成后会自动继续本次生成。");
+      appendLlmActivityStep("正在唤醒 AI 服务", "免费服务冷启动通常需要几十秒，本次生成会在服务就绪后自动提交。", "waiting");
+    },
+  });
   const taskStatus = await postJson(createUrl, payload);
   registerLlmTask(taskStatus, taskConfig);
 }
@@ -7013,7 +7019,10 @@ function buildExportBaseName() {
 
 
 async function downloadDocxFile(filename, title, content) {
-  const response = await fetch("/api/export/docx", {
+  await ensureApiReady({
+    onWaiting: () => setStatus("导出服务正在启动，请稍候，启动完成后会自动继续。", true),
+  });
+  const response = await fetch(resolveApiUrl("/api/export/docx"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -7915,6 +7924,12 @@ async function handleStorySelectionRegenerate() {
   setBusyState("Neuro 正在局部重写你选中的正文片段...");
 
   try {
+    await ensureApiReady({
+      onWaiting: () => {
+        setBusyState("AI 服务正在启动，请稍候。启动完成后会自动继续局部重写。");
+        appendLlmActivityStep("正在唤醒 AI 服务", "服务就绪后会自动提交本次局部重写。", "waiting");
+      },
+    });
     const response = await postJson("/api/story/rewrite-selection", {
       story: buildStoryPayload(),
       outline: state.outline,

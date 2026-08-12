@@ -44,8 +44,8 @@ def html_file_response(filename: str) -> FileResponse:
 app = FastAPI(title="AI 协同小说创作 WEB", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=list(settings.frontend_origins),
+    allow_credentials=settings.frontend_origins != ("*",),
     allow_methods=["*"],
     allow_headers=["*"],
 )

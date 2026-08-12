@@ -41,6 +41,11 @@ class Settings:
     request_timeout_seconds: float = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "180"))
     supabase_url: str = os.getenv("VITE_SUPABASE_URL", "")
     supabase_anon_key: str = os.getenv("VITE_SUPABASE_ANON_KEY", "")
+    frontend_origins: tuple[str, ...] = tuple(
+        origin.strip().rstrip("/")
+        for origin in os.getenv("FRONTEND_ORIGINS", "*").split(",")
+        if origin.strip()
+    ) or ("*",)
     deepseek_json_max_tokens: int = _get_bounded_int_env(
         "DEEPSEEK_JSON_MAX_TOKENS",
         DEEPSEEK_MAX_COMPLETION_TOKENS,

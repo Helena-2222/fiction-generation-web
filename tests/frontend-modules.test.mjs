@@ -322,6 +322,70 @@ test("auth-client reuses the public config cache while loading the SDK in parall
   }
 });
 
+test("auth-client reads static runtime auth config without waking the API service", async () => {
+  setupBrowserEnv();
+  globalThis.__STORY_GENERATION_CONFIG__ = {
+    authEnabled: true,
+    supabaseUrl: "https://static-project.supabase.co",
+    supabaseAnonKey: "static-anon-key",
+  };
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    throw new Error("runtime config should avoid fetch");
+  };
+
+  try {
+    const auth = await importFresh("static/js/src/auth-client.js");
+    assert.deepEqual(await auth.getAuthConfig(), {
+      authEnabled: true,
+      supabaseUrl: "https://static-project.supabase.co",
+      supabaseAnonKey: "static-anon-key",
+    });
+    assert.equal(fetchCalls, 0);
+  } finally {
+    delete globalThis.__STORY_GENERATION_CONFIG__;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("API helpers target the configured service and wake it before generation", async () => {
+  setupBrowserEnv();
+  globalThis.__STORY_GENERATION_CONFIG__ = {
+    apiBaseUrl: "https://story-api.example.com/",
+  };
+  const originalFetch = globalThis.fetch;
+  const fetchCalls = [];
+  globalThis.fetch = async (...args) => {
+    fetchCalls.push(args);
+    return {
+      ok: true,
+      async json() {
+        return { ok: true };
+      },
+    };
+  };
+
+  try {
+    const api = await importFresh("static/js/src/api.js");
+    assert.equal(
+      api.resolveApiUrl("/api/llm-tasks/outline"),
+      "https://story-api.example.com/api/llm-tasks/outline",
+    );
+    assert.equal(api.resolveApiUrl("/static/demo.js"), "/static/demo.js");
+    await api.ensureApiReady();
+    await api.postJson("/api/llm-tasks/outline", { title: "demo" });
+    assert.equal(fetchCalls[0][0], "https://story-api.example.com/api/health");
+    assert.equal(fetchCalls[0][1].cache, "no-store");
+    assert.equal(fetchCalls[1][0], "https://story-api.example.com/api/llm-tasks/outline");
+    assert.equal(fetchCalls[1][1].method, "POST");
+  } finally {
+    delete globalThis.__STORY_GENERATION_CONFIG__;
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("notes never falls back to a projected snapshot when deleting a favorite", async () => {
   const source = await readFile(
     new URL("../static/js/mynote.js", import.meta.url),

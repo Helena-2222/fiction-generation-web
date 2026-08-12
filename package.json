@@ -1,8 +1,9 @@
 {
   "type": "module",
   "scripts": {
+    "build:static": "node scripts/build-static.mjs",
     "test": "npm run test:frontend && npm run test:backend",
-    "test:backend": ".\\.venv\\Scripts\\python.exe -m unittest discover -s tests -p \"test_*.py\"",
+    "test:backend": "python -m unittest discover -s tests -p \"test_*.py\"",
     "test:frontend": "node --test tests/*.test.mjs"
   },
   "dependencies": {

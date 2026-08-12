@@ -1,10 +1,24 @@
-const CONFIG_ENDPOINT = "/api/public-config";
 const SUPABASE_BROWSER_SDK_URL = "/static/js/vendor/supabase.js";
 export const DEFAULT_NEXT_PATH = "/create?stage=basic";
 
 let configPromise = null;
 let clientPromise = null;
 let sdkLoadPromise = null;
+
+function readStaticAuthConfig() {
+  const config = globalThis.__STORY_GENERATION_CONFIG__;
+  if (!config || typeof config !== "object") {
+    return null;
+  }
+
+  const supabaseUrl = String(config.supabaseUrl || "").trim();
+  const supabaseAnonKey = String(config.supabaseAnonKey || "").trim();
+  return {
+    authEnabled: Boolean(config.authEnabled && supabaseUrl && supabaseAnonKey),
+    supabaseUrl,
+    supabaseAnonKey,
+  };
+}
 
 function resolveLocalPath(pathname) {
   const candidate = String(pathname || "").trim();
@@ -118,8 +132,13 @@ export async function ensureSupabaseBrowserSdk() {
 }
 
 export async function getAuthConfig() {
+  const staticConfig = readStaticAuthConfig();
+  if (staticConfig) {
+    return staticConfig;
+  }
+
   if (!configPromise) {
-    configPromise = fetch(CONFIG_ENDPOINT, { cache: "default" })
+    configPromise = fetch("/api/public-config", { cache: "default" })
       .then(async (response) => {
         if (!response.ok) {
           throw new Error("无法读取登录配置，请确认后端服务已经启动。");

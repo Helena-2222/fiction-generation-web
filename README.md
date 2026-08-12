@@ -127,6 +127,28 @@ uvicorn app.main:app --reload --port 8002
 
 启动后访问：
 http://127.0.0.1:8002/
+
+## Render 前后端拆分部署
+
+仓库根目录的 `render.yaml` 会创建两个服务：
+
+- `super-story-web`：Render Static Site，通过全球 CDN 提供首页、登录页、创作页及站内页面，不会因 Python 服务休眠而影响页面打开。
+- `super-story-api`：Render Web Service，仅负责 AI 生成、任务状态和 Word 导出。
+
+在 Render 新建 Blueprint 并选择本仓库后，首次创建时填写：
+
+- `DEEPSEEK_API_KEY`
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `FRONTEND_ORIGINS`：填静态站点完整来源，例如 `https://super-story-web.onrender.com`；多个域名用逗号分隔。
+
+如果启用了 Supabase 邮箱确认或第三方登录，还需要在 Supabase Auth 的 URL Configuration 中，把静态站点域名和 `https://你的静态站点/auth` 加入允许的重定向地址。自定义主域名也应绑定到 Static Site，API 使用单独的子域名或 Render 分配的 URL。
+
+静态站点构建时会生成 `runtime-config.js`，浏览器直接从其中读取 Supabase 公共配置和 API 地址，不再通过 `/api/public-config` 唤醒后端。只有用户执行 AI 生成或 Word 导出时才会请求 Web Service；免费实例休眠时，创作页会先轮询健康检查，并显示“AI 服务正在启动”，就绪后自动继续原操作。
+
+本地仍可按原方式运行 FastAPI；未设置 `STORY_API_BASE_URL` 时，API 请求自动保持同源。
+
+Render 免费 Web Service 闲置后仍会休眠，因此第一次 AI 操作可能需要等待唤醒；页面本身不再承担这段等待。若希望 AI 操作也始终立即响应，需要把 `super-story-api` 升级为不会休眠的实例。
 - 首页：``
 - 登录页：`http://127.0.0.1:8002/auth`
 - 创作页：`http://127.0.0.1:8002/create`
