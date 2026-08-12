@@ -4,5 +4,8 @@
 node_modules/
 dist/
 __pycache__/
+.pytest_cache/
 *.py[cod]
 test/
+.tmp-mobile-preview/
+.claude/
